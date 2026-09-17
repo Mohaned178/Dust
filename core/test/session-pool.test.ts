@@ -40,6 +40,15 @@ describe('ScanSession with the worker pool', () => {
     expect(result.status).toBe('complete');
   });
 
+  it('honors cancel() before start() on the pooled path', async () => {
+    fixture.file('a.txt', 'aaaaa');
+    const session = new ScanSession({ root: fixture.root, pool: poolOptions });
+    session.cancel();
+    const result = await session.start();
+    expect(result.status).toBe('cancelled');
+    expect(result.tree.get(fixture.root)?.partial).toBe(true);
+  }, 30_000);
+
   it('cancels a pooled scan and keeps partial results', async () => {
     for (let d = 0; d < 40; d += 1) {
       for (let f = 0; f < 40; f += 1) {

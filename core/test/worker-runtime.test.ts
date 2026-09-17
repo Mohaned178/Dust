@@ -138,6 +138,45 @@ describe('worker runtime', () => {
     expect(opens).not.toContain(join(root, 'sub'));
   });
 
+  it('exits the thread after exactly one fatal event with the batch flushed first', () => {
+    const tree: Record<string, Entry[]> = {
+      [root]: [{ name: 'sub', kind: 'dir', size: 0, mtimeMs: 0 }],
+      [join(root, 'sub')]: [{ name: 'deep', kind: 'dir', size: 0, mtimeMs: 0 }],
+      [join(root, 'sub', 'deep')]: [{ name: 'a.txt', kind: 'file', size: 5, mtimeMs: 1000 }],
+    };
+    const events: WorkerEvent[] = [];
+    let exitCode: number | null = null;
+    const runtime = createWorkerRuntime({
+      send: (event) => events.push(event),
+      enumerator: mockEnumerator(tree),
+      isExcluded: (absPath) => {
+        if (absPath === join(root, 'sub', 'deep', 'a.txt')) throw new Error('exclusion check blew up');
+        return false;
+      },
+      shouldAbort: () => false,
+      splitAfterEntries: 10000,
+      batchIntervalMs: 200,
+      batchMaxItems: 500,
+      setIntervalFn: () => 1,
+      clearIntervalFn: () => {},
+      exitThread: (code) => {
+        exitCode = code;
+      },
+    });
+    runtime.handleCommand({ type: 'task', path: root, isRoot: true });
+
+    expect(events.map((e) => e.type)).toEqual(['batch', 'fatal']);
+    expect(events.filter((e) => e.type === 'fatal')).toHaveLength(1);
+    const batch = events[0];
+    if (batch.type !== 'batch') throw new Error('expected batch');
+    expect(batch.batch.dirOpens.map((o) => o.path)).toEqual([root, join(root, 'sub')]);
+    expect(events.some((e) => e.type === 'ready')).toBe(false);
+    expect(exitCode).toBe(1);
+
+    runtime.handleCommand({ type: 'task', path: root, isRoot: true });
+    expect(events.map((e) => e.type)).toEqual(['batch', 'fatal']);
+  });
+
   it('stops the interval timer on dispose', () => {
     let cleared = 0;
     const runtime = createWorkerRuntime({

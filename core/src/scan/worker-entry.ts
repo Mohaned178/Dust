@@ -19,6 +19,7 @@ const runtime = createWorkerRuntime({
   splitAfterEntries: init.limits.splitAfterEntries,
   batchIntervalMs: init.limits.batchIntervalMs,
   batchMaxItems: init.limits.batchMaxItems,
+  exitThread: () => process.exit(1),
 });
 
 port.on('message', (command: WorkerCommand) => {
@@ -31,7 +32,9 @@ port.on('message', (command: WorkerCommand) => {
   runtime.handleCommand(command);
 });
 
-// Surface an unhandled crash to the host before the thread dies.
+// Surface a non-traversal crash to the host before the thread dies. Traversal
+// errors are handled inside the runtime (flush + fatal event + exitThread), so
+// this handler never double-sends a fatal for those.
 process.on('uncaughtException', (error) => {
   try {
     port.postMessage({ type: 'fatal', message: String(error) });

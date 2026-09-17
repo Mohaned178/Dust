@@ -5,7 +5,6 @@ import { NodeFsEnumerator } from '../src/scanner/enumerator';
 import { createExclusionPredicate } from '../src/scanner/exclusions';
 import type { Entry } from '../src/model/types';
 
-const external = (absPath: string): boolean => false;
 const noneExcluded = createExclusionPredicate();
 
 function mockEnumerator(tree: Record<string, Entry[]>): NodeFsEnumerator {
@@ -146,6 +145,5 @@ describe('scanDirectory', () => {
     expect(isMtimeTrackedChild('NODE_MODULES')).toBe(false);
     expect(isMtimeTrackedChild('.git')).toBe(false);
     expect(isMtimeTrackedChild('src')).toBe(true);
-    expect(external('anything')).toBe(false);
   });
 });

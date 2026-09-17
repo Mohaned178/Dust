@@ -15,6 +15,13 @@ export interface NodeTransportOptions {
 
 export function createNodeWorkerTransport(init: WorkerInit, options: NodeTransportOptions = {}): WorkerTransport {
   const workerPath = options.workerPath ?? new URL('./worker-entry.ts', import.meta.url);
+  if (!options.workerPath && !options.execArgv && String(workerPath).endsWith('.ts')) {
+    throw new Error(
+      'createNodeWorkerTransport: the default TypeScript worker entry cannot run under plain Node ' +
+        'type-stripping (extensionless imports are unresolvable). Pass `workerPath` and `execArgv` ' +
+        "explicitly, e.g. execArgv: ['--import', 'tsx'] in dev, or a compiled JS worker path in production.",
+    );
+  }
   const worker = new Worker(workerPath, {
     workerData: init,
     execArgv: options.execArgv ?? [],

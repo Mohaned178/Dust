@@ -1,10 +1,9 @@
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ScanCoordinator } from '../src/scan/coordinator';
 import type { WorkerTransport } from '../src/scan/node-worker';
 import type { DirOpen, WorkerCommand, WorkerEvent } from '../src/scan/protocol';
 import type { FolderRecord } from '../src/model/types';
-import { Fixture } from './fixtures';
 
 class FakeTransport implements WorkerTransport {
   readonly sent: WorkerCommand[] = [];

@@ -13,6 +13,7 @@ export interface WorkerRuntimeDeps {
   batchMaxItems: number;
   setIntervalFn?: (fn: () => void, ms: number) => unknown;
   clearIntervalFn?: (handle: unknown) => void;
+  exitThread?: (code: number) => void;
 }
 
 export interface WorkerRuntime {
@@ -25,6 +26,7 @@ export interface WorkerRuntime {
 export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
   let disposed = false;
   let localAbort = false;
+  let crashed = false;
 
   const dirOpens: DirOpen[] = [];
   const markers: Marker[] = [];
@@ -41,6 +43,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
   const setIntervalFn = deps.setIntervalFn ?? ((fn: () => void, ms: number) => setInterval(fn, ms));
   const clearIntervalFn =
     deps.clearIntervalFn ?? ((handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>));
+  const exitThread = deps.exitThread ?? (() => {});
   const timer = setIntervalFn(() => flush(), deps.batchIntervalMs);
 
   const shouldAbort = (): boolean => localAbort || deps.shouldAbort();
@@ -120,7 +123,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     },
 
     handleCommand(command: WorkerCommand): void {
-      if (disposed) return;
+      if (disposed || crashed) return;
       if (command.type === 'abort') {
         localAbort = true;
         return;
@@ -132,8 +135,10 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       try {
         runTask(command.path, command.isRoot);
       } catch (error) {
+        crashed = true;
         flush();
         deps.send({ type: 'fatal', message: String(error) });
+        exitThread(1);
         return;
       }
       flush();

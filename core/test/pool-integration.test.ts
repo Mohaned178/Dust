@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ScanCoordinator } from '../src/scan/coordinator';
 import { createNodeWorkerTransport } from '../src/scan/node-worker';
+import type { WorkerInit } from '../src/scan/protocol';
 import { NodeFsEnumerator } from '../src/scanner/enumerator';
 import { createExclusionPredicate } from '../src/scanner/exclusions';
 import { scanTree } from '../src/scanner/scanner';
@@ -10,6 +11,43 @@ import { DEFAULT_POOL_LIMITS } from '../src/scan/limits';
 import { Fixture } from './fixtures';
 
 const workerPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'src', 'scan', 'worker-entry.ts');
+
+function minimalInit(root: string): WorkerInit {
+  const abortFlag = new Int32Array(new SharedArrayBuffer(4));
+  return {
+    workerId: 0,
+    root,
+    exclusions: {},
+    limits: DEFAULT_POOL_LIMITS,
+    abortFlag: abortFlag.buffer,
+  };
+}
+
+describe('createNodeWorkerTransport options', () => {
+  let fixture: Fixture;
+
+  beforeEach(() => {
+    fixture = new Fixture();
+  });
+
+  afterEach(() => {
+    fixture.cleanup();
+  });
+
+  it('throws an instructive error when neither workerPath nor execArgv is provided', () => {
+    expect(() => createNodeWorkerTransport(minimalInit(fixture.root))).toThrow(
+      /default TypeScript worker entry cannot run under plain Node/,
+    );
+  });
+
+  it('does not throw at construction with explicit workerPath and execArgv', async () => {
+    const transport = createNodeWorkerTransport(minimalInit(fixture.root), {
+      workerPath,
+      execArgv: ['--import', 'tsx'],
+    });
+    await transport.terminate();
+  });
+});
 
 describe('pool integration (real worker threads)', () => {
   let fixture: Fixture;

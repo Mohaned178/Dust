@@ -59,43 +59,47 @@ async function main(): Promise<void> {
     root = synthetic;
   }
 
-  const startedAt = Date.now();
-  const session = new ScanSession({
-    root,
-    pool: args.legacy
-      ? false
-      : {
-          workers: args.workers,
-          splitAfterEntries: args.split,
-          workerPath: join(import.meta.dirname, '..', 'src', 'scan', 'worker-entry.ts'),
-          execArgv: ['--import', 'tsx'],
+  try {
+    const startedAt = Date.now();
+    const session = new ScanSession({
+      root,
+      pool: args.legacy
+        ? false
+        : {
+            workers: args.workers,
+            splitAfterEntries: args.split,
+            workerPath: join(import.meta.dirname, '..', 'src', 'scan', 'worker-entry.ts'),
+            execArgv: ['--import', 'tsx'],
+          },
+    });
+    const result = await session.start();
+    const elapsedMs = Date.now() - startedAt;
+
+    const filesPerSecond = elapsedMs > 0 ? Math.round((result.filesScanned / elapsedMs) * 1000) : 0;
+    console.log(
+      JSON.stringify(
+        {
+          root,
+          mode: args.legacy ? 'legacy' : 'pool',
+          workers: args.legacy ? 1 : (args.workers ?? 'default'),
+          splitAfterEntries: args.split ?? 'default',
+          status: result.status,
+          files: result.filesScanned,
+          bytes: result.bytesSeen,
+          folders: result.tree.size(),
+          errors: result.errors,
+          elapsedMs,
+          filesPerSecond,
         },
-  });
-  const result = await session.start();
-  const elapsedMs = Date.now() - startedAt;
-
-  const filesPerSecond = elapsedMs > 0 ? Math.round((result.filesScanned / elapsedMs) * 1000) : 0;
-  console.log(
-    JSON.stringify(
-      {
-        root,
-        mode: args.legacy ? 'legacy' : 'pool',
-        workers: args.legacy ? 1 : (args.workers ?? 'default'),
-        splitAfterEntries: args.split ?? 'default',
-        status: result.status,
-        files: result.filesScanned,
-        bytes: result.bytesSeen,
-        folders: result.tree.size(),
-        errors: result.errors,
-        elapsedMs,
-        filesPerSecond,
-      },
-      null,
-      2,
-    ),
-  );
-
-  if (synthetic) rmSync(synthetic, { recursive: true, force: true });
+        null,
+        2,
+      ),
+    );
+  } finally {
+    // Only the generated temp tree is deleted here; a user-provided --root is
+    // never removed.
+    if (synthetic) rmSync(synthetic, { recursive: true, force: true });
+  }
 }
 
 main().catch((error) => {

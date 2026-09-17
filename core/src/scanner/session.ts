@@ -63,6 +63,30 @@ export class ScanSession {
       return this.startLegacy(startedAt, tree, isExcluded, root);
     }
 
+    if (this.controller.signal.aborted) {
+      tree.addFolder({
+        path: root,
+        bytes: 0,
+        fileCount: 0,
+        folderCount: 0,
+        linkCount: 0,
+        newestMtimeMs: 0,
+        errorCount: 0,
+        partial: true,
+      });
+      return {
+        root,
+        status: 'cancelled',
+        tree,
+        startedAt,
+        finishedAt: Date.now(),
+        filesScanned: 0,
+        bytesSeen: 0,
+        errors: 0,
+        markers: [],
+      };
+    }
+
     const pool = this.options.pool ?? {};
     const limits = {
       splitAfterEntries: pool.splitAfterEntries ?? DEFAULT_POOL_LIMITS.splitAfterEntries,
