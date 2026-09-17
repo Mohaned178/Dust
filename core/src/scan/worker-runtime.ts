@@ -1,8 +1,7 @@
-import { basename } from 'node:path';
 import type { Marker } from '../model/types';
 import type { Enumerator } from '../scanner/enumerator';
-import { isMtimeTrackedChild, scanDirectory } from '../scanner/dir-scan';
 import type { DirOpen, WorkerBatch, WorkerCommand, WorkerEvent } from './protocol';
+import { scanTask } from './worker-scan';
 
 export interface WorkerRuntimeDeps {
   send: (event: WorkerEvent) => void;
@@ -88,52 +87,31 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
   }
 
   function runTask(path: string, isRoot: boolean): void {
-    let budget = deps.splitAfterEntries;
-
-    const walk = (dir: string, root: boolean, trackMtime: boolean): void => {
-      if (shouldAbort()) return;
-      const result = scanDirectory(dir, trackMtime, {
-        enumerator: deps.enumerator,
-        isExcluded: deps.isExcluded,
-        shouldAbort,
-        onEntry: (contribution) => {
-          filesSeen += contribution.files;
-          bytesSeen += contribution.bytes;
-          currentPath = contribution.path;
-          maybeAutoFlush();
-        },
-      });
-      for (const marker of result.markers) {
+    scanTask(path, isRoot, {
+      enumerator: deps.enumerator,
+      isExcluded: deps.isExcluded,
+      shouldAbort,
+      splitAfterEntries: deps.splitAfterEntries,
+      openDir: (open) => {
+        dirOpens.push(open);
+        errors += open.errorCount;
+        maybeAutoFlush();
+      },
+      submitTasks: (paths) => {
+        submits.push(...paths);
+        maybeAutoFlush();
+      },
+      marker: (marker) => {
         markers.push(marker);
         maybeAutoFlush();
-      }
-      dirOpens.push({
-        path: dir,
-        isRoot: root,
-        directBytes: result.directBytes,
-        directFileCount: result.directFileCount,
-        linkCount: result.linkCount,
-        errorCount: result.errorCount,
-        newestMtimeMs: result.newestMtimeMs,
-        partial: result.partial,
-        childDirs: result.childDirs,
-      });
-      errors += result.errorCount;
-      maybeAutoFlush();
-
-      budget -= result.entryCount;
-      if (budget <= 0 && result.childDirs.length > 0) {
-        for (const child of result.childDirs) submits.push(child);
+      },
+      progress: (contribution) => {
+        filesSeen += contribution.files;
+        bytesSeen += contribution.bytes;
+        currentPath = contribution.path;
         maybeAutoFlush();
-        return;
-      }
-      for (const child of result.childDirs) {
-        if (shouldAbort()) return;
-        walk(child, false, trackMtime && isMtimeTrackedChild(basename(child)));
-      }
-    };
-
-    walk(path, isRoot, true);
+      },
+    });
   }
 
   return {
@@ -151,7 +129,13 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
         flush();
         return;
       }
-      runTask(command.path, command.isRoot);
+      try {
+        runTask(command.path, command.isRoot);
+      } catch (error) {
+        flush();
+        deps.send({ type: 'fatal', message: String(error) });
+        return;
+      }
       flush();
       deps.send({ type: 'ready' });
     },
