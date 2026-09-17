@@ -91,6 +91,16 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
     if (!config.isExcluded(abs)) {
       if (entry.kind === 'link') {
         linkCount += 1;
+        config.onFolder?.({
+          path: abs,
+          bytes: 0,
+          fileCount: 0,
+          folderCount: 0,
+          linkCount: 1,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+        });
       } else if (entry.kind === 'file') {
         bytes += entry.size;
         fileCount += 1;

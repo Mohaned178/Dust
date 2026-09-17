@@ -1,1 +1,11 @@
-export const CORE_PACKAGE = '@dust/core';
+export { AggregateTree } from './model/tree';
+export type { TreeNode } from './model/tree';
+export type { Entry, FolderRecord, Marker, ProgressUpdate } from './model/types';
+export { NodeFsEnumerator } from './scanner/enumerator';
+export type { Enumerator, ListResult } from './scanner/enumerator';
+export { createExclusionPredicate } from './scanner/exclusions';
+export type { ExclusionConfig } from './scanner/exclusions';
+export { ScanSession } from './scanner/session';
+export type { ScanResult, SessionOptions } from './scanner/session';
+export { scanTree } from './scanner/scanner';
+export type { ScanConfig, ScanStats } from './scanner/scanner';

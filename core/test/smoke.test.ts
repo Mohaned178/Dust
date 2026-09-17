@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CORE_PACKAGE } from '../src/index';
+import * as core from '../src/index';
 
-describe('core package', () => {
-  it('is importable', () => {
-    expect(CORE_PACKAGE).toBe('@dust/core');
+describe('core public API', () => {
+  it('exposes the scan engine surface', () => {
+    expect(typeof core.ScanSession).toBe('function');
+    expect(typeof core.scanTree).toBe('function');
+    expect(typeof core.AggregateTree).toBe('function');
+    expect(typeof core.NodeFsEnumerator).toBe('function');
+    expect(typeof core.createExclusionPredicate).toBe('function');
   });
 });
