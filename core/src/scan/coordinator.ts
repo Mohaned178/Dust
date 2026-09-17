@@ -56,6 +56,7 @@ export class ScanCoordinator {
   private readonly idle: number[] = [];
   private readonly inflight = new Map<number, Task>();
   private readonly transports = new Map<number, WorkerTransport>();
+  private readonly restarts = new Map<number, number>();
   private stopping = false;
   private aborted = false;
   private rootRecord: FolderRecord | null = null;
@@ -75,6 +76,9 @@ export class ScanCoordinator {
       for (let workerId = 0; workerId < this.options.workerCount; workerId += 1) {
         this.spawn(workerId);
       }
+      if (this.options.workerCount === 0) {
+        this.forceFinalize(this.options.root);
+      }
     });
   }
 
@@ -84,6 +88,9 @@ export class ScanCoordinator {
     Atomics.store(this.options.abortFlag, 0, 1);
     for (const transport of this.transports.values()) {
       transport.postMessage({ type: 'abort' });
+    }
+    if (this.inflight.size === 0) {
+      this.forceFinalizeAll();
     }
   }
 
@@ -106,6 +113,7 @@ export class ScanCoordinator {
     this.inflight.delete(workerId);
     if (this.stopping || this.aborted) {
       this.send(workerId, { type: 'stop' });
+      this.checkDrained();
       return;
     }
     this.assign(workerId);
@@ -261,6 +269,26 @@ export class ScanCoordinator {
     }
   }
 
+  private checkDrained(): void {
+    if (this.inflight.size === 0) this.forceFinalizeAll();
+  }
+
+  private forceFinalizeAll(): void {
+    if (!this.aborted || this.rootRecord) return;
+    this.forceFinalize(this.options.root);
+  }
+
+  private forceFinalize(path: string): void {
+    const accumulator = this.ensure(path);
+    if (accumulator.finalized) return;
+    for (const child of accumulator.childDirs) {
+      if (!accumulator.finalizedChildren.has(child)) this.forceFinalize(child);
+    }
+    accumulator.opened = true;
+    accumulator.partial = true;
+    this.tryFinalize(path);
+  }
+
   private finish(): void {
     const resolve = this.resolveRun;
     if (!resolve || !this.rootRecord) return;
@@ -285,5 +313,30 @@ export class ScanCoordinator {
     this.transports.delete(workerId);
     const idleIndex = this.idle.indexOf(workerId);
     if (idleIndex >= 0) this.idle.splice(idleIndex, 1);
+    if (this.stopping || this.resolveRun === null) return;
+
+    const task = this.inflight.get(workerId);
+    this.inflight.delete(workerId);
+    const restarts = this.restarts.get(workerId) ?? 0;
+
+    if (restarts < 1) {
+      this.restarts.set(workerId, restarts + 1);
+      if (task) this.queue.unshift(task);
+      this.spawn(workerId);
+      return;
+    }
+
+    if (task) {
+      const accumulator = this.ensure(task.path);
+      if (!accumulator.opened) accumulator.opened = true;
+      accumulator.partial = true;
+      accumulator.errorCount += 1;
+      this.tryFinalize(task.path);
+    }
+
+    if (this.transports.size === 0 || (this.queue.length === 0 && this.inflight.size === 0)) {
+      if (!this.aborted && !this.rootRecord) this.forceFinalize(this.options.root);
+      this.stopAll();
+    }
   }
 }
