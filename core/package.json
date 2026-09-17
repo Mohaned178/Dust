@@ -8,6 +8,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "tsx scripts/bench-scan.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
