@@ -20,7 +20,7 @@ describe('ScanSession', () => {
     fixture.file('node_modules/dep/index.js', 'bb');
     fixture.file('package.json', '{}');
 
-    const result = await new ScanSession({ root: fixture.root }).start();
+    const result = await new ScanSession({ root: fixture.root, pool: false }).start();
 
     expect(result.status).toBe('complete');
     expect(result.tree.get(fixture.root)?.bytes).toBe(9);
@@ -55,7 +55,7 @@ describe('ScanSession', () => {
     fixture.dir('sub');
 
     const requestedRoot = fixture.root + sep;
-    const result = await new ScanSession({ root: requestedRoot }).start();
+    const result = await new ScanSession({ root: requestedRoot, pool: false }).start();
 
     expect(result.root).toBe(fixture.root);
     expect(result.tree.get(fixture.root)?.children.length).toBeGreaterThan(0);
@@ -67,6 +67,7 @@ describe('ScanSession', () => {
     const updates: string[] = [];
     await new ScanSession({
       root: fixture.root,
+      pool: false,
       progressEvery: 1,
       onProgress: (u) => updates.push(u.currentPath),
     }).start();

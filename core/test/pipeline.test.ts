@@ -23,6 +23,7 @@ describe('scan pipeline', () => {
     let streamedFolders = 0;
     const result = await new ScanSession({
       root: fixture.root,
+      pool: false,
       onFolder: () => {
         streamedFolders += 1;
       },
@@ -48,7 +49,7 @@ describe('scan pipeline', () => {
       return;
     }
 
-    const result = await new ScanSession({ root: fixture.root }).start();
+    const result = await new ScanSession({ root: fixture.root, pool: false }).start();
     const alias = result.tree.get(join(fixture.root, 'alias'));
 
     expect(alias?.bytes).toBe(0);
