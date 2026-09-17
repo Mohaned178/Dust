@@ -1,4 +1,5 @@
-import type { WorkerCommand, WorkerEvent } from './protocol';
+import { Worker } from 'node:worker_threads';
+import type { WorkerCommand, WorkerEvent, WorkerInit } from './protocol';
 
 export interface WorkerTransport {
   postMessage(command: WorkerCommand): void;
@@ -10,4 +11,18 @@ export interface WorkerTransport {
 export interface NodeTransportOptions {
   workerPath?: URL | string;
   execArgv?: string[];
+}
+
+export function createNodeWorkerTransport(init: WorkerInit, options: NodeTransportOptions = {}): WorkerTransport {
+  const workerPath = options.workerPath ?? new URL('./worker-entry.ts', import.meta.url);
+  const worker = new Worker(workerPath, {
+    workerData: init,
+    execArgv: options.execArgv ?? [],
+  });
+  return {
+    postMessage: (command) => worker.postMessage(command),
+    onMessage: (handler) => worker.on('message', handler),
+    onExit: (handler) => worker.on('exit', (code) => handler(code)),
+    terminate: () => worker.terminate(),
+  };
 }
