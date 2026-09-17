@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ScanCoordinator } from '../src/scan/coordinator';
+import type { FolderRecord } from '../src/model/types';
 import type { WorkerTransport } from '../src/scan/node-worker';
 import type { DirOpen, WorkerCommand, WorkerEvent } from '../src/scan/protocol';
 
@@ -34,10 +35,6 @@ class FakeTransport implements WorkerTransport {
   exit(code: number): void {
     this.exitHandler?.(code);
   }
-
-  taskCount(): number {
-    return this.sent.filter((c) => c.type === 'task').length;
-  }
 }
 
 const ROOT = 'F:\\synthetic';
@@ -58,6 +55,7 @@ function open(path: string, isRoot: boolean, childDirs: string[] = []): DirOpen 
 
 function makeHarness(workerCount: number) {
   const transports: FakeTransport[] = [];
+  const folders: FolderRecord[] = [];
   const abortFlag = new Int32Array(new SharedArrayBuffer(4));
   const coordinator = new ScanCoordinator({
     root: ROOT,
@@ -69,8 +67,11 @@ function makeHarness(workerCount: number) {
       transports.push(transport);
       return transport;
     },
+    onFolder: (record) => {
+      folders.push(record);
+    },
   });
-  return { coordinator, transports, abortFlag };
+  return { coordinator, transports, abortFlag, folders };
 }
 
 describe('ScanCoordinator failure handling', () => {
@@ -142,4 +143,40 @@ describe('ScanCoordinator failure handling', () => {
     await run;
     expect(h.transports[0]!.terminated).toBe(true);
   });
+
+  it('finalizes the synthesized root as the root record with zero workers', async () => {
+    const h = makeHarness(0);
+    const result = await h.coordinator.run();
+
+    expect(result.rootRecord.path).toBe(ROOT);
+    expect(result.rootRecord.partial).toBe(true);
+    expect(h.folders.some((r) => r.path === ROOT)).toBe(false);
+  }, 5_000);
+
+  it('resolves with a partial root record when cancelled before any worker is ready', async () => {
+    const h = makeHarness(1);
+    const run = h.coordinator.run();
+    h.coordinator.cancel();
+    const result = await run;
+
+    expect(result.aborted).toBe(true);
+    expect(result.rootRecord.path).toBe(ROOT);
+    expect(result.rootRecord.partial).toBe(true);
+  }, 5_000);
+
+  it('resolves with a partial root record when the root task crashes twice with no dir-open', async () => {
+    const h = makeHarness(1);
+    const run = h.coordinator.run();
+    h.transports[0]!.emit({ type: 'ready' });
+    h.transports[0]!.exit(1);
+    const replacement = h.transports[1]!;
+    replacement.emit({ type: 'ready' });
+    replacement.exit(1);
+
+    const result = await run;
+    expect(result.rootRecord.path).toBe(ROOT);
+    expect(result.rootRecord.partial).toBe(true);
+    expect(result.rootRecord.errorCount).toBeGreaterThan(0);
+    expect(h.folders.some((r) => r.path === ROOT)).toBe(false);
+  }, 5_000);
 });

@@ -281,6 +281,7 @@ export class ScanCoordinator {
   private forceFinalize(path: string): void {
     const accumulator = this.ensure(path);
     if (accumulator.finalized) return;
+    if (path === this.options.root) accumulator.isRoot = true;
     for (const child of accumulator.childDirs) {
       if (!accumulator.finalizedChildren.has(child)) this.forceFinalize(child);
     }
@@ -329,6 +330,7 @@ export class ScanCoordinator {
     if (task) {
       const accumulator = this.ensure(task.path);
       if (!accumulator.opened) accumulator.opened = true;
+      if (task.isRoot) accumulator.isRoot = true;
       accumulator.partial = true;
       accumulator.errorCount += 1;
       this.tryFinalize(task.path);
