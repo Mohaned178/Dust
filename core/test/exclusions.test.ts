@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, parse, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createExclusionPredicate } from '../src/scanner/exclusions';
 
@@ -33,5 +33,19 @@ describe('createExclusionPredicate', () => {
     const isExcluded = createExclusionPredicate({ names: ['MyJunk'] });
     expect(isExcluded(join(base, 'MYJUNK'))).toBe(true);
     expect(isExcluded(join(base, 'myjunk2'))).toBe(false);
+  });
+
+  it('excludes configured paths given with a trailing separator', () => {
+    const own = join(base, 'DustInstall');
+    const isExcluded = createExclusionPredicate({ paths: [own + sep] });
+    expect(isExcluded(own)).toBe(true);
+    expect(isExcluded(join(own, 'app', 'index.js'))).toBe(true);
+    expect(isExcluded(join(base, 'DustInstall2'))).toBe(false);
+  });
+
+  it('preserves filesystem root paths in the configuration', () => {
+    const root = parse(base).root;
+    const isExcluded = createExclusionPredicate({ paths: [root] });
+    expect(isExcluded(root)).toBe(true);
   });
 });
