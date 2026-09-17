@@ -40,10 +40,10 @@ Out of scope (Phase 2+): Docker, installed-apps manager, visual treemap, quarant
 
 | # | Decision |
 |---|----------|
-| 1 | **Progressive scan.** Results stream in as folders complete; 1M files on SSD target < 45 s, 60 s acceptable, > 90 s unacceptable without visible progress. Cancellable; partial results retained and labeled. |
+| 1 | **Progressive scan.** Results stream in as folders complete. The contract: progress is always visible and the scan is cancellable at any moment with partial results retained and labeled. The 1M-files-on-SSD < 45 s figure is a goal pending the benchmark spike (Section 8), not a pass/fail gate on the MVP. |
 | 2 | **One-pass measurement.** node_modules and friends are measured, not skipped — Windows has no O(1) directory size, so summing requires enumerating every file. Engine: sync fs inside 4-8 worker_threads with directory-level work-stealing. `Enumerator` interface leaves room for a future native fast path (FindFirstFileW / N-API); not in MVP. |
 | 3 | **npm discovery rides Analyze.** `package.json` outside node_modules marks a project root; node_modules sizes are attributed to the nearest project root during the same walk. No second pass. |
-| 4 | **Dev Cleanup is a category card in results.** No third Dashboard button. A persisting snapshot makes the card instant on relaunch. |
+| 4 | **Dev Cleanup is a category row in the results Category Summary Strip.** No third Dashboard button. A persisting snapshot makes it instant on relaunch. |
 | 5 | **Two-axis classification.** Recency groups projects (Active ≤ 30 d / Occasional 31–180 d / Dead > 180 d, one config constant); restorability grades each project (green/yellow; unsupported package managers never offered). Manual "Keep" pin always wins. |
 | 6 | **Per-category recovery path.** Permanent delete only when a rule proves the asset is regenerable (exact restore command shown) or worthless. Moving to the Recycle Bin is not a blanket default; it remains the recovery path only for future unverifiable content. |
 | 7 | **npm cache is in MVP** as its own row in the Developer category. |
@@ -101,7 +101,7 @@ Cloud placeholder files (OneDrive etc.) are counted at logical size — document
 Single snapshot file at `userData/snapshot.json`:
 
 - `schemaVersion`, `rulesVersion`
-- scan root, startedAt, finishedAt, status (`complete` or `cancelled`)
+- scan root, startedAt, finishedAt, status (`complete` or `cancelled`), `cleanedAt` (last successful cleanup, shown on disk cards)
 - per-disk used/free totals (`fs.statfs`, PowerShell `Get-Volume` fallback)
 - category summaries (bytes + item counts per rule)
 - project records (path, name, manager, lockfile grade, recency, node_modules bytes)
@@ -193,7 +193,7 @@ Defense in depth enforced in the cleaner: refuses volume roots, `C:\Windows`, Pr
 
 ### 6.4 Dev Cleanup Flow
 
-- Developer category card → Dev Cleanup view: collapsed groups Dead / Occasional / Active / Orphaned / Pinned. Each row: name, path, node_modules size, last activity with source ("git reflog 38 d ago"), restorability badge.
+- Developer row in the Category Summary Strip → Dev Cleanup view: collapsed groups Dead / Occasional / Active / Orphaned / Pinned. Each row: name, path, node_modules size, last activity with source ("git reflog 38 d ago"), restorability badge.
 - Bulk action "Select all Dead + green"; individual selection allowed for any project. Confirmation is always required.
 - Confirmation screen: total bytes, per-project rebuild command, mandatory acknowledge checkbox when any yellow item is in the plan.
 - Execute → per-project progress → summary with copyable commands (`npm ci`, `yarn install --frozen-lockfile`).
@@ -223,14 +223,28 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 - **Category Summary Strip:** reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree. The fast path.
 - **Tree Table:** columns Name (expand/collapse) | Size | Allocated (cluster-rounded approximation from the volume's cluster size; compressed files not decomposed) | file/folder count | % bar | Safety + why | Last modified | Action. Sortable on any column, default Size descending. In-place expansion to arbitrary depth; double-click opens Windows Explorer. Rows stream in and numbers finalize in place during scan. Virtualized for 100k+ rows (TanStack Table + react-virtual). The Action column shows Clean only for rule-matched rows; all others show Explore.
 - Folder exploration is first-class: the analyzed root opens at the top level, every folder expands in place, arbitrary depth. This is the "where is my space going" experience with a Safety column.
-- Cards and Tree Table coexist and read one data model: cards are the fast path, the tree is the deep path.
+- The Category Summary Strip and Tree Table coexist and read one data model: the strip is the fast path, the tree is the deep path.
 
-## 8. Performance Contract
+### 7.6 Post-Cleanup UI State (any cleanup — Quick Clean or Analyze-triggered)
+
+- **Tree Table:** cleaned rows are removed from the tree; parent sizes update in place. Collapsed parents update their numbers when the user next expands them.
+- **Category Summary Strip:** the cleaned category's value decreases to the new state. At zero it shows "0 B — nothing to clean" instead of disappearing (vanishing rows feel like bugs).
+- **Snapshot:** updated immediately with new sizes plus a `cleanedAt` timestamp, so relaunch shows accurate numbers; disk cards show a "Last cleaned" line.
+- **Success screen:** freed bytes, remaining reclaimable space, and a "View updated disk" button returning to the Results view. Dev Cleanup's summary additionally lists the copyable restore commands (Section 6.4).
+- **Session-only state applies only to the Dev Cleanup "Recently cleaned" group;** general cleanup results are persistent as described above.
+
+## 8. Performance Contract & Budget
+
+**Contract (non-negotiable, independent of benchmarks):**
+
+- Progress is always visible: streaming counters, tree rows, and category totals.
+- The scan is cancellable at any moment with partial results retained and labeled; cancellation responds within ~1 s.
+
+**Budget (a goal validated by the spike below, not a pass/fail gate on the MVP):**
 
 - 1M files on SSD: target < 45 s; 60 s acceptable; > 90 s unacceptable without visible progress.
-- Progress is always visible: streaming counters, tree rows, and category totals.
-- Validation spike before UI investment: benchmark the Node sync worker walk on the developer's real disk (expect 2-4M entries). If the budget is missed, levers in order: worker-count tuning, batch-size tuning, native enumerator behind the `Enumerator` interface. Windows Defender real-time scanning is the main variance source; measure with it enabled.
-- Cancellation responds within ~1 s.
+
+**Validation spike before UI investment:** benchmark the Node sync worker walk on the developer's real disk (expect 2-4M entries). If the budget is missed, levers in order: worker-count tuning, batch-size tuning, native enumerator behind the `Enumerator` interface. Windows Defender real-time scanning is the main variance source; measure with it enabled.
 
 ## 9. Edge Cases & Error Handling
 
@@ -250,6 +264,7 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 - `core/` runs under vitest in plain Node with fixture trees generated in `os.tmpdir` (controlled sizes and mtimes).
 - Rules: table-driven match / no-match / grade / recovery tests per rule; cache rules assert "renders only when the cache directory exists".
 - Classifier fixtures: npm lockfile, yarn lockfile, monorepo workspace, orphaned node_modules, patched, private registry, pnpm/bun (not offered), Keep pin.
+- Display grade: table-driven — `C:\Users\X\AppData\Local\SomeApp\Cache` → green with reason; `C:\Users\X\RandomFolder` → yellow with reason; `C:\Windows\System32` → red with reason; a rule-matched path shows the rule's action grade instead of the pattern grade.
 - Cleaner: guard fuzzing — random candidate paths including protected roots must always be refused; locked-file test via an open handle; plan-token test — execute with a forged or expired planId is refused.
 - Concurrency (scan lock): Quick Clean while Analyze runs is blocked and surfaces the dialog path; after Analyze completes, Quick Clean starts without a re-scan (uses snapshot data); cancel-then-start works.
 - Snapshot: round-trip, corruption discard, version-mismatch banners.
@@ -259,7 +274,7 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 
 ## 11. Risks / Validate First
 
-1. Performance budget on real hardware — spike #1, before UI investment.
+1. Performance goal on real hardware — spike #1, before UI investment (the visible-progress contract holds regardless of the outcome).
 2. Elevation mechanism for `C:\Windows\Temp` (helper vs relaunch) — "Relaunch as Administrator" is the MVP fallback.
 3. `fs.statfs` behavior on Windows — PowerShell `Get-Volume` fallback.
 4. Cluster-size query for the Allocated column — default 4096 fallback.
