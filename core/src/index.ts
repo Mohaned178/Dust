@@ -1,6 +1,6 @@
 export { AggregateTree } from './model/tree';
 export type { TreeNode } from './model/tree';
-export type { Entry, FolderRecord, Marker, ProgressUpdate } from './model/types';
+export type { Entry, FolderRecord, Marker, NodeKind, ProgressUpdate } from './model/types';
 export { NodeFsEnumerator } from './scanner/enumerator';
 export type { Enumerator, ListResult } from './scanner/enumerator';
 export { createExclusionPredicate } from './scanner/exclusions';

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "workspaces": ["core"],
-  "engines": { "node": ">=20" },
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

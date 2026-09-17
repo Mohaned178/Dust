@@ -111,7 +111,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
           emitMarker(config, state, { kind: 'package-json', path: abs });
         }
       } else {
-        if (entry.name.toLowerCase() === 'node_modules') {
+        if (entry.name.toLowerCase() === 'node_modules' && !pathHasNodeModules(dir)) {
           emitMarker(config, state, { kind: 'node-modules', path: abs });
         }
         if (entry.name.toLowerCase() === '.git') {
@@ -171,7 +171,8 @@ function emitMarker(config: ScanConfig, state: ScanState, marker: Marker): void 
 }
 
 function emitProgress(config: ScanConfig, state: ScanState, currentPath: string): void {
-  const every = config.progressEvery ?? 500;
+  const configured = config.progressEvery ?? 0;
+  const every = Number.isFinite(configured) && configured > 0 ? configured : 500;
   if (state.entriesSeen % every !== 0) return;
   config.onProgress?.({
     filesScanned: state.filesScanned,

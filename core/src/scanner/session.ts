@@ -1,3 +1,4 @@
+import { normalize, sep } from 'node:path';
 import { AggregateTree } from '../model/tree';
 import type { FolderRecord, Marker, ProgressUpdate } from '../model/types';
 import { NodeFsEnumerator } from './enumerator';
@@ -41,9 +42,10 @@ export class ScanSession {
     const startedAt = Date.now();
     const tree = new AggregateTree();
     const isExcluded = createExclusionPredicate(this.options.exclusions);
+    const root = normalizeRoot(this.options.root);
 
     const stats = scanTree({
-      root: this.options.root,
+      root,
       enumerator: this.options.enumerator ?? new NodeFsEnumerator(),
       isExcluded,
       progressEvery: this.options.progressEvery,
@@ -63,7 +65,7 @@ export class ScanSession {
     tree.addFolder(stats.rootRecord);
 
     return {
-      root: this.options.root,
+      root,
       status: stats.aborted ? 'cancelled' : 'complete',
       tree,
       startedAt,
@@ -74,4 +76,11 @@ export class ScanSession {
       markers: stats.markers,
     };
   }
+}
+
+function normalizeRoot(input: string): string {
+  const normalized = normalize(input);
+  const trimmed = normalized.replace(/[\\/]+$/, '');
+  if (trimmed.length === 0 || trimmed === normalized) return normalized;
+  return trimmed.endsWith(':') ? trimmed + sep : trimmed;
 }

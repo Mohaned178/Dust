@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Enumerator } from '../src/scanner/enumerator';
 import { ScanSession } from '../src/scanner/session';
@@ -47,7 +47,19 @@ describe('ScanSession', () => {
     const result = await session.start();
 
     expect(result.status).toBe('cancelled');
-    expect(result.tree.size()).toBeGreaterThan(0);
+    expect(result.tree.get(join(result.root, 'a'))).toBeDefined();
+  });
+
+  it('normalizes a root with a trailing separator into one connected tree', async () => {
+    fixture.file('a.txt', 'aa');
+    fixture.dir('sub');
+
+    const requestedRoot = fixture.root + sep;
+    const result = await new ScanSession({ root: requestedRoot }).start();
+
+    expect(result.root).toBe(fixture.root);
+    expect(result.tree.get(fixture.root)?.children.length).toBeGreaterThan(0);
+    expect(result.tree.roots()).toHaveLength(1);
   });
 
   it('forwards progress updates', async () => {

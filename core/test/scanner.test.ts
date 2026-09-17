@@ -75,6 +75,17 @@ describe('scanTree', () => {
     expect(kinds).toContain('git-dir');
   });
 
+  it('emits a single node-modules marker for nested node_modules directories', () => {
+    fixture.file('node_modules/a/node_modules/dep/index.js', 'x');
+
+    const markers: Marker[] = [];
+    run(fixture.root, { onMarker: (m) => markers.push(m) });
+
+    const nodeModules = markers.filter((m) => m.kind === 'node-modules');
+    expect(nodeModules).toHaveLength(1);
+    expect(nodeModules[0].path).toBe(join(fixture.root, 'node_modules'));
+  });
+
   it('skips hard-excluded files and directories entirely', () => {
     fixture.file('keep.txt', 'abc');
     fixture.file('pagefile.sys', 'should-not-count');
