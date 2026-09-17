@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+out/
+release/
+coverage/
+*.tsbuildinfo
+.vite/
+*.log
