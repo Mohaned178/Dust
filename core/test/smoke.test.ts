@@ -9,4 +9,15 @@ describe('core public API', () => {
     expect(typeof core.NodeFsEnumerator).toBe('function');
     expect(typeof core.createExclusionPredicate).toBe('function');
   });
+
+  it('exposes the rules and cleaner surface', () => {
+    expect(typeof core.Cleaner).toBe('function');
+    expect(typeof core.buildPlan).toBe('function');
+    expect(typeof core.checkDeletable).toBe('function');
+    expect(typeof core.createNodeFsProbe).toBe('function');
+    expect(typeof core.validateRules).toBe('function');
+    expect(typeof core.defaultProtectedPaths).toBe('function');
+    expect(typeof core.PlanTokenError).toBe('function');
+    expect(typeof core.RuleValidationError).toBe('function');
+  });
 });
