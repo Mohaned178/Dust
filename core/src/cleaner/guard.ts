@@ -51,11 +51,21 @@ export function defaultProtectedPaths(env: GuardOptions = {}): string[] {
   return paths.map((path) => normalize(path)).filter((path) => path.length > 0);
 }
 
+export function canonicalizePath(target: string): string {
+  const normalized = normalize(target);
+  const root = parse(normalized).root;
+  let end = normalized.length;
+  while (end > root.length && (normalized[end - 1] === '/' || normalized[end - 1] === '\\')) {
+    end -= 1;
+  }
+  return normalized.slice(0, end);
+}
+
 export function checkDeletable(
   target: string,
   options: GuardOptions & { exemptExact?: string[] } = {},
 ): GuardResult {
-  const candidate = normalize(target);
+  const candidate = canonicalizePath(target);
   const lowerCandidate = candidate.toLowerCase();
   const childSep = sep.toLowerCase();
 
@@ -63,7 +73,7 @@ export function checkDeletable(
     return { allowed: false, reason: 'volume-root' };
   }
 
-  const protectedPaths = defaultProtectedPaths(options).map((path) => path.toLowerCase());
+  const protectedPaths = defaultProtectedPaths(options).map((path) => canonicalizePath(path).toLowerCase());
   if (protectedPaths.includes(lowerCandidate)) {
     return { allowed: false, reason: 'protected-root' };
   }
@@ -75,7 +85,7 @@ export function checkDeletable(
 
   const isInside = protectedPaths.some((path) => lowerCandidate.startsWith(path + childSep));
   if (isInside) {
-    const exempt = (options.exemptExact ?? []).map((path) => normalize(path).toLowerCase());
+    const exempt = (options.exemptExact ?? []).map((path) => canonicalizePath(path).toLowerCase());
     if (!exempt.includes(lowerCandidate)) {
       return { allowed: false, reason: 'inside-protected' };
     }

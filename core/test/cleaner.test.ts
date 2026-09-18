@@ -128,4 +128,74 @@ describe('Cleaner', () => {
     expect(existsSync(first)).toBe(true);
     expect(existsSync(second)).toBe(true);
   });
+
+  it('matches review acknowledgements despite trailing-separator mismatch in either direction', async () => {
+    const first = fixture.file('stale-a.tmp', 'abc');
+    const second = fixture.file('stale-b.tmp', 'def');
+    const cleaner = makeCleaner();
+    const rules = [
+      makeRule({
+        id: 'reviewer',
+        matches: [
+          makeMatch({
+            path: first,
+            bytes: 3,
+            grade: 'review',
+            recovery: { kind: 'regenerate', command: 'npm ci' },
+          }),
+        ],
+      }),
+    ];
+    const plan = await cleaner.preview(rules, ctx);
+    const report = await cleaner.execute(plan.id, { acknowledge: [`${first}\\`] });
+    expect(report.deletedBytes).toBe(3);
+    expect(existsSync(first)).toBe(false);
+
+    const trailingRules = [
+      makeRule({
+        id: 'reviewer',
+        matches: [
+          makeMatch({
+            path: `${second}\\`,
+            bytes: 3,
+            grade: 'review',
+            recovery: { kind: 'regenerate', command: 'npm ci' },
+          }),
+        ],
+      }),
+    ];
+    const trailingPlan = await cleaner.preview(trailingRules, ctx);
+    expect(trailingPlan.items[0]?.path).toBe(second);
+    const trailingReport = await cleaner.execute(trailingPlan.id, { acknowledge: [second] });
+    expect(trailingReport.deletedBytes).toBe(3);
+    expect(existsSync(second)).toBe(false);
+  });
+
+  it('still returns a complete report when onItem throws', async () => {
+    const first = fixture.file('first.txt', 'aa');
+    const second = fixture.file('second.txt', 'bb');
+    const cleaner = makeCleaner();
+    const rules = [
+      makeRule({
+        id: 'fixture',
+        matches: [makeMatch({ path: first, bytes: 2 }), makeMatch({ path: second, bytes: 2 })],
+      }),
+    ];
+    const plan = await cleaner.preview(rules, ctx);
+
+    let calls = 0;
+    const report = await cleaner.execute(plan.id, {
+      onItem: () => {
+        calls += 1;
+        if (calls === 1) throw new Error('observer boom');
+      },
+    });
+    expect(calls).toBe(2);
+    expect(report.items).toHaveLength(2);
+    expect(report.items.every((item) => item.status === 'done')).toBe(true);
+    expect(report.deletedBytes).toBe(4);
+    expect(report.itemErrors).toBe(0);
+    expect(existsSync(first)).toBe(false);
+    expect(existsSync(second)).toBe(false);
+  });
 });

@@ -96,6 +96,23 @@ describe('deletePathTree', () => {
     expect(outcome.status).not.toBe('done');
   });
 
+  it('refuses a root-level link target without touching the target', (ctx) => {
+    const real = fixture.file('real/data.bin', '1234567890');
+    let alias: string;
+    try {
+      alias = fixture.link('alias', join(fixture.root, 'real'));
+    } catch {
+      ctx.skip();
+      return;
+    }
+
+    const outcome = deletePathTree(alias);
+    expect(outcome.status).toBe('failed');
+    expect(outcome.errors.some((error) => error.code === 'ELINK')).toBe(true);
+    expect(existsSync(real)).toBe(true);
+    expect(existsSync(join(fixture.root, 'real', 'data.bin'))).toBe(true);
+  });
+
   it('reports already-gone for missing paths', () => {
     expect(deletePathTree(join(fixture.root, 'missing'))).toMatchObject({
       status: 'already-gone',

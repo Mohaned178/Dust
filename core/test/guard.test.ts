@@ -75,6 +75,35 @@ describe('checkDeletable', () => {
     });
     expect(checkDeletable('C:\\Apps\\Dust', env)).toMatchObject({ allowed: false, reason: 'protected-root' });
   });
+
+  it('denies a trailing-slash protected root even with a matching exemption', () => {
+    expect(checkDeletable('C:\\Windows\\', { ...env, exemptExact: ['C:\\Windows\\'] })).toMatchObject({
+      allowed: false,
+      reason: 'protected-root',
+    });
+  });
+
+  it('still allows exempting a trailing-slash path inside a protected root', () => {
+    expect(checkDeletable('C:\\Windows\\Temp\\', env)).toMatchObject({
+      allowed: false,
+      reason: 'inside-protected',
+    });
+    expect(
+      checkDeletable('C:\\Windows\\Temp\\', { ...env, exemptExact: ['C:\\Windows\\Temp\\'] }),
+    ).toEqual({ allowed: true });
+  });
+
+  it('refuses every trailing-separator/case/dot-dot variant of a protected root without an exemption', () => {
+    const roots = ['C:\\Windows', 'C:\\Users\\x', 'F:\\Vault'];
+    const opts = { ...env, extraProtected: ['F:\\Vault'] };
+    for (const root of roots) {
+      const drive = root.slice(0, 1).toLowerCase() + root.slice(1);
+      const variants = [root, `${root}\\`, drive, `${root}\\sub\\..`];
+      for (const variant of variants) {
+        expect(checkDeletable(variant, opts), variant).toMatchObject({ allowed: false });
+      }
+    }
+  });
 });
 
 describe('defaultProtectedPaths', () => {

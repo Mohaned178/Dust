@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { normalize, sep } from 'node:path';
+import { sep } from 'node:path';
 import type { Action, ActionGrade, CategoryId, Recovery, Rule, RuleContext } from '../rules/types';
 import { validateRules } from '../rules/validate';
-import { checkDeletable } from './guard';
+import { checkDeletable, canonicalizePath } from './guard';
 import type { GuardDenial, GuardOptions } from './guard';
 
 export type RefusedReason = GuardDenial | 'duplicate' | 'nested' | 'invalid-recovery';
@@ -65,7 +65,7 @@ export async function buildPlan(
         continue;
       }
 
-      const normalized = normalize(match.path);
+      const normalized = canonicalizePath(match.path);
       const lower = normalized.toLowerCase();
 
       if (acceptedPaths.includes(lower)) {

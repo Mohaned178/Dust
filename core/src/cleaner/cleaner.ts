@@ -1,7 +1,7 @@
-import { normalize } from 'node:path';
 import type { Rule, RuleContext } from '../rules/types';
 import { buildPlan } from './plan';
 import type { BuildPlanOptions, CleanupPlan } from './plan';
+import { canonicalizePath } from './guard';
 import { executeItem } from './executor';
 import type { ItemResult } from './executor';
 
@@ -64,10 +64,10 @@ export class Cleaner {
       throw new PlanTokenError('consumed-plan', `plan token already consumed: ${planId}`);
     }
 
-    const acknowledged = new Set((options.acknowledge ?? []).map((path) => normalize(path).toLowerCase()));
+    const acknowledged = new Set((options.acknowledge ?? []).map((path) => canonicalizePath(path).toLowerCase()));
     const missing = entry.plan.items
       .filter((item) => item.grade === 'review')
-      .filter((item) => !acknowledged.has(normalize(item.path).toLowerCase()))
+      .filter((item) => !acknowledged.has(canonicalizePath(item.path).toLowerCase()))
       .map((item) => item.path);
     if (missing.length > 0) {
       throw new PlanTokenError(
@@ -97,7 +97,12 @@ export class Cleaner {
         };
         items.push(result);
         itemErrors += 1;
-        options.onItem?.(result);
+        // A UI observer's throw must never affect deletion semantics; swallow it.
+        try {
+          options.onItem?.(result);
+        } catch {
+          /* ignore observer errors */
+        }
         continue;
       }
 
@@ -106,7 +111,12 @@ export class Cleaner {
       deletedBytes += result.deletedBytes;
       skippedLocked += result.skippedLocked;
       itemErrors += result.errors.length;
-      options.onItem?.(result);
+      // A UI observer's throw must never affect deletion semantics; swallow it.
+      try {
+        options.onItem?.(result);
+      } catch {
+        /* ignore observer errors */
+      }
     }
 
     return {

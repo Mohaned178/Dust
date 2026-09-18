@@ -24,7 +24,7 @@ export { checkDeletable, defaultProtectedPaths } from './cleaner/guard';
 export type { GuardDenial, GuardOptions, GuardResult } from './cleaner/guard';
 export { Cleaner, PlanTokenError } from './cleaner/cleaner';
 export type { CleanerOptions, CleanupReport, ExecuteOptions, PlanTokenErrorCode } from './cleaner/cleaner';
-export { deletePathTree, executeItem } from './cleaner/executor';
+export { executeItem } from './cleaner/executor';
 export type { DeleteError, DeleteOutcome, ItemResult } from './cleaner/executor';
 export { createNodeFsProbe } from './rules/probe';
 export { RuleValidationError, validateRules } from './rules/validate';
