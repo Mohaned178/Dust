@@ -17,7 +17,7 @@ describe('recycleBinRule', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]).toMatchObject({ path: 'C:\\$Recycle.Bin', grade: 'review', bytes: 4096 });
     expect(matches[0]!.recovery).toEqual({ kind: 'junk', reason: 'Emptied items are permanently gone' });
-    expect(matches[0]!.evidence).toContain('12');
+    expect(matches[0]!.evidence).toBe('12 items, 4096 bytes on C: for the current user, dated 1970-01-01 to 1970-01-01');
     expect(rule.action).toEqual({ kind: 'empty-recycle-bin' });
   });
 
@@ -31,6 +31,20 @@ describe('recycleBinRule', () => {
   it('returns no matches when enumeration is unavailable', async () => {
     const rule = recycleBinRule({
       enumerate: () => ({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null }),
+    });
+    expect(await rule.match(ctx())).toEqual([]);
+  });
+
+  it('returns no matches when enumeration failed, keeping the error marker off the match surface', async () => {
+    const rule = recycleBinRule({
+      enumerate: () => ({
+        fileCount: 0,
+        bytes: 0,
+        oldestMs: null,
+        newestMs: null,
+        volume: 'C:',
+        error: 'access denied',
+      }),
     });
     expect(await rule.match(ctx())).toEqual([]);
   });

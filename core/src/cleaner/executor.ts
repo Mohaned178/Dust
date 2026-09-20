@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import type { PlanItem } from './plan';
@@ -29,13 +30,28 @@ export interface EmptyRecycleBinResult {
   detail?: string;
 }
 
+function resolvePowerShell(): string {
+  const candidate = join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+  return existsSync(candidate) ? candidate : 'powershell.exe';
+}
+
 export function defaultEmptyRecycleBin(): EmptyRecycleBinResult {
   if (process.platform !== 'win32') return { ok: false, code: 'RECYCLE-BIN-UNSUPPORTED' };
   try {
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop'], {
-      encoding: 'utf8',
-      timeout: 60_000,
-    });
+    execFileSync(
+      resolvePowerShell(),
+      ['-NoProfile', '-NonInteractive', '-Command', 'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop -DriveLetter $env:SystemDrive'],
+      {
+        encoding: 'utf8',
+        timeout: 60_000,
+      },
+    );
     return { ok: true };
   } catch (error) {
     return { ok: false, code: 'RECYCLE-BIN-ERROR', detail: codeOf(error) };

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Rule, RuleContext, RuleMatch } from '../types';
 
@@ -8,11 +9,15 @@ export interface RecycleBinInfo {
   oldestMs: number | null;
   newestMs: number | null;
   volume: string | null;
+  error?: string;
 }
 
 const ENUMERATE_SCRIPT = [
   '$ErrorActionPreference = "SilentlyContinue"',
-  '$items = Get-ChildItem -LiteralPath "$env:SystemDrive\\$Recycle.Bin" -Force -Recurse -File -ErrorAction SilentlyContinue',
+  "$binRoot = Join-Path $env:SystemDrive '$Recycle.Bin'",
+  '$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+  '$userFolders = @(Get-ChildItem -LiteralPath $binRoot -Force -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name.EndsWith($sid) })',
+  '$items = $userFolders | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Force -Recurse -File -ErrorAction SilentlyContinue }',
   '$bytes = ($items | Measure-Object -Property Length -Sum).Sum',
   '$count = @($items).Count',
   '$oldest = ($items | Sort-Object LastWriteTime | Select-Object -First 1).LastWriteTime',
@@ -22,12 +27,31 @@ const ENUMERATE_SCRIPT = [
   'ConvertTo-Json -Compress -InputObject @{ count = $count; bytes = [long]$bytes; oldestMs = $oldestMs; newestMs = $newestMs; volume = $env:SystemDrive }',
 ].join('\n');
 
+function resolvePowerShell(): string {
+  const candidate = join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+  return existsSync(candidate) ? candidate : 'powershell.exe';
+}
+
+function codeOf(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return 'UNKNOWN';
+}
+
 export function defaultRecycleBinEnumeration(): RecycleBinInfo {
   if (process.platform !== 'win32') {
     return { fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null };
   }
   try {
-    const raw = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ENUMERATE_SCRIPT], {
+    const raw = execFileSync(resolvePowerShell(), ['-NoProfile', '-NonInteractive', '-Command', ENUMERATE_SCRIPT], {
       encoding: 'utf8',
       timeout: 30_000,
     });
@@ -39,8 +63,8 @@ export function defaultRecycleBinEnumeration(): RecycleBinInfo {
       newestMs: parsed.newestMs ? parsed.newestMs : null,
       volume: parsed.volume ?? null,
     };
-  } catch {
-    return { fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null };
+  } catch (error) {
+    return { fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null, error: codeOf(error) };
   }
 }
 
@@ -64,7 +88,7 @@ export function recycleBinRule(
           bytes: info.bytes,
           grade: 'review',
           recovery: { kind: 'junk', reason: 'Emptied items are permanently gone' },
-          evidence: `${info.fileCount} items, ${info.bytes} bytes, dated ${oldest} to ${newest}`,
+          evidence: `${info.fileCount} items, ${info.bytes} bytes on ${info.volume} for the current user, dated ${oldest} to ${newest}`,
         },
       ];
     },

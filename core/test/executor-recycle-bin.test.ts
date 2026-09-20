@@ -61,4 +61,18 @@ describe('executeItem empty-recycle-bin', () => {
     expect(result.errors[0]?.code).toBe('GUARD-VOLUME-ROOT');
     expect(called).toBe(false);
   });
+
+  it('allows the recycle-bin container path through the guard and runs the empty call', () => {
+    let called = false;
+    const result = executeItem(item({ path: 'C:\\$Recycle.Bin' }), {
+      guard: { userProfile: 'C:\\Users\\x', userFolders: [] },
+      runEmptyRecycleBin: () => {
+        called = true;
+        return { ok: true };
+      },
+    });
+    expect(called).toBe(true);
+    expect(result).toMatchObject({ action: 'empty-recycle-bin', status: 'done', deletedBytes: 0 });
+    expect(result.errors).toEqual([]);
+  });
 });
