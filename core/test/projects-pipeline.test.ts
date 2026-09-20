@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as core from '../src/index';
 import { ScanSession } from '../src/scanner/session';
@@ -10,6 +11,7 @@ import { Fixture } from './fixtures';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = 1_800_000_000_000;
+const workerPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'src', 'scan', 'worker-entry.ts');
 
 describe('project classification pipeline (real scan)', () => {
   let fixture: Fixture;
@@ -110,6 +112,30 @@ describe('project classification pipeline (real scan)', () => {
     expect(existsSync(join(fixture.root, 'app', 'node_modules'))).toBe(false);
     expect(existsSync(join(fixture.root, 'pnpm-app', 'node_modules'))).toBe(true);
   });
+
+  it('keeps old project recency through a real pooled scan with fresh node_modules mtimes', async () => {
+    fixture.file('app/package.json', JSON.stringify({ name: 'app' }), NOW - 200 * DAY);
+    fixture.file('app/package-lock.json', '{}', NOW - 200 * DAY);
+    fixture.file('app/src/index.ts', 'x', NOW - 200 * DAY);
+    fixture.file('app/node_modules/dep/index.js', 'yyyy');
+
+    const result = await new ScanSession({
+      root: fixture.root,
+      pool: { workers: 2, splitAfterEntries: 1, workerPath, execArgv: ['--import', 'tsx'] },
+    }).start();
+    expect(result.status).toBe('complete');
+
+    const analysis = classifyProjects({
+      root: fixture.root,
+      tree: result.tree,
+      markers: result.markers,
+      probe: core.createNodeFsProbe(),
+      now: () => NOW,
+    });
+    const app = analysis.projects.find((project) => project.name === 'app')!;
+    expect(app).toMatchObject({ recency: 'dead', offered: true });
+    expect(app.activity).toEqual({ ms: NOW - 200 * DAY, source: 'files' });
+  }, 30_000);
 
   it('exposes the project classification surface through the public index', () => {
     expect(typeof core.classifyProjects).toBe('function');

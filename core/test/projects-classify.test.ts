@@ -229,7 +229,82 @@ describe('classifyProjects', () => {
     expect(analysis.projects[0]!.restorability.reasons[0]).toContain('no manifest');
   });
 
-  it('exposes the pinned threshold constants', () => {
+  it('exposes the pinned threshold constants frozen', () => {
     expect(DEFAULT_RECENCY_THRESHOLDS).toEqual({ activeDays: 30, occasionalDays: 180 });
+    expect(Object.isFrozen(DEFAULT_RECENCY_THRESHOLDS)).toBe(true);
+  });
+
+  it('grades a yarn.lock-only project with a private registry yellow', () => {
+    const app = fixture.dir('yarn-private');
+    fixture.file('yarn-private/package.json', '{}');
+    fixture.file(
+      'yarn-private/yarn.lock',
+      'resolved "https://npm.internal.example/foo/-/foo-1.0.0.tgz#hash"\nresolved "https://registry.yarnpkg.com/bar/-/bar-1.0.0.tgz#hash"\n',
+    );
+    fixture.dir('yarn-private/node_modules');
+    const analysis = classifyProjects({
+      root: fixture.root,
+      tree: new AggregateTree(),
+      markers: [
+        { kind: 'package-json', path: join(app, 'package.json') },
+        { kind: 'node-modules', path: join(app, 'node_modules') },
+      ],
+      probe: createNodeFsProbe(),
+      now: () => NOW,
+    });
+    const project = analysis.projects[0]!;
+    expect(project.packageManager).toBe('yarn');
+    expect(project.restorability.grade).toBe('yellow');
+    expect(project.restorability.reasons[0]).toContain('npm.internal.example');
+  });
+
+  it('does not offer orphans under a global install root', () => {
+    const npmRoot = fixture.dir('appdata/npm');
+    const orphan = fixture.dir('appdata/npm/node_modules');
+    const control = fixture.dir('elsewhere/node_modules');
+    const tree = new AggregateTree();
+    tree.addFolder(record(orphan, { bytes: 42 }));
+    tree.addFolder(record(control, { bytes: 7 }));
+    const analysis = classifyProjects({
+      root: fixture.root,
+      tree,
+      markers: [
+        { kind: 'node-modules', path: orphan },
+        { kind: 'node-modules', path: control },
+      ],
+      probe: createNodeFsProbe(),
+      now: () => NOW,
+      globalInstallRoots: [npmRoot],
+    });
+
+    const global = analysis.projects.find((project) => project.path === orphan)!;
+    expect(global).toMatchObject({ kind: 'orphaned-node-modules', offered: false });
+    expect(global.restorability.reasons.join(' ')).toContain('global');
+    expect(global.evidence.join(' ')).toContain('global');
+
+    const other = analysis.projects.find((project) => project.path === control)!;
+    expect(other.offered).toBe(true);
+    expect(other.evidence.join(' ')).not.toContain('global');
+  });
+
+  it('does not offer units whose manifest lives under a global install root', () => {
+    const npmRoot = fixture.dir('appdata/npm');
+    const tool = fixture.dir('appdata/npm/some-tool');
+    fixture.file('appdata/npm/some-tool/package.json', JSON.stringify({ name: 'some-tool' }));
+    fixture.dir('appdata/npm/some-tool/node_modules');
+    const analysis = classifyProjects({
+      root: fixture.root,
+      tree: new AggregateTree(),
+      markers: [
+        { kind: 'package-json', path: join(tool, 'package.json') },
+        { kind: 'node-modules', path: join(tool, 'node_modules') },
+      ],
+      probe: createNodeFsProbe(),
+      now: () => NOW,
+      globalInstallRoots: [npmRoot],
+    });
+    const project = analysis.projects[0]!;
+    expect(project).toMatchObject({ kind: 'project', offered: false });
+    expect(project.evidence.join(' ')).toContain('global');
   });
 });

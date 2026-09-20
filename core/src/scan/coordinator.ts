@@ -158,7 +158,7 @@ export class ScanCoordinator {
       accumulator.directFileCount = open.directFileCount;
       accumulator.linkCount = open.linkCount;
       accumulator.errorCount = open.errorCount;
-      accumulator.newestMtimeMs = open.newestMtimeMs;
+      accumulator.newestMtimeMs = this.isMtimeTrackedPath(open.path) ? open.newestMtimeMs : 0;
       accumulator.partial = open.partial;
       accumulator.childDirs = open.childDirs;
     }
@@ -259,6 +259,13 @@ export class ScanCoordinator {
     };
     this.accumulators.set(path, accumulator);
     return accumulator;
+  }
+
+  private isMtimeTrackedPath(path: string): boolean {
+    return !path
+      .toLowerCase()
+      .split(/[\\/]/)
+      .some((segment) => segment === 'node_modules' || segment === '.git');
   }
 
   private send(workerId: number, command: WorkerCommand): void {

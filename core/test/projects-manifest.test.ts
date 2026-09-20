@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createNodeFsProbe } from '../src/rules/probe';
 import {
@@ -124,5 +123,21 @@ describe('sampleRegistryHosts', () => {
     expect(sampleRegistryHosts(content)).toEqual(['registry.npmjs.org', 'registry.yarnpkg.com', 'npm.internal.example']);
     expect(PUBLIC_REGISTRY_HOSTS.has('npm.internal.example')).toBe(false);
     expect(sampleRegistryHosts('')).toEqual([]);
+  });
+
+  it('extracts yarn v1 resolved entries without a colon', () => {
+    const content = [
+      '# yarn lockfile v1',
+      '',
+      'foo@^1.0.0:',
+      '  version "1.0.0"',
+      '  resolved "https://npm.internal.example/foo/-/foo-1.0.0.tgz#hash"',
+      '  integrity sha512-abc',
+      '',
+      'bar@^1.0.0:',
+      '  version "1.0.0"',
+      '  resolved "https://registry.yarnpkg.com/bar/-/bar-1.0.0.tgz#hash"',
+    ].join('\n');
+    expect(sampleRegistryHosts(content)).toEqual(['npm.internal.example', 'registry.yarnpkg.com']);
   });
 });

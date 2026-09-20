@@ -57,6 +57,7 @@ export interface ProjectOptions {
   thresholds?: Partial<RecencyThresholds>;
   pins?: string[];
   isExternal?: (path: string) => boolean;
+  globalInstallRoots?: string[];
 }
 
 export interface ClassifyInput extends ProjectOptions {

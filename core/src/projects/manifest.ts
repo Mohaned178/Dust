@@ -67,7 +67,7 @@ export function parsePackageManager(field: string): { name: string; major: numbe
 export function sampleRegistryHosts(content: string): string[] {
   const sample = content.slice(0, 64 * 1024);
   const hosts = new Set<string>();
-  const pattern = /"resolved"\s*:\s*"https?:\/\/([^/"\\]+)/g;
+  const pattern = /"?resolved"?\s*:?\s*"https?:\/\/([^/"\\]+)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(sample)) !== null) {
     hosts.add(match[1]!);

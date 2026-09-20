@@ -1,4 +1,4 @@
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { canonicalizePath } from '../cleaner/guard';
 import type { AggregateTree } from '../model/tree';
 import type { FsProbe } from '../rules/types';
@@ -20,7 +20,9 @@ import type {
 
 const DAY = 24 * 60 * 60 * 1000;
 
-export const DEFAULT_RECENCY_THRESHOLDS: RecencyThresholds = { activeDays: 30, occasionalDays: 180 };
+const GLOBAL_INSTALL_ROOT_REASON = 'global install root \u2014 not offered (Phase 2)';
+
+export const DEFAULT_RECENCY_THRESHOLDS: RecencyThresholds = Object.freeze({ activeDays: 30, occasionalDays: 180 });
 
 export function classifyProjects(input: ClassifyInput): ProjectAnalysis {
   const { units, orphans } = discoverProjects({ tree: input.tree, markers: input.markers, probe: input.probe });
@@ -49,6 +51,7 @@ function classifyUnit(
   const recency = recencyOf(activity, now, thresholds);
   const pinned = pins.has(canonicalizePath(unit.root).toLowerCase());
   const external = input.isExternal?.(unit.root) ?? false;
+  const globalInstallRoot = isUnderAnyRoot(unit.root, input.globalInstallRoots);
   const bytes = unit.nodeModules.reduce((sum, entry) => sum + entry.bytes, 0);
 
   const evidence: string[] = [
@@ -60,6 +63,7 @@ function classifyUnit(
   if (unit.pnp) evidence.push('Yarn Plug\u2019n\u2019Play detected');
   if (pinned) evidence.push('pinned by user — never suggested');
   if (external) evidence.push('external drive — not offered in MVP');
+  if (globalInstallRoot) evidence.push(GLOBAL_INSTALL_ROOT_REASON);
   if (unit.nodeModules.length === 0) evidence.push('node_modules not present');
 
   return {
@@ -73,7 +77,8 @@ function classifyUnit(
     activity,
     recency,
     restorability,
-    offered: !pinned && !external && restorability.grade !== 'not-offered' && unit.nodeModules.length > 0,
+    offered:
+      !pinned && !external && !globalInstallRoot && restorability.grade !== 'not-offered' && unit.nodeModules.length > 0,
     evidence,
   };
 }
@@ -82,6 +87,13 @@ function classifyOrphan(orphan: DiscoveredOrphan, input: ClassifyInput, pins: Se
   const parentDir = dirname(orphan.path);
   const pinned = pins.has(canonicalizePath(orphan.path).toLowerCase());
   const external = input.isExternal?.(parentDir) ?? false;
+  const globalInstallRoot = isUnderAnyRoot(orphan.path, input.globalInstallRoots);
+  const reasons = ['no manifest or lockfile found — node_modules cannot be recreated'];
+  const evidence = ['Orphaned node_modules — no package.json above', 'cannot be recreated'];
+  if (globalInstallRoot) {
+    reasons.push(GLOBAL_INSTALL_ROOT_REASON);
+    evidence.push(GLOBAL_INSTALL_ROOT_REASON);
+  }
   return {
     path: orphan.path,
     name: basename(parentDir),
@@ -94,12 +106,22 @@ function classifyOrphan(orphan: DiscoveredOrphan, input: ClassifyInput, pins: Se
     recency: 'unknown',
     restorability: {
       grade: 'yellow',
-      reasons: ['no manifest or lockfile found — node_modules cannot be recreated'],
+      reasons,
       restoreCommand: null,
     },
-    offered: !pinned && !external,
-    evidence: ['Orphaned node_modules — no package.json above', 'cannot be recreated'],
+    offered: !pinned && !external && !globalInstallRoot,
+    evidence,
   };
+}
+
+function isUnderAnyRoot(path: string, roots: string[] | undefined): boolean {
+  if (!roots || roots.length === 0) return false;
+  const candidate = canonicalizePath(path).toLowerCase();
+  const childSep = sep.toLowerCase();
+  return roots.some((root) => {
+    const canonicalRoot = canonicalizePath(root).toLowerCase();
+    return candidate === canonicalRoot || candidate.startsWith(canonicalRoot + childSep);
+  });
 }
 
 interface ManagerResolution {
@@ -219,6 +241,6 @@ function recencyOf(activity: ProjectActivity, now: number, thresholds: RecencyTh
 
 function describeActivity(activity: ProjectActivity, now: number): string {
   if (activity.ms === null) return 'Last activity: unknown';
-  const days = Math.floor((now - activity.ms) / DAY);
+  const days = Math.max(Math.floor((now - activity.ms) / DAY), 0);
   return `Last activity: ${days}d ago (${activity.source})`;
 }
