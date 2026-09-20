@@ -1,4 +1,4 @@
-import type { Stats } from 'node:fs';
+import type { Dirent, Stats } from 'node:fs';
 import type { AggregateTree } from '../model/tree';
 import type { Marker } from '../model/types';
 
@@ -25,6 +25,7 @@ export interface RuleMatch {
 export interface FsProbe {
   exists(path: string): boolean;
   stat(path: string): Stats | null;
+  listDirectory(path: string): Dirent[];
 }
 
 export interface RuleContext {

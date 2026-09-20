@@ -1,4 +1,4 @@
-import { lstatSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
 import type { FsProbe } from './types';
 
 export function createNodeFsProbe(): FsProbe {
@@ -17,6 +17,9 @@ export function createNodeFsProbe(): FsProbe {
       } catch {
         return null;
       }
+    },
+    listDirectory(path: string) {
+      return readdirSync(path, { withFileTypes: true });
     },
   };
 }
