@@ -38,3 +38,22 @@ export type {
   RuleContext,
   RuleMatch,
 } from './rules/types';
+export { createInventoryRules } from './rules/inventory';
+export { systemTempRule } from './rules/inventory/system-temp';
+export { recycleBinRule, defaultRecycleBinEnumeration } from './rules/inventory/recycle-bin';
+export type { RecycleBinInfo } from './rules/inventory/recycle-bin';
+export { npmCacheRule } from './rules/inventory/npm-cache';
+export {
+  cacheRegistryRules,
+  chromeCacheRule,
+  edgeCacheRule,
+  firefoxCacheRule,
+  discordCacheRule,
+  slackCacheRule,
+} from './rules/inventory/cache-registry';
+export { defaultRuleEnv, expandProfileWildcard } from './rules/paths';
+export type { RuleEnv } from './rules/paths';
+export { classifyDisplayGrade } from './display/display-grade';
+export type { DisplayGrade, DisplayGradeReason } from './display/display-grade';
+export { defaultEmptyRecycleBin } from './cleaner/executor';
+export type { EmptyRecycleBinResult } from './cleaner/executor';

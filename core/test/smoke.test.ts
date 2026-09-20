@@ -20,4 +20,13 @@ describe('core public API', () => {
     expect(typeof core.PlanTokenError).toBe('function');
     expect(typeof core.RuleValidationError).toBe('function');
   });
+
+  it('exposes the inventory and display surface', () => {
+    expect(typeof core.createInventoryRules).toBe('function');
+    expect(typeof core.defaultRuleEnv).toBe('function');
+    expect(typeof core.classifyDisplayGrade).toBe('function');
+    expect(typeof core.recycleBinRule).toBe('function');
+    expect(typeof core.cacheRegistryRules).toBe('function');
+    expect(typeof core.defaultEmptyRecycleBin).toBe('function');
+  });
 });
