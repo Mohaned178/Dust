@@ -57,3 +57,31 @@ export { classifyDisplayGrade } from './display/display-grade';
 export type { DisplayGrade, DisplayGradeReason } from './display/display-grade';
 export { defaultEmptyRecycleBin } from './cleaner/executor';
 export type { EmptyRecycleBinResult } from './cleaner/executor';
+export { classifyProjects, DEFAULT_RECENCY_THRESHOLDS } from './projects/classify';
+export { discoverProjects } from './projects/discover';
+export type { DiscoveredOrphan, DiscoveredUnit } from './projects/discover';
+export {
+  PUBLIC_REGISTRY_HOSTS,
+  hasPnp,
+  hasWorkspaceSignals,
+  parsePackageManager,
+  readManifest,
+  sampleRegistryHosts,
+} from './projects/manifest';
+export type { LockfileName, ManifestInfo } from './projects/manifest';
+export type {
+  ActivitySource,
+  ClassifyInput,
+  NodeModulesLocation,
+  PackageManager,
+  ProjectActivity,
+  ProjectAnalysis,
+  ProjectKind,
+  ProjectOptions,
+  ProjectRecord,
+  RecencyGroup,
+  RecencyThresholds,
+  Restorability,
+  RestorabilityGrade,
+} from './projects/types';
+export { npmProjectModulesRule } from './rules/inventory/npm-project-modules';

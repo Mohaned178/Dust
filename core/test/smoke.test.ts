@@ -29,4 +29,12 @@ describe('core public API', () => {
     expect(typeof core.cacheRegistryRules).toBe('function');
     expect(typeof core.defaultEmptyRecycleBin).toBe('function');
   });
+
+  it('exposes the project classification surface', () => {
+    expect(typeof core.classifyProjects).toBe('function');
+    expect(typeof core.discoverProjects).toBe('function');
+    expect(typeof core.readManifest).toBe('function');
+    expect(typeof core.npmProjectModulesRule).toBe('function');
+    expect(core.DEFAULT_RECENCY_THRESHOLDS).toEqual({ activeDays: 30, occasionalDays: 180 });
+  });
 });
