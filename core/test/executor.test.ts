@@ -168,10 +168,4 @@ describe('executeItem', () => {
     expect(result.status).toBe('failed');
     expect(result.errors[0]?.code).toBe('GUARD-PROTECTED-ROOT');
   });
-
-  it('returns a defined failure for actions not yet implemented', () => {
-    const result = executeItem(item('F:\\anywhere', { action: { kind: 'empty-recycle-bin' } }));
-    expect(result.status).toBe('failed');
-    expect(result.errors[0]?.code).toBe('UNSUPPORTED-ACTION');
-  });
 });

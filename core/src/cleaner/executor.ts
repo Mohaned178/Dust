@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import type { PlanItem } from './plan';
@@ -20,6 +21,25 @@ export interface ItemResult extends DeleteOutcome {
   ruleId: string;
   path: string;
   action: PlanItem['action']['kind'];
+}
+
+export interface EmptyRecycleBinResult {
+  ok: boolean;
+  code?: string;
+  detail?: string;
+}
+
+export function defaultEmptyRecycleBin(): EmptyRecycleBinResult {
+  if (process.platform !== 'win32') return { ok: false, code: 'RECYCLE-BIN-UNSUPPORTED' };
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop'], {
+      encoding: 'utf8',
+      timeout: 60_000,
+    });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, code: 'RECYCLE-BIN-ERROR', detail: codeOf(error) };
+  }
 }
 
 const FILE_LOCKED_CODES = new Set(['EBUSY', 'EPERM']);
@@ -69,15 +89,44 @@ export function deletePathTree(target: string): DeleteOutcome {
   return outcome;
 }
 
-export function executeItem(item: PlanItem, options: { guard?: GuardOptions } = {}): ItemResult {
-  if (item.action.kind !== 'delete-path') {
+export function executeItem(
+  item: PlanItem,
+  options: { guard?: GuardOptions; runEmptyRecycleBin?: () => EmptyRecycleBinResult } = {},
+): ItemResult {
+  if (item.action.kind === 'empty-recycle-bin') {
+    const guardResult = checkDeletable(item.path, {
+      ...(options.guard ?? {}),
+      exemptExact: [item.path],
+    });
+    if (!guardResult.allowed) {
+      return {
+        ...baseResult(item),
+        action: 'empty-recycle-bin',
+        status: 'failed',
+        deletedBytes: 0,
+        skippedLocked: 0,
+        errors: [{ path: item.path, code: `GUARD-${(guardResult.reason ?? 'denied').toUpperCase()}` }],
+      };
+    }
+    const run = options.runEmptyRecycleBin ?? defaultEmptyRecycleBin;
+    const result = run();
+    if (result.ok) {
+      return {
+        ...baseResult(item),
+        action: 'empty-recycle-bin',
+        status: 'done',
+        deletedBytes: 0,
+        skippedLocked: 0,
+        errors: [],
+      };
+    }
     return {
       ...baseResult(item),
-      action: item.action.kind,
+      action: 'empty-recycle-bin',
       status: 'failed',
       deletedBytes: 0,
       skippedLocked: 0,
-      errors: [{ path: item.path, code: 'UNSUPPORTED-ACTION' }],
+      errors: [{ path: item.path, code: result.code ?? 'RECYCLE-BIN-ERROR' }],
     };
   }
 
