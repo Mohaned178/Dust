@@ -26,6 +26,7 @@ export interface FsProbe {
   exists(path: string): boolean;
   stat(path: string): Stats | null;
   listDirectory(path: string): Dirent[];
+  readFile(path: string): string | null;
 }
 
 export interface RuleContext {
