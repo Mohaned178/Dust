@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   AggregateTree,
+  Cleaner,
+  PlanTokenError,
   RULES_VERSION,
   ScanSession,
   buildSnapshot,
@@ -12,18 +14,24 @@ import {
   defaultRuleEnv,
   getVolumeUsage,
   listVolumes,
+  pruneSnapshotAfterCleanup,
   volumeRootOf,
 } from '@dust/core';
 import type {
+  CleanupPlan,
+  CleanupReport as CoreCleanupReport,
   FolderRecord,
   Marker,
   ProjectOptions,
+  ProjectRecord,
   RecycleBinInfo,
   Rule,
   RuleContext,
   RuleEnv,
   ScanResult,
   SessionOptions,
+  SnapshotCategory,
+  SnapshotData,
   SnapshotMatch,
   VolumeInfo,
   VolumeUsage,
@@ -31,11 +39,21 @@ import type {
 import type { SnapshotStore } from '@dust/core';
 import type {
   CategorySummaryRow,
+  CleanExecuteRequest,
+  CleanExecuteResult,
+  CleanPreview,
+  CleanPreviewRequest,
+  CleanPreviewResult,
+  CleanReport,
+  CleanScope,
   DashboardState,
+  DevCleanupState,
+  RecentlyCleanedProject,
   ResultMatch,
   ResultRow,
   ResultsState,
   ScanEvent,
+  SetPinResult,
   StartAnalyzeResult,
 } from '../../shared/ipc';
 import { aggregateCategories, collectRuleMatches } from './analyze';
@@ -44,6 +62,19 @@ import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
 import { buildRowsFromSnapshot, buildRowsFromTree, sameRoot, summarizeCategories, toResultRow } from './results';
 import type { ResultsEnv } from './results';
+import { applyCleanReport } from './cleanup-rows';
+import {
+  isUnderAny,
+  samePath,
+  scopeRules,
+  snapshotRules,
+  subtractCategories,
+  toCleanItemResult,
+  toCleanPreview,
+  toCleanReport,
+} from './cleanup';
+import { groupDevProjects, projectNameOf, toDevProjects } from './dev-cleanup';
+import { measureDirectories } from './targeted';
 
 export interface ScanSessionLike {
   start(): Promise<ScanResult>;
@@ -67,6 +98,8 @@ export interface EngineHostDeps {
     projects: ProjectOptions,
     options: { recycleBin?: { enumerate?: () => RecycleBinInfo | Promise<RecycleBinInfo> } },
   ) => Rule[];
+  createCleaner?: () => Cleaner;
+  quickRoot?: () => string;
 }
 
 export interface EngineHost {
@@ -74,6 +107,10 @@ export interface EngineHost {
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
   getResults(root: string): ResultsState;
+  previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
+  executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
+  getDevCleanup(root: string): DevCleanupState;
+  setPin(path: string, pinned: boolean): SetPinResult;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
@@ -84,6 +121,21 @@ function guardEnv(env: RuleEnv): ResultsEnv {
     programData: env.programData || undefined,
     userProfile: env.userProfile || undefined,
   };
+}
+
+interface PlanSource {
+  source: CleanPreview['source'];
+  root: string;
+  scanAgeMs: number | null;
+  rules: Rule[];
+  ctx: RuleContext;
+}
+
+interface PendingPlan {
+  plan: CleanupPlan;
+  scope: CleanScope;
+  root: string;
+  selection: string[];
 }
 
 export function createEngineHost(deps: EngineHostDeps): EngineHost {
@@ -110,6 +162,30 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     rows: ResultRow[];
   } | null = null;
 
+  let lastRun: {
+    root: string;
+    tree: AggregateTree;
+    markers: Marker[];
+    probe: RuleContext['probe'];
+    rules: Rule[];
+    projects: ProjectRecord[];
+    ruleCategories: SnapshotCategory[];
+    finishedAt: number;
+  } | null = null;
+
+  let recentlyCleaned: RecentlyCleanedProject[] = [];
+  const pendingPlans = new Map<string, PendingPlan>();
+  const cleaner =
+    deps.createCleaner?.() ??
+    new Cleaner({
+      guard: {
+        systemRoot: env.windowsDir || undefined,
+        programData: env.programData || undefined,
+        userProfile: env.userProfile || undefined,
+      },
+      now,
+    });
+
   function emit(event: ScanEvent): void {
     for (const listener of [...listeners]) {
       try {
@@ -124,6 +200,240 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const volumes = listVolumesFn();
     const usage = getVolumeUsageFn(volumes.map((volume) => volume.root));
     return buildDashboardState({ volumes, usage, snapshot: deps.store.load(), scan: lock.current() });
+  }
+
+  function liveSource(): PlanSource | null {
+    if (lastRun === null) return null;
+    return {
+      source: 'live',
+      root: lastRun.root,
+      scanAgeMs: Math.max(now() - lastRun.finishedAt, 0),
+      rules: lastRun.rules,
+      ctx: { root: lastRun.root, tree: lastRun.tree, markers: lastRun.markers, probe: lastRun.probe },
+    };
+  }
+
+  function snapshotSource(snapshot: SnapshotData): PlanSource {
+    return {
+      source: 'snapshot',
+      root: snapshot.root,
+      scanAgeMs: Math.max(now() - snapshot.finishedAt, 0),
+      rules: snapshotRules(snapshot, deps.store.getPins()),
+      ctx: { root: snapshot.root, tree: new AggregateTree(), markers: [], probe: createNodeFsProbe() },
+    };
+  }
+
+  function quickCleanRoot(): string {
+    if (lastRun !== null) return lastRun.root;
+    const loaded = deps.store.load();
+    if (loaded.kind === 'ok') return loaded.snapshot.root;
+    return (
+      deps.quickRoot?.() ??
+      volumeRootOf(env.userProfile || env.windowsDir || env.temp) ??
+      volumeRootOf(process.cwd()) ??
+      'C:\\'
+    );
+  }
+
+  async function targetedSource(root: string): Promise<PlanSource> {
+    const probe = createNodeFsProbe();
+    const rules = createRules(
+      env,
+      { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
+      { recycleBin: { enumerate: () => defaultRecycleBinEnumeration() } },
+    );
+    const actions = new Map(rules.map((rule) => [rule.id, rule.action.kind]));
+    const discovery = await collectRuleMatches(scopeRules(rules, 'quick', []), {
+      root,
+      tree: new AggregateTree(),
+      markers: [],
+      probe,
+    });
+    const tree = measureDirectories(
+      discovery
+        .filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin')
+        .map((match) => match.path),
+    );
+    return { source: 'targeted', root, scanAgeMs: null, rules, ctx: { root, tree, markers: [], probe } };
+  }
+
+  async function resolveQuickSource(): Promise<PlanSource> {
+    const live = liveSource();
+    if (live !== null) return live;
+    const loaded = deps.store.load();
+    if (loaded.kind === 'ok') return snapshotSource(loaded.snapshot);
+    return targetedSource(quickCleanRoot());
+  }
+
+  async function resolveRootSource(root: string): Promise<PlanSource | null> {
+    const live = liveSource();
+    if (live !== null && sameRoot(live.root, root)) return live;
+    const loaded = deps.store.load();
+    if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, root)) return snapshotSource(loaded.snapshot);
+    return null;
+  }
+
+  async function previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult> {
+    const scope = request.scope;
+    if (scope !== 'quick' && request.paths.length === 0) {
+      return { ok: false, reason: 'empty-selection', message: 'Select at least one item to clean' };
+    }
+    const lockRoot = scope === 'quick' ? quickCleanRoot() : request.root;
+    const acquired = lock.acquire('quick-clean', lockRoot, now());
+    if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
+    try {
+      const base = scope === 'quick' ? await resolveQuickSource() : await resolveRootSource(request.root);
+      if (base === null) {
+        return {
+          ok: false,
+          reason: 'invalid-root',
+          message: `No scan data for ${lockRoot} - run an Analyze first`,
+        };
+      }
+      const selection = scope === 'quick' ? [] : request.paths;
+      const plan = await cleaner.preview(scopeRules(base.rules, scope, selection), base.ctx);
+      if (plan.items.length === 0) {
+        return { ok: false, reason: 'empty-selection', message: 'Nothing to clean here' };
+      }
+      pendingPlans.set(plan.id, { plan, scope, root: base.root, selection: [...selection] });
+      return {
+        ok: true,
+        preview: toCleanPreview(plan, base.source, base.root, base.scanAgeMs, {
+          windowsDir: env.windowsDir || undefined,
+        }),
+      };
+    } catch (error) {
+      return { ok: false, reason: 'failed', message: messageOf(error) };
+    } finally {
+      lock.release();
+    }
+  }
+
+  function applyCleanupEffects(pending: PendingPlan, coreReport: CoreCleanupReport): number {
+    const loaded = deps.store.load();
+    const baseCategories: SnapshotCategory[] =
+      lastRun !== null && sameRoot(lastRun.root, pending.root)
+        ? lastRun.ruleCategories
+        : loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, pending.root)
+          ? loaded.snapshot.categories
+          : [];
+
+    const report = toCleanReport(pending.plan, pending.scope, pending.root, coreReport, 0);
+
+    if (lastResults !== null && sameRoot(lastResults.root, pending.root)) {
+      lastResults = {
+        ...lastResults,
+        rows: applyCleanReport(lastResults.rows, report),
+        categories: summarizeCategories(subtractCategories(baseCategories, report)),
+      };
+    }
+
+    if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, pending.root)) {
+      deps.store.save(pruneSnapshotAfterCleanup(loaded.snapshot, coreReport, now()));
+    }
+
+    lastRun = null;
+    return summarizeCategories(subtractCategories(baseCategories, report)).reduce(
+      (sum, row) => sum + row.bytes,
+      0,
+    );
+  }
+
+  function recordRecentlyCleaned(pending: PendingPlan, report: CleanReport): void {
+    const byProject = new Map<string, RecentlyCleanedProject>();
+    for (const item of report.items) {
+      if (item.ruleId !== 'npm-project-modules' || item.deletedBytes <= 0) continue;
+      const projectPath = pending.selection
+        .filter((path) => isUnderAny(item.path, [path]))
+        .sort((a, b) => b.length - a.length)[0];
+      if (projectPath === undefined) continue;
+      const existing = byProject.get(projectPath);
+      if (existing) {
+        existing.bytes += item.deletedBytes;
+        continue;
+      }
+      byProject.set(projectPath, {
+        root: pending.root,
+        path: projectPath,
+        name: projectNameOf(projectPath),
+        bytes: item.deletedBytes,
+        restoreCommand: item.restoreCommand,
+        cleanedAt: report.finishedAt,
+      });
+    }
+    for (const entry of byProject.values()) {
+      recentlyCleaned = [entry, ...recentlyCleaned.filter((row) => !samePath(row.path, entry.path))];
+    }
+  }
+
+  async function executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult> {
+    const pending = pendingPlans.get(request.planId);
+    if (!pending) return { ok: false, reason: 'unknown-plan' };
+    const acquired = lock.acquire('quick-clean', pending.root, now());
+    if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
+    try {
+      let coreReport: CoreCleanupReport;
+      try {
+        coreReport = await cleaner.execute(request.planId, {
+          acknowledge: request.acknowledge,
+          onItem: (result) =>
+            emit({
+              type: 'clean-item',
+              cleanId: request.cleanId,
+              item: toCleanItemResult(pending.plan, result),
+            }),
+        });
+      } catch (error) {
+        if (error instanceof PlanTokenError) return { ok: false, reason: error.code };
+        return { ok: false, reason: 'failed', message: messageOf(error) };
+      }
+      pendingPlans.delete(request.planId);
+      const remaining = applyCleanupEffects(pending, coreReport);
+      const report = toCleanReport(pending.plan, pending.scope, pending.root, coreReport, remaining);
+      if (pending.scope === 'dev') recordRecentlyCleaned(pending, report);
+      emit({ type: 'cleaned', cleanId: request.cleanId, root: pending.root });
+      return { ok: true, report };
+    } finally {
+      lock.release();
+    }
+  }
+
+  function getDevCleanup(root: string): DevCleanupState {
+    const pins = deps.store.getPins();
+    let source: DevCleanupState['source'] = 'empty';
+    let finishedAt: number | null = null;
+    let projects: ProjectRecord[] = [];
+
+    if (lastRun !== null && sameRoot(lastRun.root, root)) {
+      source = 'live';
+      finishedAt = lastRun.finishedAt;
+      projects = lastRun.projects;
+    } else {
+      const loaded = deps.store.load();
+      if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, root)) {
+        source = 'snapshot';
+        finishedAt = loaded.snapshot.finishedAt;
+        projects = loaded.snapshot.projects;
+      }
+    }
+
+    const cleaned = recentlyCleaned.filter((entry) => sameRoot(entry.root, root));
+    const visible = toDevProjects(projects, pins).filter(
+      (entry) => !cleaned.some((candidate) => samePath(candidate.path, entry.path)),
+    );
+    return { source, root, finishedAt, groups: groupDevProjects(visible), recentlyCleaned: cleaned };
+  }
+
+  function setPin(path: string, pinned: boolean): SetPinResult {
+    const current = deps.store.getPins();
+    const remaining = current.filter((pin) => !samePath(pin, path));
+    const next = pinned ? [...remaining, path] : remaining;
+    const saved = deps.store.setPins(next);
+    return saved.ok ? { ok: true, pins: next } : { ok: false, message: saved.error ?? 'could not save pins' };
+  }
+
+  function messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
@@ -262,6 +572,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       settle = resolve;
     });
     lastResults = null;
+    lastRun = null;
+    pendingPlans.clear();
+    recentlyCleaned = [];
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
@@ -368,6 +681,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       rows: buildRowsFromTree(result.tree, result.root, matches, guard),
     };
 
+    lastRun = {
+      root: result.root,
+      tree: result.tree,
+      markers: result.markers,
+      probe,
+      rules,
+      projects: analysis.projects,
+      ruleCategories,
+      finishedAt,
+    };
+
     const usage = getVolumeUsageFn(listVolumesFn().map((volume) => volume.root));
     const snapshot = buildSnapshot({
       root: result.root,
@@ -466,5 +790,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     listeners.clear();
   }
 
-  return { getDashboard, startAnalyze, cancelScan, getResults, onEvent, dispose };
+  return {
+    getDashboard,
+    startAnalyze,
+    cancelScan,
+    getResults,
+    previewClean,
+    executeClean,
+    getDevCleanup,
+    setPin,
+    onEvent,
+    dispose,
+  };
 }

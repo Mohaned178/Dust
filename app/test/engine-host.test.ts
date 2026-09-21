@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
@@ -539,5 +540,271 @@ describe('createEngineHost', () => {
     fake.finish(emptyScanResult(tree.root, 'complete'));
     await finished;
     expect(projectsCalls).toBe(1);
+  });
+
+  it('previews and executes a quick clean from live results', async () => {
+    tree.file('temp/junk.bin', 'abcdefghij');
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+      now: () => 1000,
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    await finished;
+
+    const preview = await host.previewClean({ scope: 'quick' });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.preview.source).toBe('live');
+    expect(preview.preview.items.map((entry) => entry.path)).toEqual([join(tree.root, 'temp')]);
+    expect(preview.preview.totals.bytes).toBe(10);
+    expect(preview.preview.items[0]?.recovery.kind).toBe('junk');
+
+    const result = await host.executeClean({ cleanId: 'clean-1', planId: preview.preview.planId });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.report.deletedBytes).toBe(10);
+    expect(result.report.items[0]).toMatchObject({ status: 'done', category: 'temp' });
+    expect(existsSync(join(tree.root, 'temp'))).toBe(false);
+
+    const loaded = store.load();
+    expect(loaded.kind).toBe('ok');
+    if (loaded.kind !== 'ok') return;
+    expect(loaded.snapshot.cleanedAt).toBe(1000);
+    expect(loaded.snapshot.categories[0]).toMatchObject({ ruleId: 'fixture-temp', bytes: 0, items: 0 });
+    expect(loaded.snapshot.folders.some((folder) => folder.path === join(tree.root, 'temp'))).toBe(false);
+
+    const live = host.getResults(tree.root);
+    expect(live.rows.some((row) => row.path === join(tree.root, 'temp'))).toBe(false);
+  });
+
+  it('refuses a cleanup while a scan holds the lock', async () => {
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+      createSession: () => fake,
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    expect(await host.previewClean({ scope: 'quick' })).toEqual({ ok: false, reason: 'busy', running: 'analyze' });
+
+    fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    await finished;
+  });
+
+  it('cleans selected projects from a snapshot and records recently cleaned', async () => {
+    const projectDir = tree.dir('proj');
+    tree.file('proj/package.json', '{}');
+    tree.file('proj/node_modules/dep/index.js', '0123456789');
+    const nodeModules = join(projectDir, 'node_modules');
+
+    store.save({
+      schemaVersion: 2,
+      rulesVersion: '1',
+      root: tree.root,
+      startedAt: 1,
+      finishedAt: 2,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [{ ruleId: 'npm-project-modules', category: 'npm-projects', bytes: 10, items: 1 }],
+      matches: [
+        {
+          path: nodeModules,
+          ruleId: 'npm-project-modules',
+          category: 'npm-projects',
+          bytes: 10,
+          grade: 'safe',
+          evidence: 'Project',
+        },
+      ],
+      projects: [
+        {
+          path: projectDir,
+          name: 'proj',
+          kind: 'project',
+          packageManager: 'npm',
+          pinned: false,
+          workspaceCount: 0,
+          nodeModules: { paths: [{ path: nodeModules, bytes: 10 }], bytes: 10 },
+          activity: { ms: 100, source: 'files' },
+          recency: 'dead',
+          restorability: { grade: 'green', reasons: [], restoreCommand: 'npm ci' },
+          offered: true,
+          evidence: ['npm'],
+        },
+      ],
+      folders: [
+        { path: tree.root, name: tree.root, bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
+        { path: projectDir, name: 'proj', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
+        { path: nodeModules, name: 'node_modules', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 0 },
+      ],
+    });
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      now: () => 1000,
+    });
+
+    const dev = host.getDevCleanup(tree.root);
+    expect(dev.source).toBe('snapshot');
+    expect(dev.groups.find((group) => group.id === 'dead')?.projects.map((entry) => entry.path)).toEqual([
+      projectDir,
+    ]);
+
+    const preview = await host.previewClean({ scope: 'dev', root: tree.root, paths: [projectDir] });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.preview.totals.bytes).toBe(10);
+
+    const executed = await host.executeClean({ cleanId: 'clean-2', planId: preview.preview.planId });
+    expect(executed.ok).toBe(true);
+    if (!executed.ok) return;
+    expect(executed.report.items[0]).toMatchObject({ status: 'done', restoreCommand: 'npm ci' });
+    expect(existsSync(nodeModules)).toBe(false);
+
+    const after = host.getDevCleanup(tree.root);
+    expect(after.recentlyCleaned.map((entry) => [entry.path, entry.restoreCommand])).toEqual([
+      [projectDir, 'npm ci'],
+    ]);
+    expect(after.groups.flatMap((group) => group.projects)).toEqual([]);
+
+    const loaded = store.load();
+    expect(loaded.kind).toBe('ok');
+    if (loaded.kind !== 'ok') return;
+    expect(loaded.snapshot.projects).toEqual([]);
+    expect(loaded.snapshot.matches).toEqual([]);
+  });
+
+  it('previews a row clean from the saved snapshot', async () => {
+    const temp = tree.dir('temp');
+    tree.file('temp/junk.bin', '0123456789');
+
+    store.save({
+      schemaVersion: 2,
+      rulesVersion: '1',
+      root: tree.root,
+      startedAt: 1,
+      finishedAt: 2,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 10, items: 1 }],
+      matches: [
+        { path: temp, ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'temp' },
+      ],
+      projects: [],
+      folders: [
+        { path: tree.root, name: tree.root, bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
+        { path: temp, name: 'temp', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 0 },
+      ],
+    });
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+    });
+
+    const preview = await host.previewClean({ scope: 'row', root: tree.root, paths: [temp] });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.preview.source).toBe('snapshot');
+
+    const executed = await host.executeClean({ cleanId: 'clean-3', planId: preview.preview.planId });
+    expect(executed.ok).toBe(true);
+    if (!executed.ok) return;
+    expect(executed.report.items[0]).toMatchObject({ ruleId: 'system-temp', deletedBytes: 10 });
+    expect(existsSync(temp)).toBe(false);
+  });
+
+  it('requires an acknowledgement for review-grade project matches', async () => {
+    const appPath = join(tree.root, 'ghost-app');
+    const nodeModules = join(appPath, 'node_modules');
+    store.save({
+      schemaVersion: 2,
+      rulesVersion: '1',
+      root: tree.root,
+      startedAt: 1,
+      finishedAt: 2,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [{ ruleId: 'npm-project-modules', category: 'npm-projects', bytes: 5, items: 1 }],
+      matches: [
+        {
+          path: nodeModules,
+          ruleId: 'npm-project-modules',
+          category: 'npm-projects',
+          bytes: 5,
+          grade: 'review',
+          evidence: 'no lockfile',
+        },
+      ],
+      projects: [
+        {
+          path: appPath,
+          name: 'app',
+          kind: 'project',
+          packageManager: 'npm',
+          pinned: false,
+          workspaceCount: 0,
+          nodeModules: { paths: [{ path: nodeModules, bytes: 5 }], bytes: 5 },
+          activity: { ms: 100, source: 'files' },
+          recency: 'dead',
+          restorability: { grade: 'yellow', reasons: ['no lockfile'], restoreCommand: 'npm install' },
+          offered: true,
+          evidence: ['npm'],
+        },
+      ],
+      folders: [],
+    });
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+    });
+
+    const preview = await host.previewClean({ scope: 'dev', root: tree.root, paths: [appPath] });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.preview.totals.reviewItems).toBe(1);
+
+    expect(await host.executeClean({ cleanId: 'clean-4', planId: preview.preview.planId })).toEqual({
+      ok: false,
+      reason: 'unacknowledged-review',
+    });
+
+    const acknowledged = await host.executeClean({
+      cleanId: 'clean-4',
+      planId: preview.preview.planId,
+      acknowledge: [nodeModules],
+    });
+    expect(acknowledged.ok).toBe(true);
+    if (!acknowledged.ok) return;
+    expect(acknowledged.report.items[0]?.status).toBe('already-gone');
   });
 });
