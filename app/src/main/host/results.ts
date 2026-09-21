@@ -178,6 +178,6 @@ function nearestIncludedParent(path: string, root: string, folders: Set<string>)
   return null;
 }
 
-function pathKey(path: string): string {
+export function pathKey(path: string): string {
   return path.replace(/[\\/]+$/, '').toLowerCase();
 }
