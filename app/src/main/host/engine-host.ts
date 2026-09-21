@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  AggregateTree,
   RULES_VERSION,
   ScanSession,
   buildSnapshot,
@@ -7,13 +8,17 @@ import {
   createExternalPredicate,
   createInventoryRules,
   createNodeFsProbe,
+  defaultRecycleBinEnumeration,
   defaultRuleEnv,
   getVolumeUsage,
   listVolumes,
   volumeRootOf,
 } from '@dust/core';
 import type {
+  FolderRecord,
+  Marker,
   ProjectOptions,
+  RecycleBinInfo,
   Rule,
   RuleContext,
   RuleEnv,
@@ -37,7 +42,7 @@ import { aggregateCategories, collectRuleMatches } from './analyze';
 import { buildDashboardState } from './dashboard';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
-import { buildRowsFromSnapshot, buildRowsFromTree, sameRoot, summarizeCategories } from './results';
+import { buildRowsFromSnapshot, buildRowsFromTree, sameRoot, summarizeCategories, toResultRow } from './results';
 import type { ResultsEnv } from './results';
 
 export interface ScanSessionLike {
@@ -52,10 +57,16 @@ export interface EngineHostDeps {
   env?: RuleEnv;
   now?: () => number;
   progressIntervalMs?: number;
+  folderIntervalMs?: number;
+  categoryIntervalMs?: number;
   listVolumes?: () => VolumeInfo[];
   getVolumeUsage?: (volumes: string[]) => VolumeUsage[];
   createSession?: (options: SessionOptions) => ScanSessionLike;
-  createRules?: (env: RuleEnv, projects: ProjectOptions) => Rule[];
+  createRules?: (
+    env: RuleEnv,
+    projects: ProjectOptions,
+    options: { recycleBin?: { enumerate?: () => RecycleBinInfo | Promise<RecycleBinInfo> } },
+  ) => Rule[];
 }
 
 export interface EngineHost {
@@ -83,7 +94,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const createSession = deps.createSession ?? ((options: SessionOptions) => new ScanSession(options));
   const createRules =
     deps.createRules ??
-    ((ruleEnv: RuleEnv, projects: ProjectOptions) => createInventoryRules(ruleEnv, { projects }));
+    ((ruleEnv: RuleEnv, projects: ProjectOptions, options) =>
+      createInventoryRules(ruleEnv, { projects, recycleBin: options.recycleBin }));
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
 
@@ -120,22 +132,93 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         ? undefined
         : listVolumesFn().find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
+    const targetRoot = target.root;
 
-    const acquired = lock.acquire('analyze', target.root, now());
+    const acquired = lock.acquire('analyze', targetRoot, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
 
     const runId = randomUUID();
-    lastResults = null;
     const startedAt = now();
+    lastResults = null;
     const progress = new ThrottledEmitter<ScanEvent>((event) => emit(event), {
       intervalMs: deps.progressIntervalMs ?? 100,
     });
+
+    const folderIntervalMs = deps.folderIntervalMs ?? 100;
+    const categoryIntervalMs = deps.categoryIntervalMs ?? 2000;
+    const guard = guardEnv(env);
+    const probe = createNodeFsProbe();
+    const liveTree = new AggregateTree();
+    const liveMarkers: Marker[] = [];
+    const folderBuffer: ResultRow[] = [];
+    let lastFolderFlush = 0;
+    let lastCategoryRun = 0;
+    let categoryRunning = false;
+    let liveEnded = false;
+
+    let recycleBinInfo: RecycleBinInfo | null = null;
+    const rules = createRules(
+      env,
+      { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
+      {
+        recycleBin: {
+          enumerate: () => (recycleBinInfo ??= defaultRecycleBinEnumeration()),
+        },
+      },
+    );
+
+    function flushFolders(): void {
+      if (folderBuffer.length === 0) return;
+      emit({ type: 'folders', runId, folders: folderBuffer.splice(0) });
+    }
+
+    function maybeLiveCategories(): void {
+      if (liveEnded || categoryRunning) return;
+      const stamp = now();
+      if (stamp - lastCategoryRun < categoryIntervalMs) return;
+      lastCategoryRun = stamp;
+      categoryRunning = true;
+      void collectRuleMatches(rules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
+        .then((matches) => {
+          if (liveEnded) return;
+          emit({ type: 'categories', runId, categories: summarizeCategories(aggregateCategories(matches)) });
+        })
+        .catch(() => {})
+        .finally(() => {
+          categoryRunning = false;
+        });
+    }
+
+    function onLiveFolder(record: FolderRecord): void {
+      liveTree.addFolder(record);
+      folderBuffer.push(
+        toResultRow(record, {
+          root: targetRoot,
+          complete: true,
+          childCount: liveTree.children(record.path).length,
+          env: guard,
+        }),
+      );
+      const stamp = now();
+      if (stamp - lastFolderFlush >= folderIntervalMs) {
+        lastFolderFlush = stamp;
+        flushFolders();
+      }
+      maybeLiveCategories();
+    }
+
+    function finishLive(): void {
+      liveEnded = true;
+      flushFolders();
+    }
 
     let session: ScanSessionLike;
     try {
       session = createSession({
         root: volume,
         pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        onFolder: onLiveFolder,
+        onMarker: (marker) => liveMarkers.push(marker),
         onProgress: (update) => {
           progress.push({
             type: 'progress',
@@ -166,7 +249,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress, settle });
+    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, finishLive });
 
     return { ok: true, runId };
   }
@@ -177,12 +260,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     startedAt: number;
     progress: ThrottledEmitter<ScanEvent>;
     settle: () => void;
+    rules: Rule[];
+    probe: RuleContext['probe'];
+    finishLive: () => void;
   }): Promise<void> {
     try {
       const result = await input.session.start();
+      input.finishLive();
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
-      const summary = await finalize(result, input.startedAt);
+      const summary = await finalize(result, input.startedAt, input.rules, input.probe);
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({ type: 'matches', runId: input.runId, matches: summary.matches });
       emit({
@@ -199,6 +286,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         saved: summary.saved,
       });
     } catch (error) {
+      input.finishLive();
       input.progress.cancel();
       emit({
         type: 'failed',
@@ -215,6 +303,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function finalize(
     result: ScanResult,
     startedAt: number,
+    rules: Rule[],
+    probe: RuleContext['probe'],
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -223,7 +313,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     categories: CategorySummaryRow[];
     matches: ResultMatch[];
   }> {
-    const probe = createNodeFsProbe();
     const existing = deps.store.load();
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
     const external = createExternalPredicate(listVolumesFn());
@@ -238,7 +327,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       isExternal: external,
       now,
     });
-    const rules = createRules(env, { pins, isExternal: external, now });
     const ctx: RuleContext = { root: result.root, tree: result.tree, markers: result.markers, probe };
     const matches = await collectRuleMatches(rules, ctx);
     const ruleCategories = aggregateCategories(matches);

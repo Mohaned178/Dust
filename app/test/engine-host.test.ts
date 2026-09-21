@@ -3,6 +3,7 @@ import { SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
+import type { ScanEvent } from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
 import { TempTree } from './fixtures';
 
@@ -344,5 +345,79 @@ describe('createEngineHost', () => {
     expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true });
     expect(seen).toEqual(['started', 'finalizing', 'categories', 'matches', 'finished']);
     expect(seen).not.toContain('failed');
+  });
+
+  it('streams completed folders, live categories and final matches during a scan', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    const liveRule: Rule = {
+      id: 'fixture-live',
+      category: 'temp',
+      title: 'Fixture live',
+      action: { kind: 'delete-path' },
+      match: (ctx: RuleContext) => {
+        const path = join(tree.root, 'b');
+        return [
+          {
+            path,
+            bytes: ctx.tree.get(path)?.bytes ?? 0,
+            grade: 'safe',
+            recovery: { kind: 'junk', reason: 'fixture junk' },
+            evidence: 'live fixture',
+          },
+        ];
+      },
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [liveRule],
+      createSession: (options) => (fake = new FakeSession(options)),
+      folderIntervalMs: 100,
+      categoryIntervalMs: 50,
+    });
+
+    const events: ScanEvent[] = [];
+    host.onEvent((event) => events.push(event));
+    const started = await host.startAnalyze(tree.root);
+    expect(started.ok).toBe(true);
+
+    const record = (path: string, bytes: number) => ({
+      path,
+      bytes,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+
+    fake.options.onFolder?.(record(join(tree.root, 'a'), 10));
+    clock = 500;
+    fake.options.onFolder?.(record(join(tree.root, 'b'), 20));
+
+    const folderEvent = events.find((event) => event.type === 'folders');
+    expect(folderEvent?.type === 'folders' && folderEvent.folders.map((row) => row.path)).toEqual([
+      join(tree.root, 'a'),
+      join(tree.root, 'b'),
+    ]);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const liveCategories = events.filter((event) => event.type === 'categories');
+    expect(liveCategories.length).toBeGreaterThan(0);
+    const live = liveCategories.at(-1);
+    expect(live?.type === 'categories' && live.categories.find((row) => row.category === 'temp')?.bytes).toBe(20);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    const matches = events.find((event) => event.type === 'matches');
+    expect(matches?.type === 'matches' && matches.matches[0]?.path).toBe(join(tree.root, 'b'));
   });
 });
