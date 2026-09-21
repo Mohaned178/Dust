@@ -156,8 +156,8 @@ describe('executeItem', () => {
   it('executes a delete-path item', () => {
     const dir = fixture.dir('junk');
     fixture.file('junk/a.txt', 'aaa');
-    const result = executeItem(item(dir));
-    expect(result).toMatchObject({ status: 'done', deletedBytes: 3, action: 'delete-path' });
+    const result = executeItem(item(dir, { bytes: 3 }));
+    expect(result).toMatchObject({ status: 'done', deletedBytes: 3, plannedBytes: 3, action: 'delete-path' });
     expect(existsSync(dir)).toBe(false);
   });
 

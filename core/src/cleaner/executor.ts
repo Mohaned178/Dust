@@ -22,6 +22,7 @@ export interface ItemResult extends DeleteOutcome {
   ruleId: string;
   path: string;
   action: PlanItem['action']['kind'];
+  plannedBytes: number;
 }
 
 export interface EmptyRecycleBinResult {
@@ -165,8 +166,8 @@ export function executeItem(
   return { ...outcome, ...baseResult(item), action: 'delete-path' };
 }
 
-function baseResult(item: PlanItem): Pick<ItemResult, 'ruleId' | 'path'> {
-  return { ruleId: item.ruleId, path: item.path };
+function baseResult(item: PlanItem): Pick<ItemResult, 'ruleId' | 'path' | 'plannedBytes'> {
+  return { ruleId: item.ruleId, path: item.path, plannedBytes: item.bytes };
 }
 
 function walkDirectory(dir: string, outcome: DeleteOutcome): void {

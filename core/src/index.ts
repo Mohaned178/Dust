@@ -95,6 +95,7 @@ export type {
   SnapshotMatch,
 } from './snapshot/schema';
 export { applyCleanupReport, buildFolderMap, buildSnapshot } from './snapshot/build';
+export { pruneSnapshotAfterCleanup } from './snapshot/prune';
 export type { FolderMapOptions, SnapshotInput } from './snapshot/build';
 export { SnapshotStore } from './snapshot/store';
 export type { SaveResult, SnapshotLoadResult, StorePaths, UserPreferences } from './snapshot/store';

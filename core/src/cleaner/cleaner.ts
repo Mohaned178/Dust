@@ -90,6 +90,7 @@ export class Cleaner {
           ruleId: item.ruleId,
           path: item.path,
           action: item.action.kind,
+          plannedBytes: item.bytes,
           status: 'failed',
           deletedBytes: 0,
           skippedLocked: 0,
