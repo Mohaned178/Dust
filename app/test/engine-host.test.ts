@@ -252,6 +252,22 @@ describe('createEngineHost', () => {
     expect(host.getDashboard().scan).toBeNull();
   });
 
+  it('releases the lock when rule creation throws', async () => {
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => {
+        throw new Error('no rules');
+      },
+    });
+
+    expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no rules' });
+    expect(host.getDashboard().scan).toBeNull();
+    expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: false, reason: 'start-failed' });
+  });
+
   it('serves retained live results after a run and reports empty for other roots', async () => {
     tree.file('temp/junk.bin', 'abcdefghij');
 

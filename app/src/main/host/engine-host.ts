@@ -156,16 +156,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     let categoryRunning = false;
     let liveEnded = false;
 
-    let recycleBinInfo: RecycleBinInfo | null = null;
-    const rules = createRules(
-      env,
-      { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
-      {
-        recycleBin: {
-          enumerate: () => (recycleBinInfo ??= defaultRecycleBinEnumeration()),
-        },
-      },
-    );
+    let rules: Rule[];
 
     function flushFolders(): void {
       if (folderBuffer.length === 0) return;
@@ -214,6 +205,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     let session: ScanSessionLike;
     try {
+      let recycleBinInfo: RecycleBinInfo | null = null;
+      rules = createRules(
+        env,
+        { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
+        {
+          recycleBin: {
+            enumerate: () => (recycleBinInfo ??= defaultRecycleBinEnumeration()),
+          },
+        },
+      );
       session = createSession({
         root: volume,
         pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
