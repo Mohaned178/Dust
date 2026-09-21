@@ -53,7 +53,7 @@ export function toResultRow(record: RowInput, options: RowOptions): ResultRow {
     partial: record.partial,
     complete: options.complete,
     childCount: options.childCount,
-    grade: options.action ? options.action.grade : display.grade,
+    grade: display.grade,
     gradeReason: display.reason,
     action: options.action ?? null,
   };

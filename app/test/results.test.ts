@@ -146,8 +146,8 @@ describe('buildRowsFromSnapshot', () => {
 
     expect(byPath.get('C:\\')?.parent).toBeNull();
     expect(byPath.get('C:\\deep\\a\\b')?.parent).toBe('C:\\deep');
-    expect(byPath.get('C:\\deep\\a\\b')?.action).toMatchObject({ ruleId: 'system-temp' });
-    expect(byPath.get('C:\\deep\\a\\b')?.grade).toBe('safe');
+    expect(byPath.get('C:\\deep\\a\\b')?.action).toMatchObject({ ruleId: 'system-temp', grade: 'safe' });
+    expect(byPath.get('C:\\deep\\a\\b')?.grade).toBe('review');
   });
 });
 
