@@ -85,3 +85,18 @@ export type {
   RestorabilityGrade,
 } from './projects/types';
 export { npmProjectModulesRule } from './rules/inventory/npm-project-modules';
+export { SNAPSHOT_SCHEMA_VERSION, parseSnapshot, SnapshotCorruptError } from './snapshot/schema';
+export type {
+  ScanStatus,
+  SnapshotCategory,
+  SnapshotData,
+  SnapshotDisk,
+  SnapshotFolder,
+} from './snapshot/schema';
+export { applyCleanupReport, buildFolderMap, buildSnapshot } from './snapshot/build';
+export type { FolderMapOptions, SnapshotInput } from './snapshot/build';
+export { SnapshotStore } from './snapshot/store';
+export type { SaveResult, SnapshotLoadResult, StorePaths, UserPreferences } from './snapshot/store';
+export { RULES_VERSION } from './rules/version';
+export { getVolumeUsage, listFixedVolumes } from './system/volumes';
+export type { VolumeUsage } from './system/volumes';

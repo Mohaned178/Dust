@@ -37,4 +37,17 @@ describe('core public API', () => {
     expect(typeof core.npmProjectModulesRule).toBe('function');
     expect(core.DEFAULT_RECENCY_THRESHOLDS).toEqual({ activeDays: 30, occasionalDays: 180 });
   });
+
+  it('exposes the snapshot and volumes surface', () => {
+    expect(typeof core.buildSnapshot).toBe('function');
+    expect(typeof core.buildFolderMap).toBe('function');
+    expect(typeof core.applyCleanupReport).toBe('function');
+    expect(typeof core.SnapshotStore).toBe('function');
+    expect(typeof core.getVolumeUsage).toBe('function');
+    expect(typeof core.listFixedVolumes).toBe('function');
+    expect(typeof core.SnapshotCorruptError).toBe('function');
+    expect(core.SNAPSHOT_SCHEMA_VERSION).toBe(1);
+    expect(core.RULES_VERSION).toBe('1');
+    expect(typeof core.parseSnapshot).toBe('function');
+  });
 });
