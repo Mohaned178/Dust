@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { statfsSync } from 'node:fs';
+import { listVolumes } from './drive-type';
 
 export interface VolumeUsage {
   volume: string;
@@ -25,25 +26,9 @@ export function getVolumeUsage(volumes: string[]): VolumeUsage[] {
 }
 
 export function listFixedVolumes(): string[] {
-  if (process.platform !== 'win32') return [];
-  try {
-    const raw = execFileSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter } | ForEach-Object { "$($_.DriveLetter):\\" }`,
-      ],
-      { encoding: 'utf8', timeout: 15_000 },
-    );
-    return raw
-      .split(/[\r\n]+/)
-      .map((line) => line.trim())
-      .filter((line) => /^[A-Za-z]:\\$/.test(line));
-  } catch {
-    return [];
-  }
+  return listVolumes()
+    .filter((volume) => volume.driveType === 'fixed')
+    .map((volume) => volume.root);
 }
 
 function powershellVolumeUsage(volume: string): VolumeUsage {

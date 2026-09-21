@@ -50,4 +50,10 @@ describe('core public API', () => {
     expect(core.RULES_VERSION).toBe('1');
     expect(typeof core.parseSnapshot).toBe('function');
   });
+
+  it('exposes the drive-type surface', () => {
+    expect(typeof core.listVolumes).toBe('function');
+    expect(typeof core.volumeRootOf).toBe('function');
+    expect(typeof core.createExternalPredicate).toBe('function');
+  });
 });

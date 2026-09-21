@@ -100,3 +100,5 @@ export type { SaveResult, SnapshotLoadResult, StorePaths, UserPreferences } from
 export { RULES_VERSION } from './rules/version';
 export { getVolumeUsage, listFixedVolumes } from './system/volumes';
 export type { VolumeUsage } from './system/volumes';
+export { createExternalPredicate, listVolumes, volumeRootOf } from './system/drive-type';
+export type { DriveType, VolumeInfo } from './system/drive-type';
