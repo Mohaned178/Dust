@@ -38,21 +38,26 @@ export function ResultsView({ api, root, runId, onOpenDevCleanup }: ResultsViewP
   const [cleanPath, setCleanPath] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
   const expandedRef = useRef(expanded);
+  const reloadSeqRef = useRef(0);
 
   useEffect(() => {
     expandedRef.current = expanded;
   }, [expanded]);
 
   const reload = useCallback(() => {
+    const seq = reloadSeqRef.current + 1;
+    reloadSeqRef.current = seq;
     api
       .getResults(root)
       .then((next) => {
+        if (reloadSeqRef.current !== seq) return;
         storeRef.current = createRowStore(root);
         upsertRows(storeRef.current, next.rows);
         setState(next);
         setVersion((value) => value + 1);
       })
       .catch((cause: unknown) => {
+        if (reloadSeqRef.current !== seq) return;
         setError(cause instanceof Error ? cause.message : String(cause));
       });
   }, [api, root]);
@@ -65,6 +70,7 @@ export function ResultsView({ api, root, runId, onOpenDevCleanup }: ResultsViewP
     setExpanded(new Set());
     setFilter(null);
     setSelected(null);
+    setCleanPath(null);
     reload();
   }, [reload, root, runId]);
 

@@ -69,7 +69,17 @@ export function RowCleanDialog({ api, root, path, onClose }: RowCleanDialogProps
         {report !== null ? (
           <CleanSummary report={report} onDone={onClose} doneLabel="Close" />
         ) : preview === null ? (
-          <p className="text-sm text-neutral-400">Building the plan...</p>
+          error !== null ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300"
+            >
+              Close
+            </button>
+          ) : (
+            <p className="text-sm text-neutral-400">Building the plan...</p>
+          )
         ) : (
           <CleanPlan
             preview={preview}

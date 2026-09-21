@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest';
 import { ResultsView } from '../../renderer/src/pages/ResultsView';
 import type { CleanExecuteRequest, ResultsState, ScanEvent } from '../../src/shared/ipc';
-import { makeApi, makeCategories, makeResultsState } from './fakes';
+import { makeApi, makeCategories, makeResultsRows, makeResultsState } from './fakes';
 
 describe('ResultsView', () => {
   it('shows a loading state while getResults is pending', async () => {
@@ -209,5 +209,70 @@ describe('ResultsView', () => {
     fireEvent.click(await screen.findByRole('button', { name: /npm projects/ }));
     expect(onOpenDevCleanup).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Users')).not.toBeNull();
+  });
+
+  it('ignores a stale getResults response that resolves after a newer one', async () => {
+    const pending: Array<(state: ResultsState) => void> = [];
+    const getResults = vi.fn(
+      () =>
+        new Promise<ResultsState>((resolve) => {
+          pending.push(resolve);
+        }),
+    );
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      getResults,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    const rowsWithTempName = (name: string) =>
+      makeResultsRows().map((row) => (row.path === 'C:\\Temp' ? { ...row, name } : row));
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      handlers[0]?.({ type: 'cleaned', cleanId: 'clean-1', root: 'C:\\' });
+    });
+    expect(getResults).toHaveBeenCalledTimes(2);
+
+    const newer = pending[1];
+    const older = pending[0];
+    await act(async () => {
+      newer?.(makeResultsState({ rows: rowsWithTempName('Newer') }));
+    });
+    await act(async () => {
+      older?.(makeResultsState({ rows: rowsWithTempName('Older') }));
+    });
+
+    expect(await screen.findByText('Newer')).toBeInTheDocument();
+    expect(screen.queryByText('Older')).toBeNull();
+  });
+
+  it('shows a closeable error when the row plan cannot be built', async () => {
+    const api = makeApi({
+      getResults: async () => makeResultsState(),
+      previewClean: async () => ({ ok: false as const, reason: 'busy' as const, running: 'analyze' as const }),
+    });
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clean Temp' }));
+    expect(await screen.findByText('A scan is already running. Cancel it first.')).toBeInTheDocument();
+    expect(screen.queryByText('Building the plan...')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('closes the row cleanup dialog when the root changes', async () => {
+    const api = makeApi({ getResults: async () => makeResultsState() });
+    const { rerender } = render(<ResultsView api={api} root="C:\\" runId={null} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clean Temp' }));
+    expect(await screen.findByRole('dialog', { name: 'Clean C:\\Temp' })).toBeInTheDocument();
+
+    rerender(<ResultsView api={api} root="D:\\" runId={null} />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
