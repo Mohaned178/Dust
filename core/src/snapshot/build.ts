@@ -11,6 +11,7 @@ import type {
   SnapshotData,
   SnapshotDisk,
   SnapshotFolder,
+  SnapshotMatch,
 } from './schema';
 import { SNAPSHOT_SCHEMA_VERSION } from './schema';
 
@@ -22,6 +23,7 @@ export interface SnapshotInput {
   tree: AggregateTree;
   projects: ProjectRecord[];
   categories: SnapshotCategory[];
+  matches?: SnapshotMatch[];
   disks: SnapshotDisk[];
   rulesVersion?: string;
   priorCleanedAt?: number | null;
@@ -46,6 +48,7 @@ export function buildSnapshot(input: SnapshotInput): SnapshotData {
     cleanedAt: input.priorCleanedAt ?? null,
     disks: input.disks,
     categories: input.categories,
+    matches: input.matches ?? [],
     projects: input.projects,
     folders: buildFolderMap(input.tree, root, {
       maxDepth: input.maxDepth,
@@ -109,6 +112,7 @@ export function buildFolderMap(tree: AggregateTree, root: string, options: Folde
       path,
       name: basename(node.path),
       bytes: node.bytes,
+      allocatedBytes: node.allocatedBytes,
       fileCount: node.fileCount,
       folderCount: node.folderCount,
       newestMtimeMs: node.newestMtimeMs,

@@ -84,12 +84,13 @@ describe('buildSnapshot', () => {
       tree: result.tree,
       projects: [],
       categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 10, items: 1 }],
+      matches: [{ path: join(fixture.root, 'a'), ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'fixture' }],
       disks: [{ volume: 'F:\\', totalBytes: 100, freeBytes: 40 }],
       priorCleanedAt: 1500,
     });
 
     expect(snapshot).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       rulesVersion: '1',
       root: fixture.root,
       status: 'complete',
@@ -97,6 +98,8 @@ describe('buildSnapshot', () => {
     });
     expect(snapshot.folders.some((folder) => folder.path === fixture.root)).toBe(true);
     expect(snapshot.folders.some((folder) => folder.path === join(fixture.root, 'a'))).toBe(true);
+    expect(snapshot.matches).toHaveLength(1);
+    expect(snapshot.folders.find((folder) => folder.path === join(fixture.root, 'a'))?.allocatedBytes).toBe(4096);
   });
 
   it('stores the normalized root and still maps folders when given a trailing separator', async () => {

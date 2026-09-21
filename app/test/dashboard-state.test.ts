@@ -4,7 +4,7 @@ import { buildDashboardState } from '../src/main/host/dashboard';
 
 function snapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     rulesVersion: '1',
     root: 'C:\\Data',
     startedAt: 10,
@@ -13,6 +13,7 @@ function snapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
     cleanedAt: null,
     disks: [{ volume: 'C:\\', totalBytes: 1000, freeBytes: 400 }],
     categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 100, items: 2 }],
+    matches: [],
     projects: [],
     folders: [],
     ...overrides,

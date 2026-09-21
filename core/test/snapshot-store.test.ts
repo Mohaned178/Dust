@@ -73,7 +73,7 @@ describe('SnapshotStore', () => {
     });
     mkdirSync(join(dir, 'unwritable'));
     const result = blocked.save({
-      schemaVersion: 1,
+      schemaVersion: 2,
       rulesVersion: '1',
       root: 'F:\\x',
       startedAt: 0,
@@ -82,6 +82,7 @@ describe('SnapshotStore', () => {
       cleanedAt: null,
       disks: [],
       categories: [],
+      matches: [],
       projects: [],
       folders: [],
     });

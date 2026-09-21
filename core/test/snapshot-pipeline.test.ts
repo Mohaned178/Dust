@@ -118,7 +118,7 @@ describe('snapshot pipeline (scan, classify, rule, clean, persist)', () => {
     expect(typeof core.getVolumeUsage).toBe('function');
     expect(typeof core.listFixedVolumes).toBe('function');
     expect(typeof core.SnapshotCorruptError).toBe('function');
-    expect(core.SNAPSHOT_SCHEMA_VERSION).toBe(1);
+    expect(core.SNAPSHOT_SCHEMA_VERSION).toBe(2);
     expect(core.RULES_VERSION).toBe('1');
     expect(typeof core.parseSnapshot).toBe('function');
   });

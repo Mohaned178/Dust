@@ -1,6 +1,6 @@
 import type { ProjectRecord } from '../projects/types';
 
-export const SNAPSHOT_SCHEMA_VERSION = 1;
+export const SNAPSHOT_SCHEMA_VERSION = 2;
 
 export type ScanStatus = 'complete' | 'cancelled';
 
@@ -21,6 +21,7 @@ export interface SnapshotFolder {
   path: string;
   name: string;
   bytes: number;
+  allocatedBytes: number;
   fileCount: number;
   folderCount: number;
   newestMtimeMs: number;
@@ -28,6 +29,15 @@ export interface SnapshotFolder {
   partial: boolean;
   complete: boolean;
   childCount: number;
+}
+
+export interface SnapshotMatch {
+  path: string;
+  ruleId: string;
+  category: string;
+  bytes: number;
+  grade: 'safe' | 'review';
+  evidence: string;
 }
 
 export interface SnapshotData {
@@ -40,6 +50,7 @@ export interface SnapshotData {
   cleanedAt: number | null;
   disks: SnapshotDisk[];
   categories: SnapshotCategory[];
+  matches: SnapshotMatch[];
   projects: ProjectRecord[];
   folders: SnapshotFolder[];
 }
@@ -84,6 +95,9 @@ export function parseSnapshot(raw: string): SnapshotData {
   if (!Array.isArray(object.categories) || !object.categories.every(isSnapshotCategory)) {
     throw new SnapshotCorruptError('categories');
   }
+  if (!Array.isArray(object.matches) || !object.matches.every(isSnapshotMatch)) {
+    throw new SnapshotCorruptError('matches');
+  }
   if (!Array.isArray(object.projects) || !object.projects.every(isProjectRecord)) {
     throw new SnapshotCorruptError('projects');
   }
@@ -118,6 +132,18 @@ function isSnapshotCategory(value: unknown): boolean {
     typeof value.category === 'string' &&
     isFiniteNumber(value.bytes) &&
     isFiniteNumber(value.items)
+  );
+}
+
+function isSnapshotMatch(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.path === 'string' &&
+    typeof value.ruleId === 'string' &&
+    typeof value.category === 'string' &&
+    isFiniteNumber(value.bytes) &&
+    (value.grade === 'safe' || value.grade === 'review') &&
+    typeof value.evidence === 'string'
   );
 }
 
@@ -186,6 +212,7 @@ function isSnapshotFolder(value: unknown): boolean {
     typeof value.path === 'string' &&
     typeof value.name === 'string' &&
     isFiniteNumber(value.bytes) &&
+    isFiniteNumber(value.allocatedBytes) &&
     isFiniteNumber(value.fileCount) &&
     isFiniteNumber(value.folderCount) &&
     isFiniteNumber(value.newestMtimeMs) &&

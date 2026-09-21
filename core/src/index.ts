@@ -92,6 +92,7 @@ export type {
   SnapshotData,
   SnapshotDisk,
   SnapshotFolder,
+  SnapshotMatch,
 } from './snapshot/schema';
 export { applyCleanupReport, buildFolderMap, buildSnapshot } from './snapshot/build';
 export type { FolderMapOptions, SnapshotInput } from './snapshot/build';

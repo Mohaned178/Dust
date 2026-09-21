@@ -5,7 +5,7 @@ import type { ProjectRecord } from '../src/projects/types';
 
 function validSnapshot(): SnapshotData {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     rulesVersion: '1',
     root: 'F:\\synthetic',
     startedAt: 1000,
@@ -20,6 +20,7 @@ function validSnapshot(): SnapshotData {
         path: 'F:\\synthetic',
         name: 'synthetic',
         bytes: 10,
+        allocatedBytes: 4096,
         fileCount: 2,
         folderCount: 0,
         newestMtimeMs: 3000,
@@ -27,6 +28,16 @@ function validSnapshot(): SnapshotData {
         partial: false,
         complete: true,
         childCount: 0,
+      },
+    ],
+    matches: [
+      {
+        path: 'F:\\synthetic\\Temp',
+        ruleId: 'system-temp',
+        category: 'temp',
+        bytes: 10,
+        grade: 'safe',
+        evidence: 'User TEMP directory — junk by definition',
       },
     ],
   };
@@ -38,11 +49,21 @@ describe('parseSnapshot', () => {
   });
 
   it('rejects garbage, wrong shapes and the wrong schema version', () => {
-    for (const raw of ['{oops', '5', 'null', '[]', '{}', '{"schemaVersion": 2}']) {
+    for (const raw of ['{oops', '5', 'null', '[]', '{}', '{"schemaVersion": 3}']) {
       expect(() => parseSnapshot(raw), raw).toThrow(SnapshotCorruptError);
     }
-    const wrongVersion = { ...validSnapshot(), schemaVersion: 2 };
+    const wrongVersion = { ...validSnapshot(), schemaVersion: 3 };
     expect(() => parseSnapshot(JSON.stringify(wrongVersion))).toThrow(SnapshotCorruptError);
+  });
+
+  it('rejects a malformed persisted match', () => {
+    const bad = {
+      ...validSnapshot(),
+      matches: [{ path: 'F:\\x', ruleId: 'system-temp', category: 'temp', bytes: 1, grade: 'maybe', evidence: 'x' }],
+    };
+    expect(() => parseSnapshot(JSON.stringify(bad))).toThrow(SnapshotCorruptError);
+    const missing = { ...validSnapshot(), matches: undefined };
+    expect(() => parseSnapshot(JSON.stringify(missing))).toThrow(SnapshotCorruptError);
   });
 
   it('rejects entries with bad field types', () => {
@@ -52,6 +73,8 @@ describe('parseSnapshot', () => {
     expect(() => parseSnapshot(JSON.stringify(badStatus))).toThrow(SnapshotCorruptError);
     const badFolders = { ...validSnapshot(), folders: [{ path: 'F:\\x' }] };
     expect(() => parseSnapshot(JSON.stringify(badFolders))).toThrow(SnapshotCorruptError);
+    const badAllocated = { ...validSnapshot(), folders: [{ ...validSnapshot().folders[0]!, allocatedBytes: 'lots' }] };
+    expect(() => parseSnapshot(JSON.stringify(badAllocated))).toThrow(SnapshotCorruptError);
   });
 
   it('accepts a full project record', () => {
@@ -117,6 +140,6 @@ describe('parseSnapshot', () => {
   });
 
   it('exposes the current schema version constant', () => {
-    expect(SNAPSHOT_SCHEMA_VERSION).toBe(1);
+    expect(SNAPSHOT_SCHEMA_VERSION).toBe(2);
   });
 });
