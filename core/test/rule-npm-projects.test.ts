@@ -14,6 +14,7 @@ function record(path: string, overrides: Partial<FolderRecord> = {}): FolderReco
   return {
     path,
     bytes: 0,
+    allocatedBytes: 0,
     fileCount: 0,
     folderCount: 0,
     linkCount: 0,

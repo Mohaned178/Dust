@@ -9,6 +9,7 @@ export interface WorkerRuntimeDeps {
   isExcluded: (absPath: string) => boolean;
   shouldAbort: () => boolean;
   splitAfterEntries: number;
+  clusterSize: number;
   batchIntervalMs: number;
   batchMaxItems: number;
   setIntervalFn?: (fn: () => void, ms: number) => unknown;
@@ -95,6 +96,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       isExcluded: deps.isExcluded,
       shouldAbort,
       splitAfterEntries: deps.splitAfterEntries,
+      clusterSize: deps.clusterSize,
       openDir: (open) => {
         dirOpens.push(open);
         errors += open.errorCount;

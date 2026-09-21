@@ -10,6 +10,7 @@ export interface Entry {
 export interface FolderRecord {
   path: string;
   bytes: number;
+  allocatedBytes: number;
   fileCount: number;
   folderCount: number;
   linkCount: number;

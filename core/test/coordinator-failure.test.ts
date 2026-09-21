@@ -44,6 +44,7 @@ function open(path: string, isRoot: boolean, childDirs: string[] = []): DirOpen 
     path,
     isRoot,
     directBytes: 0,
+    directAllocatedBytes: 0,
     directFileCount: 0,
     linkCount: 0,
     errorCount: 0,

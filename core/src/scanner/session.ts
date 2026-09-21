@@ -9,6 +9,7 @@ import { scanTree } from './scanner';
 import { DEFAULT_POOL_LIMITS, defaultWorkerCount } from '../scan/limits';
 import { createNodeWorkerTransport } from '../scan/node-worker';
 import { ScanCoordinator } from '../scan/coordinator';
+import { volumeClusterSize } from '../system/cluster';
 
 export interface PoolOptions {
   workers?: number;
@@ -24,6 +25,7 @@ export interface SessionOptions {
   enumerator?: Enumerator;
   exclusions?: ExclusionConfig;
   pool?: false | PoolOptions;
+  clusterSize?: number;
   progressEvery?: number;
   onFolder?: (record: FolderRecord) => void;
   onMarker?: (marker: Marker) => void;
@@ -58,15 +60,17 @@ export class ScanSession {
     const tree = new AggregateTree();
     const isExcluded = createExclusionPredicate(this.options.exclusions);
     const root = normalizeRoot(this.options.root);
+    const clusterSize = this.options.clusterSize ?? volumeClusterSize(root);
 
     if (this.options.pool === false || this.options.enumerator) {
-      return this.startLegacy(startedAt, tree, isExcluded, root);
+      return this.startLegacy(startedAt, tree, isExcluded, root, clusterSize);
     }
 
     if (this.controller.signal.aborted) {
       tree.addFolder({
         path: root,
         bytes: 0,
+        allocatedBytes: 0,
         fileCount: 0,
         folderCount: 0,
         linkCount: 0,
@@ -107,6 +111,7 @@ export class ScanSession {
             root,
             exclusions: this.options.exclusions ?? {},
             limits,
+            clusterSize,
             abortFlag: abortFlag.buffer,
           },
           { workerPath: pool.workerPath, execArgv: pool.execArgv },
@@ -141,11 +146,13 @@ export class ScanSession {
     tree: AggregateTree,
     isExcluded: (absPath: string) => boolean,
     root: string,
+    clusterSize: number,
   ): ScanResult {
     const stats = scanTree({
       root,
       enumerator: this.options.enumerator ?? new NodeFsEnumerator(),
       isExcluded,
+      clusterSize,
       progressEvery: this.options.progressEvery,
       signal: this.controller.signal,
       onFolder: (record) => {

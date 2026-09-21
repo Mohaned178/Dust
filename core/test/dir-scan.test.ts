@@ -32,6 +32,7 @@ describe('scanDirectory', () => {
     const result = scanDirectory(root, true, { enumerator, isExcluded: noneExcluded });
 
     expect(result.directBytes).toBe(12);
+    expect(result.directAllocatedBytes).toBe(8192);
     expect(result.directFileCount).toBe(2);
     expect(result.linkCount).toBe(1);
     expect(result.linkPaths).toEqual([join(root, 'link')]);
@@ -40,6 +41,17 @@ describe('scanDirectory', () => {
     expect(result.entryCount).toBe(4);
     expect(result.partial).toBe(false);
     expect(result.markers).toEqual([]);
+  });
+
+  it('honors an explicit cluster size for allocated bytes', () => {
+    const enumerator = mockEnumerator({
+      [root]: [
+        { name: 'a.txt', kind: 'file', size: 5, mtimeMs: 1000 },
+        { name: 'b.txt', kind: 'file', size: 7, mtimeMs: 1000 },
+      ],
+    });
+    const result = scanDirectory(root, true, { enumerator, isExcluded: noneExcluded, clusterSize: 1024 });
+    expect(result.directAllocatedBytes).toBe(2048);
   });
 
   it('zeroes newestMtimeMs when mtime tracking is off but still counts bytes', () => {

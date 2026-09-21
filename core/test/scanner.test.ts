@@ -42,6 +42,8 @@ describe('scanTree', () => {
 
     const sub = records.find((r) => r.path === join(fixture.root, 'sub'));
     expect(sub).toMatchObject({ bytes: 18, fileCount: 2, folderCount: 1 });
+    expect(sub?.allocatedBytes).toBe(8192);
+    expect(stats.rootRecord.allocatedBytes).toBe(3 * 4096);
     expect(stats.rootRecord).toMatchObject({ bytes: 23, fileCount: 3, folderCount: 2 });
   });
 

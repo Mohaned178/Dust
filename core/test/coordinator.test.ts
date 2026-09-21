@@ -50,6 +50,7 @@ function open(path: string, isRoot: boolean, overrides: Partial<DirOpen> = {}): 
     path,
     isRoot,
     directBytes: 0,
+    directAllocatedBytes: 0,
     directFileCount: 0,
     linkCount: 0,
     errorCount: 0,
@@ -127,15 +128,16 @@ describe('ScanCoordinator', () => {
     const run = coordinator.run();
     const t = h.transports[0]!;
     t.emit({ type: 'ready' });
-    t.emit(batch([open(ROOT, true, { childDirs: [join(ROOT, 'a')], directBytes: 1 })]));
-    t.emit(batch([open(join(ROOT, 'a'), false, { directBytes: 5, directFileCount: 1, childDirs: [join(ROOT, 'a', 'b')] })]));
-    t.emit(batch([open(join(ROOT, 'a', 'b'), false, { directBytes: 7, directFileCount: 1 })]));
+    t.emit(batch([open(ROOT, true, { childDirs: [join(ROOT, 'a')], directBytes: 1, directAllocatedBytes: 4096 })]));
+    t.emit(batch([open(join(ROOT, 'a'), false, { directBytes: 5, directAllocatedBytes: 4096, directFileCount: 1, childDirs: [join(ROOT, 'a', 'b')] })]));
+    t.emit(batch([open(join(ROOT, 'a', 'b'), false, { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })]));
 
     const result = await run;
     expect(order).toEqual([join(ROOT, 'a', 'b'), join(ROOT, 'a')]);
     expect(result.rootRecord).toMatchObject({
       path: ROOT,
       bytes: 13,
+      allocatedBytes: 12288,
       fileCount: 2,
       folderCount: 2,
       partial: false,

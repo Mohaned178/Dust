@@ -1,7 +1,7 @@
 import type { Marker } from '../model/types';
 import type { ExclusionConfig } from '../scanner/exclusions';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export interface PoolLimits {
   splitAfterEntries: number;
@@ -14,6 +14,7 @@ export interface WorkerInit {
   root: string;
   exclusions: ExclusionConfig;
   limits: PoolLimits;
+  clusterSize: number;
   abortFlag: SharedArrayBuffer;
 }
 
@@ -21,6 +22,7 @@ export interface DirOpen {
   path: string;
   isRoot: boolean;
   directBytes: number;
+  directAllocatedBytes: number;
   directFileCount: number;
   linkCount: number;
   errorCount: number;

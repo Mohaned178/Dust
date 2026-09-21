@@ -24,6 +24,7 @@ describe('ScanSession', () => {
 
     expect(result.status).toBe('complete');
     expect(result.tree.get(fixture.root)?.bytes).toBe(9);
+    expect(result.tree.get(fixture.root)?.allocatedBytes).toBe(3 * 4096);
     expect(result.tree.get(fixture.root)?.complete).toBe(true);
     expect(result.markers.some((m) => m.kind === 'package-json')).toBe(true);
     expect(result.markers.some((m) => m.kind === 'node-modules')).toBe(true);

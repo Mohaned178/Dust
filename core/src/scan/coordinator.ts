@@ -34,6 +34,7 @@ interface Accumulator {
   opened: boolean;
   finalized: boolean;
   directBytes: number;
+  directAllocatedBytes: number;
   directFileCount: number;
   linkCount: number;
   errorCount: number;
@@ -42,6 +43,7 @@ interface Accumulator {
   childDirs: string[];
   finalizedChildren: Set<string>;
   sumBytes: number;
+  sumAllocated: number;
   sumFiles: number;
   sumFolders: number;
   sumLinks: number;
@@ -155,6 +157,7 @@ export class ScanCoordinator {
       accumulator.opened = true;
       accumulator.isRoot = open.isRoot;
       accumulator.directBytes = open.directBytes;
+      accumulator.directAllocatedBytes = open.directAllocatedBytes;
       accumulator.directFileCount = open.directFileCount;
       accumulator.linkCount = open.linkCount;
       accumulator.errorCount = open.errorCount;
@@ -210,6 +213,7 @@ export class ScanCoordinator {
       const parent = this.ensure(dirname(accumulator.path));
       parent.finalizedChildren.add(accumulator.path);
       parent.sumBytes += record.bytes;
+      parent.sumAllocated += record.allocatedBytes;
       parent.sumFiles += record.fileCount;
       parent.sumFolders += record.folderCount;
       parent.sumLinks += record.linkCount;
@@ -224,6 +228,7 @@ export class ScanCoordinator {
     return {
       path: accumulator.path,
       bytes: accumulator.directBytes + accumulator.sumBytes,
+      allocatedBytes: accumulator.directAllocatedBytes + accumulator.sumAllocated,
       fileCount: accumulator.directFileCount + accumulator.sumFiles,
       folderCount: accumulator.childDirs.length + accumulator.sumFolders,
       linkCount: accumulator.linkCount + accumulator.sumLinks,
@@ -242,6 +247,7 @@ export class ScanCoordinator {
       opened: false,
       finalized: false,
       directBytes: 0,
+      directAllocatedBytes: 0,
       directFileCount: 0,
       linkCount: 0,
       errorCount: 0,
@@ -250,6 +256,7 @@ export class ScanCoordinator {
       childDirs: [],
       finalizedChildren: new Set(),
       sumBytes: 0,
+      sumAllocated: 0,
       sumFiles: 0,
       sumFolders: 0,
       sumLinks: 0,

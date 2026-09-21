@@ -8,6 +8,7 @@ export interface ScanConfig {
   enumerator: Enumerator;
   isExcluded: (absPath: string) => boolean;
   signal?: AbortSignal;
+  clusterSize?: number;
   progressEvery?: number;
   onFolder?: (record: FolderRecord) => void;
   onMarker?: (marker: Marker) => void;
@@ -63,6 +64,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
   const result = scanDirectory(dir, trackMtime, {
     enumerator: config.enumerator,
     isExcluded: config.isExcluded,
+    clusterSize: config.clusterSize,
     shouldAbort: () => config.signal?.aborted === true,
     onEntry: (c) => {
       state.entriesSeen += 1;
@@ -75,6 +77,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
   if (result.aborted) state.aborted = true;
 
   let bytes = result.directBytes;
+  let allocatedBytes = result.directAllocatedBytes;
   let fileCount = result.directFileCount;
   let folderCount = 0;
   let linkCount = result.linkCount;
@@ -90,6 +93,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
     config.onFolder?.({
       path: linkPath,
       bytes: 0,
+      allocatedBytes: 0,
       fileCount: 0,
       folderCount: 0,
       linkCount: 1,
@@ -107,6 +111,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
     }
     const child = scanDir(childPath, trackMtime && isMtimeTrackedChild(basename(childPath)), config, state);
     bytes += child.bytes;
+    allocatedBytes += child.allocatedBytes;
     fileCount += child.fileCount;
     folderCount += 1 + child.folderCount;
     linkCount += child.linkCount;
@@ -125,6 +130,7 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
   return {
     path: dir,
     bytes,
+    allocatedBytes,
     fileCount,
     folderCount,
     linkCount,
@@ -138,6 +144,7 @@ function emptyRecord(path: string, partial: boolean, errorCount = 0): FolderReco
   return {
     path,
     bytes: 0,
+    allocatedBytes: 0,
     fileCount: 0,
     folderCount: 0,
     linkCount: 0,

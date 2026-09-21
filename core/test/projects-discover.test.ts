@@ -10,6 +10,7 @@ function record(path: string, bytes: number): FolderRecord {
   return {
     path,
     bytes,
+    allocatedBytes: 0,
     fileCount: 0,
     folderCount: 0,
     linkCount: 0,

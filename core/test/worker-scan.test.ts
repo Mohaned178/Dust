@@ -47,6 +47,7 @@ function run(
     isExcluded: () => false,
     shouldAbort: shouldAbort ?? (() => false),
     splitAfterEntries,
+    clusterSize: 4096,
     openDir: (open) => sink.opens.push(open),
     submitTasks: (paths) => sink.submits.push(...paths),
     marker: (marker) => sink.markers.push(marker),
@@ -78,6 +79,7 @@ describe('scanTask', () => {
     const rootOpen = sink.opens[0]!;
     expect(rootOpen.isRoot).toBe(true);
     expect(rootOpen.childDirs).toEqual([join(root, 'a'), join(root, 'b')]);
+    expect(sink.opens.find((o) => o.path === join(root, 'a', 'c'))!.directAllocatedBytes).toBe(8192);
   });
 
   it('splits a directory whose children exceed the remaining budget', () => {

@@ -9,6 +9,7 @@ export interface WorkerScanContext {
   isExcluded: (absPath: string) => boolean;
   shouldAbort: () => boolean;
   splitAfterEntries: number;
+  clusterSize: number;
   openDir: (open: DirOpen) => void;
   submitTasks: (paths: string[]) => void;
   marker: (marker: Marker) => void;
@@ -24,6 +25,7 @@ export function scanTask(taskPath: string, isRoot: boolean, ctx: WorkerScanConte
     const result = scanDirectory(dir, trackMtime, {
       enumerator: ctx.enumerator,
       isExcluded: ctx.isExcluded,
+      clusterSize: ctx.clusterSize,
       shouldAbort: ctx.shouldAbort,
       onEntry: (contribution) => ctx.progress(contribution),
     });
@@ -34,6 +36,7 @@ export function scanTask(taskPath: string, isRoot: boolean, ctx: WorkerScanConte
       path: dir,
       isRoot: root,
       directBytes: result.directBytes,
+      directAllocatedBytes: result.directAllocatedBytes,
       directFileCount: result.directFileCount,
       linkCount: result.linkCount,
       errorCount: result.errorCount,

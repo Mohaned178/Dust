@@ -1,17 +1,20 @@
 import { join } from 'node:path';
 import type { Entry, Marker } from '../model/types';
 import type { Enumerator } from './enumerator';
+import { DEFAULT_CLUSTER_SIZE, roundUpToCluster } from '../system/cluster';
 
 export interface DirScanContext {
   enumerator: Enumerator;
   isExcluded: (absPath: string) => boolean;
   shouldAbort?: () => boolean;
+  clusterSize?: number;
   onEntry?: (contribution: { entries: 1; files: 0 | 1; bytes: number; path: string }) => void;
 }
 
 export interface DirScanResult {
   path: string;
   directBytes: number;
+  directAllocatedBytes: number;
   directFileCount: number;
   linkCount: number;
   linkPaths: string[];
@@ -28,6 +31,7 @@ export function scanDirectory(dir: string, trackMtime: boolean, ctx: DirScanCont
   const result: DirScanResult = {
     path: dir,
     directBytes: 0,
+    directAllocatedBytes: 0,
     directFileCount: 0,
     linkCount: 0,
     linkPaths: [],
@@ -39,6 +43,8 @@ export function scanDirectory(dir: string, trackMtime: boolean, ctx: DirScanCont
     childDirs: [],
     markers: [],
   };
+
+  const clusterSize = ctx.clusterSize ?? DEFAULT_CLUSTER_SIZE;
 
   let entries: Entry[];
   try {
@@ -74,6 +80,7 @@ export function scanDirectory(dir: string, trackMtime: boolean, ctx: DirScanCont
 
     if (entry.kind === 'file') {
       result.directBytes += entry.size;
+      result.directAllocatedBytes += roundUpToCluster(entry.size, clusterSize);
       result.directFileCount += 1;
       if (trackMtime && entry.mtimeMs > result.newestMtimeMs) result.newestMtimeMs = entry.mtimeMs;
       if (isPackageJsonMarker(dir, entry.name)) {

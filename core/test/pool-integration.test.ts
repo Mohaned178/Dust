@@ -21,6 +21,7 @@ function minimalInit(root: string): WorkerInit {
     root,
     exclusions: {},
     limits: DEFAULT_POOL_LIMITS,
+    clusterSize: 4096,
     abortFlag: abortFlag.buffer,
   };
 }
@@ -89,6 +90,7 @@ describe('pool integration (real worker threads)', () => {
             root: fixture.root,
             exclusions: {},
             limits: DEFAULT_POOL_LIMITS,
+            clusterSize: 4096,
             abortFlag: abortFlag.buffer,
           },
           { workerPath, execArgv: ['--import', 'tsx'] },
@@ -132,6 +134,7 @@ describe('pool integration (real worker threads)', () => {
             root: fixture.root,
             exclusions: {},
             limits,
+            clusterSize: 4096,
             abortFlag: abortFlag.buffer,
           },
           { workerPath, execArgv: ['--import', 'tsx'] },
@@ -169,6 +172,7 @@ describe('pool integration (real worker threads)', () => {
             root: fixture.root,
             exclusions: {},
             limits,
+            clusterSize: 4096,
             abortFlag: abortFlag.buffer,
           },
           { workerPath, execArgv: ['--import', 'tsx'] },

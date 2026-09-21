@@ -17,6 +17,7 @@ const runtime = createWorkerRuntime({
   isExcluded,
   shouldAbort: () => Atomics.load(abortFlag, 0) === 1,
   splitAfterEntries: init.limits.splitAfterEntries,
+  clusterSize: init.clusterSize,
   batchIntervalMs: init.limits.batchIntervalMs,
   batchMaxItems: init.limits.batchMaxItems,
   exitThread: () => process.exit(1),
