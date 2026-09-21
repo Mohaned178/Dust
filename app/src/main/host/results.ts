@@ -1,6 +1,6 @@
 import { basename, dirname } from 'node:path';
-import { classifyDisplayGrade } from '@dust/core';
-import type { AggregateTree, CategoryId, SnapshotData } from '@dust/core';
+import { createDisplayGrader } from '@dust/core';
+import type { AggregateTree, CategoryId, DisplayGradeReason, SnapshotData } from '@dust/core';
 import { CATEGORY_LABELS, CATEGORY_ORDER, isCategoryId } from '../../shared/categories';
 import type { CategorySummaryRow, ResultAction, ResultMatch, ResultRow } from '../../shared/ipc';
 
@@ -35,9 +35,22 @@ export function sameRoot(a: string, b: string): boolean {
   return pathKey(a) === pathKey(b);
 }
 
+const EMPTY_ENV: ResultsEnv = {};
+const graders = new WeakMap<ResultsEnv, (path: string) => DisplayGradeReason>();
+
+function graderFor(env: ResultsEnv | undefined): (path: string) => DisplayGradeReason {
+  const key = env ?? EMPTY_ENV;
+  let grader = graders.get(key);
+  if (grader === undefined) {
+    grader = createDisplayGrader({ env: key });
+    graders.set(key, grader);
+  }
+  return grader;
+}
+
 export function toResultRow(record: RowInput, options: RowOptions): ResultRow {
   const isRoot = sameRoot(record.path, options.root);
-  const display = classifyDisplayGrade(record.path, { env: options.env ?? {} });
+  const display = graderFor(options.env)(record.path);
   const parent = options.parent !== undefined ? options.parent : isRoot ? null : dirname(record.path);
   return {
     path: record.path,

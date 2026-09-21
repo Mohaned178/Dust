@@ -4,6 +4,7 @@ import {
   createRowStore,
   filterPaths,
   flattenVisible,
+  isRowVisible,
   mergeMatches,
   pathKey,
   pathName,
@@ -84,6 +85,17 @@ describe('RowStore', () => {
       { path: 'C:\\Temp', bytes: 1, ruleId: 'system-temp', category: 'temp', grade: 'safe', evidence: 'fixture' },
     ]);
     expect(store.nodes.get(pathKey('C:\\Temp'))?.action).toMatchObject({ ruleId: 'system-temp' });
+  });
+});
+
+describe('isRowVisible', () => {
+  it('treats top-level rows as visible and deeper rows only under expanded ancestors', () => {
+    const expanded = new Set([pathKey('C:\\a')]);
+    expect(isRowVisible(null, 'C:\\', expanded)).toBe(true);
+    expect(isRowVisible('C:\\', 'C:\\', expanded)).toBe(true);
+    expect(isRowVisible('C:\\a', 'C:\\', expanded)).toBe(true);
+    expect(isRowVisible('C:\\a\\b', 'C:\\', expanded)).toBe(true);
+    expect(isRowVisible('C:\\c\\d', 'C:\\', expanded)).toBe(false);
   });
 });
 

@@ -177,7 +177,6 @@ export function TreeTable({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 36,
     overscan: 12,
-    getItemKey: (index) => rows[index]?.row.path ?? index,
   });
 
   const headers = table.getHeaderGroups()[0]?.headers ?? [];

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { classifyDisplayGrade } from '../src/display/display-grade';
+import { classifyDisplayGrade, createDisplayGrader } from '../src/display/display-grade';
 
 const env = {
   systemRoot: 'C:\\Windows',
@@ -50,6 +50,22 @@ describe('classifyDisplayGrade', () => {
 
   it('prefers safety: a temp-named folder inside Windows is still danger', () => {
     expect(classifyDisplayGrade('C:\\Windows\\Cache', { env })).toMatchObject({ grade: 'danger' });
+  });
+
+  it('createDisplayGrader returns a reusable grader identical to classifyDisplayGrade', () => {
+    const grader = createDisplayGrader({ env });
+    const paths = [
+      'C:\\Windows\\System32',
+      'C:\\Users\\x\\Documents\\report.docx',
+      'C:\\Users\\x\\AppData\\Local\\Temp\\file.tmp',
+      'C:\\Users\\x\\RandomFolder',
+      'D:\\',
+      'F:\\projects\\app\\node_modules\\pkg\\index.js',
+    ];
+    for (const path of paths) {
+      expect(grader(path)).toEqual(classifyDisplayGrade(path, { env }));
+    }
+    expect(grader('C:\\Windows\\Cache').grade).toBe('danger');
   });
 
   it('cannot leak into the cleaner (informational only)', () => {

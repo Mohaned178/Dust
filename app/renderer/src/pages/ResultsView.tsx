@@ -9,6 +9,7 @@ import {
   createRowStore,
   filterPaths,
   flattenVisible,
+  isRowVisible,
   mergeMatches,
   pathKey,
   upsertRows,
@@ -32,6 +33,11 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   const [filter, setFilter] = useState<CategoryId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
+  const expandedRef = useRef(expanded);
+
+  useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
 
   useEffect(() => {
     if (runId !== null) return;
@@ -63,8 +69,9 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
     return api.onScanEvent((next) => {
       if (next.runId !== runId) return;
       if (next.type === 'folders') {
+        const affectsVisible = next.folders.some((row) => isRowVisible(row.parent, root, expandedRef.current));
         upsertRows(storeRef.current, next.folders);
-        setVersion((value) => value + 1);
+        if (affectsVisible) setVersion((value) => value + 1);
       } else if (next.type === 'categories') {
         setLiveCategories(next.categories);
       } else if (next.type === 'matches') {
@@ -72,7 +79,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
         setVersion((value) => value + 1);
       }
     });
-  }, [api, runId]);
+  }, [api, root, runId]);
 
   const filterSet = useMemo(
     () => filterPaths(storeRef.current, filter),
@@ -90,7 +97,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   const totalBytes = useMemo(() => storeRef.current.nodes.get(pathKey(root))?.bytes ?? 0, [version, root]);
 
   const categories = runId !== null ? liveCategories : state?.categories ?? [];
-  const source = runId !== null ? 'live' : state?.source ?? 'empty';
+  const source = runId !== null ? 'live' : state === null ? 'loading' : state.source;
   const selectedRow: RowNode | undefined =
     selected !== null ? storeRef.current.nodes.get(pathKey(selected)) : undefined;
 
@@ -136,7 +143,9 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
 
       <CategoryStrip categories={categories} active={filter} onSelect={setFilter} />
 
-      {source === 'empty' ? (
+      {source === 'loading' ? (
+        <p className="text-sm text-neutral-400">Loading results…</p>
+      ) : source === 'empty' ? (
         <p className="text-sm text-neutral-400">No results yet — run an Analyze from the dashboard.</p>
       ) : (
         <>

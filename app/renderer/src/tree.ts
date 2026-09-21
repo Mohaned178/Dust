@@ -105,6 +105,16 @@ export function filterPaths(store: RowStore, category: CategoryId | null): Set<s
   return included;
 }
 
+export function isRowVisible(parent: string | null, root: string, expanded: ReadonlySet<string>): boolean {
+  if (parent === null || sameRoot(parent, root)) return true;
+  let current: string | null = parent;
+  while (current !== null && !sameRoot(current, root)) {
+    if (expanded.has(pathKey(current))) return true;
+    current = pathParent(current);
+  }
+  return false;
+}
+
 const GRADE_RANK: Record<DisplayGrade, number> = { safe: 0, review: 1, danger: 2 };
 
 export function compareRows(a: ResultRow, b: ResultRow, key: SortKey): number {

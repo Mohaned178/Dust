@@ -19,40 +19,48 @@ const SAFE_PATTERNS: Array<{ segments: string[]; reason: string }> = [
   { segments: ['$recycle.bin'], reason: 'Recycle Bin contents — already deleted by you' },
 ];
 
-export function classifyDisplayGrade(
-  path: string,
+export function createDisplayGrader(
   options: { env?: Partial<GuardOptions> } = {},
-): DisplayGradeReason {
-  const canonical = canonicalizePath(path);
-  const lower = canonical.toLowerCase();
-  const root = parse(canonical).root.toLowerCase();
-
-  if (lower === root) {
-    return { grade: 'danger', reason: 'System-critical — read-only' };
-  }
-
+): (path: string) => DisplayGradeReason {
   const env = options.env ?? {};
   const protectedPaths = defaultProtectedPaths(env).map((entry) => canonicalizePath(entry).toLowerCase());
   const profileRoot = canonicalizePath(env.userProfile ?? process.env.USERPROFILE ?? '').toLowerCase();
   const subtreeCritical = protectedPaths.filter((entry) => entry !== profileRoot);
+  const childSep = sep.toLowerCase();
 
-  if (profileRoot !== '' && lower === profileRoot) {
-    return { grade: 'danger', reason: 'System-critical — read-only' };
-  }
-  const insideCritical = subtreeCritical.some(
-    (entry) => lower === entry || lower.startsWith(entry + sep.toLowerCase()),
-  );
-  if (insideCritical) {
-    return { grade: 'danger', reason: 'System-critical — read-only' };
-  }
+  return (path: string): DisplayGradeReason => {
+    const canonical = canonicalizePath(path);
+    const lower = canonical.toLowerCase();
+    const root = parse(canonical).root.toLowerCase();
 
-  const segments = lower.split(/[\\/]+/).filter((segment) => segment.length > 0);
-  for (const pattern of SAFE_PATTERNS) {
-    const hit = pattern.segments.every((segment) => segments.includes(segment));
-    if (hit) {
-      return { grade: 'safe', reason: pattern.reason };
+    if (lower === root) {
+      return { grade: 'danger', reason: 'System-critical — read-only' };
     }
-  }
+    if (profileRoot !== '' && lower === profileRoot) {
+      return { grade: 'danger', reason: 'System-critical — read-only' };
+    }
+    const insideCritical = subtreeCritical.some(
+      (entry) => lower === entry || lower.startsWith(entry + childSep),
+    );
+    if (insideCritical) {
+      return { grade: 'danger', reason: 'System-critical — read-only' };
+    }
 
-  return { grade: 'review', reason: 'Unrecognized folder — review before deleting' };
+    const segments = lower.split(/[\\/]+/).filter((segment) => segment.length > 0);
+    for (const pattern of SAFE_PATTERNS) {
+      const hit = pattern.segments.every((segment) => segments.includes(segment));
+      if (hit) {
+        return { grade: 'safe', reason: pattern.reason };
+      }
+    }
+
+    return { grade: 'review', reason: 'Unrecognized folder — review before deleting' };
+  };
+}
+
+export function classifyDisplayGrade(
+  path: string,
+  options: { env?: Partial<GuardOptions> } = {},
+): DisplayGradeReason {
+  return createDisplayGrader(options)(path);
 }

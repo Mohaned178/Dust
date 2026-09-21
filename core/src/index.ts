@@ -53,7 +53,7 @@ export {
 } from './rules/inventory/cache-registry';
 export { defaultRuleEnv, expandProfileWildcard } from './rules/paths';
 export type { RuleEnv } from './rules/paths';
-export { classifyDisplayGrade } from './display/display-grade';
+export { classifyDisplayGrade, createDisplayGrader } from './display/display-grade';
 export type { DisplayGrade, DisplayGradeReason } from './display/display-grade';
 export { defaultEmptyRecycleBin } from './cleaner/executor';
 export type { EmptyRecycleBinResult } from './cleaner/executor';

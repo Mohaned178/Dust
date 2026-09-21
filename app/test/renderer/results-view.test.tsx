@@ -1,10 +1,29 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ResultsView } from '../../renderer/src/pages/ResultsView';
-import type { ScanEvent } from '../../src/shared/ipc';
+import type { ResultsState, ScanEvent } from '../../src/shared/ipc';
 import { makeApi, makeResultsState } from './fakes';
 
 describe('ResultsView', () => {
+  it('shows a loading state while getResults is pending', async () => {
+    let resolveResults: (state: ResultsState) => void = () => {};
+    const api = makeApi({
+      getResults: () =>
+        new Promise<ResultsState>((resolve) => {
+          resolveResults = resolve;
+        }),
+    });
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+
+    expect(screen.getByText('Loading results…')).toBeInTheDocument();
+    expect(screen.queryByText(/No results yet/)).toBeNull();
+
+    await act(async () => {
+      resolveResults(makeResultsState());
+    });
+    expect(await screen.findByText('Users')).toBeInTheDocument();
+  });
+
   it('renders the strip, the tree and the snapshot banner from getResults', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
     render(<ResultsView api={api} root="C:\\" runId={null} />);

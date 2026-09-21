@@ -493,4 +493,51 @@ describe('createEngineHost', () => {
     expect(matches?.type === 'matches' && matches.matches[0]?.path).toBe(join(tree.root, 'b'));
     expect(matches?.type === 'matches' && matches.matches[0]).not.toHaveProperty('recovery');
   });
+
+  it('skips npm-projects rules on live ticks and runs them at finalize', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    let projectsCalls = 0;
+    const projectsRule: Rule = {
+      id: 'fixture-projects',
+      category: 'npm-projects',
+      title: 'Fixture projects',
+      action: { kind: 'delete-path' },
+      match: () => {
+        projectsCalls += 1;
+        return [];
+      },
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [projectsRule],
+      createSession: (options) => (fake = new FakeSession(options)),
+      categoryIntervalMs: 1,
+    });
+
+    await host.startAnalyze(tree.root);
+    clock = 100;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'a'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(projectsCalls).toBe(0);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+    expect(projectsCalls).toBe(1);
+  });
 });

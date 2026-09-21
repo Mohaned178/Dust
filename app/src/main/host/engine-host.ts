@@ -98,6 +98,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       createInventoryRules(ruleEnv, { projects, recycleBin: options.recycleBin }));
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
+  const guard = guardEnv(env);
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
 
@@ -145,7 +146,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     const folderIntervalMs = deps.folderIntervalMs ?? 100;
     const categoryIntervalMs = deps.categoryIntervalMs ?? 2000;
-    const guard = guardEnv(env);
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
@@ -168,7 +168,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       if (stamp - lastCategoryRun < categoryIntervalMs) return;
       lastCategoryRun = stamp;
       categoryRunning = true;
-      void collectRuleMatches(rules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
+      const liveRules = rules.filter((rule) => rule.category !== 'npm-projects');
+      void collectRuleMatches(liveRules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
         .then((matches) => {
           if (liveEnded) return;
           emit({ type: 'categories', runId, categories: summarizeCategories(aggregateCategories(matches)) });
@@ -364,7 +365,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       status: result.status,
       finishedAt,
       categories,
-      rows: buildRowsFromTree(result.tree, result.root, matches, guardEnv(env)),
+      rows: buildRowsFromTree(result.tree, result.root, matches, guard),
     };
 
     const usage = getVolumeUsageFn(listVolumesFn().map((volume) => volume.root));
@@ -437,7 +438,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         rulesStale: loaded.snapshot.rulesVersion !== RULES_VERSION,
         depthLimited: true,
         categories: summarizeCategories(loaded.snapshot.categories),
-        rows: buildRowsFromSnapshot(loaded.snapshot, guardEnv(env)),
+        rows: buildRowsFromSnapshot(loaded.snapshot, guard),
       };
     }
 
