@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { SnapshotStore, volumeRootOf } from '@dust/core';
+import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
@@ -429,9 +429,37 @@ describe('createEngineHost', () => {
     const live = liveCategories.at(-1);
     expect(live?.type === 'categories' && live.categories.find((row) => row.category === 'temp')?.bytes).toBe(20);
 
+    const settledTree = new AggregateTree();
+    settledTree.addFolder({
+      path: join(tree.root, 'b'),
+      bytes: 20,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    settledTree.addFolder({
+      path: tree.root,
+      bytes: 30,
+      allocatedBytes: 8192,
+      fileCount: 2,
+      folderCount: 1,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
     const finished = nextEvent(host, 'finished');
-    fake.finish(emptyScanResult(tree.root, 'complete'));
+    fake.finish({ ...emptyScanResult(tree.root, 'complete'), tree: settledTree, bytesSeen: 30 });
     await finished;
+
+    const folderEvents = events.filter((event) => event.type === 'folders');
+    const lastFolders = folderEvents.at(-1);
+    expect(lastFolders?.type === 'folders' && lastFolders.folders.map((row) => row.path)).toEqual([tree.root]);
+    expect(lastFolders?.type === 'folders' && lastFolders.folders[0]?.bytes).toBe(30);
 
     const matches = events.find((event) => event.type === 'matches');
     expect(matches?.type === 'matches' && matches.matches[0]?.path).toBe(join(tree.root, 'b'));

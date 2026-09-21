@@ -198,8 +198,21 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       maybeLiveCategories();
     }
 
-    function finishLive(): void {
+    function finishLive(result: ScanResult | null): void {
       liveEnded = true;
+      if (result !== null) {
+        const rootNode = result.tree.get(result.root);
+        if (rootNode) {
+          folderBuffer.push(
+            toResultRow(rootNode, {
+              root: result.root,
+              complete: rootNode.complete,
+              childCount: result.tree.children(result.root).length,
+              env: guard,
+            }),
+          );
+        }
+      }
       flushFolders();
     }
 
@@ -263,11 +276,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     settle: () => void;
     rules: Rule[];
     probe: RuleContext['probe'];
-    finishLive: () => void;
+    finishLive: (result: ScanResult | null) => void;
   }): Promise<void> {
     try {
       const result = await input.session.start();
-      input.finishLive();
+      input.finishLive(result);
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
       const summary = await finalize(result, input.startedAt, input.rules, input.probe);
@@ -287,7 +300,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         saved: summary.saved,
       });
     } catch (error) {
-      input.finishLive();
+      input.finishLive(null);
       input.progress.cancel();
       emit({
         type: 'failed',
