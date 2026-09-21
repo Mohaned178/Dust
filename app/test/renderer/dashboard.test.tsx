@@ -71,4 +71,14 @@ describe('Dashboard', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
     expect(await screen.findByText(/Could not start the scan: no worker/)).toBeInTheDocument();
   });
+
+  it('shows a banner when starting the scan rejects', async () => {
+    const onAnalyze = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
+    expect(await screen.findByText(/Could not start the scan: boom/)).toBeInTheDocument();
+  });
 });

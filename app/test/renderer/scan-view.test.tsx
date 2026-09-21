@@ -29,6 +29,29 @@ describe('ScanView', () => {
     expect(cancelScan).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a message when cancelling the scan rejects', async () => {
+    const cancelScan = vi.fn(async () => {
+      throw new Error('nope');
+    });
+    const event: ScanEvent = {
+      type: 'progress',
+      runId: 'run-1',
+      progress: {
+        filesScanned: 1,
+        bytesSeen: 2,
+        currentPath: 'C:\\Windows\\Temp',
+        dirsCompleted: 1,
+        errors: 0,
+        elapsedMs: 100,
+      },
+    };
+    render(<ScanView api={makeApi({ cancelScan })} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel scan' }));
+    expect(await screen.findByText(/Cancel failed: nope/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeInTheDocument();
+  });
+
   it('ignores events from other runs', () => {
     const other: ScanEvent = {
       type: 'finished',

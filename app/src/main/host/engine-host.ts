@@ -49,7 +49,7 @@ export interface EngineHostDeps {
 export interface EngineHost {
   getDashboard(): DashboardState;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
-  cancelScan(): boolean;
+  cancelScan(): Promise<boolean>;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
@@ -66,7 +66,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
 
-  let active: { runId: string; session: ScanSessionLike } | null = null;
+  let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
 
   function emit(event: ScanEvent): void {
     for (const listener of [...listeners]) {
@@ -129,10 +129,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         message: error instanceof Error ? error.message : String(error),
       };
     }
-    active = { runId, session };
+    let settle!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress });
+    void runAnalysis({ session, runId, startedAt, progress, settle });
 
     return { ok: true, runId };
   }
@@ -142,6 +146,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     runId: string;
     startedAt: number;
     progress: ThrottledEmitter<ScanEvent>;
+    settle: () => void;
   }): Promise<void> {
     try {
       const result = await input.session.start();
@@ -171,6 +176,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     } finally {
       active = null;
       lock.release();
+      input.settle();
     }
   }
 
@@ -224,9 +230,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
   }
 
-  function cancelScan(): boolean {
-    if (!active) return false;
-    active.session.cancel();
+  async function cancelScan(): Promise<boolean> {
+    const run = active;
+    if (!run) return false;
+    run.session.cancel();
+    await run.settled;
     return true;
   }
 

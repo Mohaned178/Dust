@@ -113,9 +113,10 @@ describe('createEngineHost', () => {
     expect(second).toEqual({ ok: false, reason: 'busy', running: 'analyze' });
     expect(host.getDashboard().scan).toMatchObject({ kind: 'analyze', root: volumeList()[0]!.root });
 
-    host.cancelScan();
+    const cancelled = host.cancelScan();
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
     await nextEvent(host, 'finished');
+    expect(await cancelled).toBe(true);
     expect(host.getDashboard().scan).toBeNull();
   });
 
@@ -132,14 +133,41 @@ describe('createEngineHost', () => {
 
     const finished = nextEvent(host, 'finished');
     await host.startAnalyze(tree.root);
-    expect(host.cancelScan()).toBe(true);
+    const cancelled = host.cancelScan();
     expect(fake.cancelled).toBe(true);
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    expect(await cancelled).toBe(true);
 
     const event = await finished;
     expect(event).toMatchObject({ status: 'cancelled', saved: true });
     const loaded = store.load();
     expect(loaded.kind === 'ok' && loaded.snapshot.status).toBe('cancelled');
+  });
+
+  it('waits for lock release on cancel so an immediate retry is not busy', async () => {
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    await host.startAnalyze(tree.root);
+    const cancelled = host.cancelScan();
+    expect(fake.cancelled).toBe(true);
+    expect(host.getDashboard().scan).not.toBeNull();
+
+    fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    expect(await cancelled).toBe(true);
+    expect(host.getDashboard().scan).toBeNull();
+    expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: true });
+
+    const retried = host.cancelScan();
+    fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    expect(await retried).toBe(true);
   });
 
   it('reports a failed run and releases the lock', async () => {

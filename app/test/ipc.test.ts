@@ -66,11 +66,12 @@ describe('registerIpcHandlers', () => {
     const started = (await registrar.invoke(IPC.scanStart, 't:\\')) as StartAnalyzeResult;
     expect(started.ok).toBe(true);
 
-    await registrar.invoke(IPC.scanCancel);
+    const cancelled = registrar.invoke(IPC.scanCancel);
     expect(session.cancelled).toBe(true);
 
     session.finish(emptyScanResult('T:\\', 'cancelled'));
     await finishedEvent;
+    expect(await cancelled).toBe(true);
     await Promise.resolve();
 
     const forwarded = sent.filter((entry) => entry.channel === IPC.scanEvent).map((entry) => entry.payload as ScanEvent);

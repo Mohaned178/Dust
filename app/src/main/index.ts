@@ -45,13 +45,16 @@ void app.whenReady().then(async () => {
   };
   registerIpcHandlers(registrar, host, {
     send: (channel, payload) => {
-      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+      if (!window.webContents.isDestroyed()) window.webContents.send(channel, payload);
     },
   });
 
   window.once('ready-to-show', () => window.show());
   app.on('before-quit', () => host.dispose());
   await loadRenderer(window);
+}).catch((error: unknown) => {
+  console.error('Dust failed to start', error);
+  app.quit();
 });
 
 app.on('window-all-closed', () => {

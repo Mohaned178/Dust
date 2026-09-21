@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { DustApi, ScanEvent } from '../../../src/shared/ipc';
 import { formatBytes, formatCount, formatDuration } from '../format';
 
@@ -10,6 +11,7 @@ export interface ScanViewProps {
 }
 
 export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const current = event !== null && 'runId' in event && event.runId === runId ? event : null;
   const finished = current?.type === 'finished' ? current : null;
   const failed = current?.type === 'failed' ? current : null;
@@ -23,6 +25,14 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
     : failed
       ? 'Scan failed'
       : 'Scanning';
+
+  const cancel = async () => {
+    try {
+      await api.cancelScan();
+    } catch (cause) {
+      setCancelError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-10">
@@ -41,9 +51,10 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
           </dl>
           <p className="mt-4 truncate text-xs text-neutral-500">{progress?.currentPath ?? 'Preparing…'}</p>
           {finalizing && <p className="mt-2 text-sm text-emerald-300">Analyzing results…</p>}
+          {cancelError !== null && <p className="mt-2 text-sm text-red-300">Cancel failed: {cancelError}</p>}
           <button
             type="button"
-            onClick={() => void api.cancelScan()}
+            onClick={() => void cancel()}
             disabled={finalizing}
             className="mt-4 rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 disabled:opacity-40"
           >

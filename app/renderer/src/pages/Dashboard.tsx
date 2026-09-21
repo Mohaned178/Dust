@@ -40,6 +40,8 @@ export function Dashboard({ api, onAnalyze }: DashboardProps) {
           if (result.reason === 'busy') setPendingRoot(root);
           else if (result.reason === 'start-failed') setStartError(result.message);
         }
+      } catch (cause) {
+        setStartError(cause instanceof Error ? cause.message : String(cause));
       } finally {
         setBusyRoot(null);
       }
@@ -51,7 +53,12 @@ export function Dashboard({ api, onAnalyze }: DashboardProps) {
     const root = pendingRoot;
     setPendingRoot(null);
     if (!root) return;
-    await api.cancelScan();
+    try {
+      await api.cancelScan();
+    } catch (cause) {
+      setStartError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
     await analyze(root);
   }, [api, analyze, pendingRoot]);
 
