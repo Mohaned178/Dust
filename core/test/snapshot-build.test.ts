@@ -21,7 +21,7 @@ describe('buildFolderMap', () => {
     fixture.file('b/f1.txt', '01234');
     fixture.file('c/d/f1.txt', '01234567890123456789');
     fixture.file('e/f1.txt', '0');
-    const result = await new ScanSession({ root: fixture.root, pool: false }).start();
+    const result = await new ScanSession({ root: fixture.root, pool: false, clusterSize: 4096 }).start();
     return result.tree;
   }
 

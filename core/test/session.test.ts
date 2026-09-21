@@ -20,7 +20,7 @@ describe('ScanSession', () => {
     fixture.file('node_modules/dep/index.js', 'bb');
     fixture.file('package.json', '{}');
 
-    const result = await new ScanSession({ root: fixture.root, pool: false }).start();
+    const result = await new ScanSession({ root: fixture.root, pool: false, clusterSize: 4096 }).start();
 
     expect(result.status).toBe('complete');
     expect(result.tree.get(fixture.root)?.bytes).toBe(9);

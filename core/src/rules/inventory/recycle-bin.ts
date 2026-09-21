@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Rule, RuleContext, RuleMatch } from '../types';
@@ -46,26 +46,41 @@ function codeOf(error: unknown): string {
   return 'UNKNOWN';
 }
 
-export function defaultRecycleBinEnumeration(): RecycleBinInfo {
+export function defaultRecycleBinEnumeration(): Promise<RecycleBinInfo> {
   if (process.platform !== 'win32') {
-    return { fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null };
+    return Promise.resolve({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null });
   }
-  try {
-    const raw = execFileSync(resolvePowerShell(), ['-NoProfile', '-NonInteractive', '-Command', ENUMERATE_SCRIPT], {
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-    const parsed = JSON.parse(raw) as { count?: number; bytes?: number; oldestMs?: number; newestMs?: number; volume?: string };
-    return {
-      fileCount: parsed.count ?? 0,
-      bytes: parsed.bytes ?? 0,
-      oldestMs: parsed.oldestMs ? parsed.oldestMs : null,
-      newestMs: parsed.newestMs ? parsed.newestMs : null,
-      volume: parsed.volume ?? null,
-    };
-  } catch (error) {
-    return { fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null, error: codeOf(error) };
-  }
+  return new Promise((resolve) => {
+    execFile(
+      resolvePowerShell(),
+      ['-NoProfile', '-NonInteractive', '-Command', ENUMERATE_SCRIPT],
+      { encoding: 'utf8', timeout: 30_000 },
+      (error, stdout) => {
+        if (error) {
+          resolve({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null, error: codeOf(error) });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stdout) as {
+            count?: number;
+            bytes?: number;
+            oldestMs?: number;
+            newestMs?: number;
+            volume?: string;
+          };
+          resolve({
+            fileCount: parsed.count ?? 0,
+            bytes: parsed.bytes ?? 0,
+            oldestMs: parsed.oldestMs ? parsed.oldestMs : null,
+            newestMs: parsed.newestMs ? parsed.newestMs : null,
+            volume: parsed.volume ?? null,
+          });
+        } catch {
+          resolve({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null, error: 'UNKNOWN' });
+        }
+      },
+    );
+  });
 }
 
 export function recycleBinRule(
