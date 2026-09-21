@@ -4,6 +4,7 @@ import { AggregateTree } from '../model/tree';
 import type { TreeNode } from '../model/tree';
 import type { ProjectRecord } from '../projects/types';
 import type { CleanupReport } from '../cleaner/cleaner';
+import { normalizeRoot } from '../scanner/session';
 import type {
   ScanStatus,
   SnapshotCategory,
@@ -34,10 +35,11 @@ export interface FolderMapOptions {
 }
 
 export function buildSnapshot(input: SnapshotInput): SnapshotData {
+  const root = normalizeRoot(input.root);
   return {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     rulesVersion: input.rulesVersion ?? RULES_VERSION,
-    root: input.root,
+    root,
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
     status: input.status,
@@ -45,7 +47,7 @@ export function buildSnapshot(input: SnapshotInput): SnapshotData {
     disks: input.disks,
     categories: input.categories,
     projects: input.projects,
-    folders: buildFolderMap(input.tree, input.root, {
+    folders: buildFolderMap(input.tree, root, {
       maxDepth: input.maxDepth,
       topContributors: input.topContributors,
     }),
@@ -73,8 +75,9 @@ export function applyCleanupReport(
 export function buildFolderMap(tree: AggregateTree, root: string, options: FolderMapOptions = {}): SnapshotFolder[] {
   const maxDepth = options.maxDepth ?? 4;
   const topCount = options.topContributors ?? 50;
+  const normalizedRoot = normalizeRoot(root);
 
-  const rootNode = tree.get(root);
+  const rootNode = tree.get(normalizedRoot);
   if (!rootNode) return [];
 
   const all = new Map<string, TreeNode>();
@@ -92,7 +95,7 @@ export function buildFolderMap(tree: AggregateTree, root: string, options: Folde
 
   const included = new Set<string>();
   for (const path of all.keys()) {
-    if (depthFrom(root, path) <= maxDepth) included.add(path);
+    if (depthFrom(normalizedRoot, path) <= maxDepth) included.add(path);
   }
   const byBytes = [...all.values()]
     .filter((node) => !included.has(node.path))

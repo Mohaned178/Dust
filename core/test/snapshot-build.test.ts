@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFolderMap, buildSnapshot, applyCleanupReport } from '../src/snapshot/build';
 import { AggregateTree } from '../src/model/tree';
@@ -51,6 +51,15 @@ describe('buildFolderMap', () => {
     const tree = new AggregateTree();
     expect(buildFolderMap(tree, fixture.root)).toEqual([]);
   });
+
+  it('normalizes a root with a trailing separator before lookup', async () => {
+    const tree = await scannedTree();
+    const folders = buildFolderMap(tree, fixture.root + sep);
+    const byPath = new Map(folders.map((folder) => [folder.path, folder]));
+    expect(byPath.has(fixture.root)).toBe(true);
+    expect(byPath.get(fixture.root)).toMatchObject({ childCount: 4, complete: true });
+    expect(byPath.has(join(fixture.root, 'a'))).toBe(true);
+  });
 });
 
 describe('buildSnapshot', () => {
@@ -86,6 +95,26 @@ describe('buildSnapshot', () => {
       status: 'complete',
       cleanedAt: 1500,
     });
+    expect(snapshot.folders.some((folder) => folder.path === fixture.root)).toBe(true);
+    expect(snapshot.folders.some((folder) => folder.path === join(fixture.root, 'a'))).toBe(true);
+  });
+
+  it('stores the normalized root and still maps folders when given a trailing separator', async () => {
+    fixture.file('a/f1.txt', '0123456789');
+    const result = await new ScanSession({ root: fixture.root, pool: false }).start();
+    const snapshot = buildSnapshot({
+      root: fixture.root + sep,
+      startedAt: 1000,
+      finishedAt: 2000,
+      status: 'complete',
+      tree: result.tree,
+      projects: [],
+      categories: [],
+      disks: [],
+    });
+
+    expect(snapshot.root).toBe(fixture.root);
+    expect(snapshot.folders.length).toBeGreaterThan(0);
     expect(snapshot.folders.some((folder) => folder.path === fixture.root)).toBe(true);
     expect(snapshot.folders.some((folder) => folder.path === join(fixture.root, 'a'))).toBe(true);
   });

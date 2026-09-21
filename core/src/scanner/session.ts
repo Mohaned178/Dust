@@ -176,7 +176,7 @@ export class ScanSession {
   }
 }
 
-function normalizeRoot(input: string): string {
+export function normalizeRoot(input: string): string {
   const normalized = normalize(input);
   const trimmed = normalized.replace(/[\\/]+$/, '');
   if (trimmed.length === 0 || trimmed === normalized) return normalized;
