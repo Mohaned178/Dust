@@ -139,7 +139,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     const runId = randomUUID();
     const startedAt = now();
-    lastResults = null;
     const progress = new ThrottledEmitter<ScanEvent>((event) => emit(event), {
       intervalMs: deps.progressIntervalMs ?? 100,
     });
@@ -181,6 +180,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
 
     function onLiveFolder(record: FolderRecord): void {
+      if (liveEnded) return;
       liveTree.addFolder(record);
       folderBuffer.push(
         toResultRow(record, {
@@ -218,7 +218,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     let session: ScanSessionLike;
     try {
-      let recycleBinInfo: RecycleBinInfo | null = null;
+      let recycleBinInfo: RecycleBinInfo | Promise<RecycleBinInfo> | null = null;
       rules = createRules(
         env,
         { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
@@ -260,6 +260,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const settled = new Promise<void>((resolve) => {
       settle = resolve;
     });
+    lastResults = null;
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
@@ -285,7 +286,18 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       emit({ type: 'finalizing', runId: input.runId });
       const summary = await finalize(result, input.startedAt, input.rules, input.probe);
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
-      emit({ type: 'matches', runId: input.runId, matches: summary.matches });
+      emit({
+        type: 'matches',
+        runId: input.runId,
+        matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence }) => ({
+          path,
+          bytes,
+          ruleId,
+          category,
+          grade,
+          evidence,
+        })),
+      });
       emit({
         type: 'finished',
         runId: input.runId,

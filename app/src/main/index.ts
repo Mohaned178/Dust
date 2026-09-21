@@ -53,7 +53,7 @@ void app.whenReady().then(async () => {
     },
     {
       revealPath: async (path) => {
-        await shell.openPath(path);
+        shell.showItemInFolder(path);
       },
     },
   );

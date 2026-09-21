@@ -297,6 +297,34 @@ describe('createEngineHost', () => {
     expect(host.getResults('Z:\\').source).toBe('empty');
   });
 
+  it('keeps retained live results when a later start fails', async () => {
+    tree.file('temp/junk.bin', 'abcdefghij');
+    let fake!: FakeSession;
+    let failNext = false;
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+      createSession: (options) => {
+        if (failNext) throw new Error('no worker');
+        return (fake = new FakeSession(options));
+      },
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+    expect(host.getResults(tree.root).source).toBe('live');
+
+    failNext = true;
+    expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no worker' });
+    expect(host.getResults(tree.root).source).toBe('live');
+  });
+
   it('builds a depth-limited view from a saved snapshot when no live run matches', () => {
     store.save({
       schemaVersion: 2,
@@ -463,5 +491,6 @@ describe('createEngineHost', () => {
 
     const matches = events.find((event) => event.type === 'matches');
     expect(matches?.type === 'matches' && matches.matches[0]?.path).toBe(join(tree.root, 'b'));
+    expect(matches?.type === 'matches' && matches.matches[0]).not.toHaveProperty('recovery');
   });
 });
