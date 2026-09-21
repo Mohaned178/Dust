@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -15,6 +16,11 @@ export default defineConfig({
       },
       {
         extends: true,
+        resolve: {
+          alias: {
+            '@tanstack/react-virtual': fileURLToPath(new URL('./test/renderer/virtual-mock.ts', import.meta.url)),
+          },
+        },
         test: {
           name: 'renderer',
           environment: 'jsdom',
