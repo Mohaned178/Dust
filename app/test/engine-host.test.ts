@@ -222,4 +222,34 @@ describe('createEngineHost', () => {
     expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no worker' });
     expect(host.getDashboard().scan).toBeNull();
   });
+
+  it('isolates a throwing listener from the run outcome', async () => {
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    const seen: string[] = [];
+    host.onEvent(() => {
+      throw new Error('listener exploded');
+    });
+    host.onEvent((event) => {
+      seen.push(event.type);
+    });
+
+    const finished = nextEvent(host, 'finished');
+    const started = await host.startAnalyze(tree.root);
+    expect(started.ok).toBe(true);
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    const event = await finished;
+
+    expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true });
+    expect(seen).toEqual(['started', 'finalizing', 'finished']);
+    expect(seen).not.toContain('failed');
+  });
 });

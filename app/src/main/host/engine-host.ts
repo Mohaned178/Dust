@@ -69,7 +69,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   let active: { runId: string; session: ScanSessionLike } | null = null;
 
   function emit(event: ScanEvent): void {
-    for (const listener of [...listeners]) listener(event);
+    for (const listener of [...listeners]) {
+      try {
+        listener(event);
+      } catch {
+        /* a broken listener must not corrupt the run */
+      }
+    }
   }
 
   function getDashboard(): DashboardState {
