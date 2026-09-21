@@ -1,5 +1,10 @@
-import { BrowserWindow, app } from 'electron';
+import { SnapshotStore } from '@dust/core';
+import { BrowserWindow, app, ipcMain } from 'electron';
 import { join } from 'node:path';
+import type { IpcRegistrar } from './ipc';
+import { registerIpcHandlers } from './ipc';
+import { createEngineHost } from './host/engine-host';
+import { createStorePaths, resolveWorkerPath } from './paths';
 
 function createMainWindow(): BrowserWindow {
   return new BrowserWindow({
@@ -29,8 +34,23 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 }
 
 void app.whenReady().then(async () => {
+  const store = new SnapshotStore(createStorePaths(app.getPath('userData')));
+  const host = createEngineHost({ store, workerPath: resolveWorkerPath(__dirname) });
   const window = createMainWindow();
+
+  const registrar: IpcRegistrar = {
+    handle: (channel, listener) => {
+      ipcMain.handle(channel, (event, ...args) => listener(event, ...args));
+    },
+  };
+  registerIpcHandlers(registrar, host, {
+    send: (channel, payload) => {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    },
+  });
+
   window.once('ready-to-show', () => window.show());
+  app.on('before-quit', () => host.dispose());
   await loadRenderer(window);
 });
 
