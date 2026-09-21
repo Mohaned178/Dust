@@ -52,9 +52,19 @@ describe('registerIpcHandlers', () => {
     const { host } = makeHost(session);
     const registrar = new FakeRegistrar();
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    const unsubscribe = registerIpcHandlers(registrar, host, {
-      send: (channel, payload) => sent.push({ channel, payload }),
-    });
+    const revealed: string[] = [];
+    const unsubscribe = registerIpcHandlers(
+      registrar,
+      host,
+      {
+        send: (channel, payload) => sent.push({ channel, payload }),
+      },
+      {
+        revealPath: async (path) => {
+          revealed.push(path);
+        },
+      },
+    );
 
     const dashboard = (await registrar.invoke(IPC.dashboardGet)) as DashboardState;
     expect(dashboard.volumes.map((volume) => volume.root)).toEqual(['T:\\']);
@@ -77,6 +87,12 @@ describe('registerIpcHandlers', () => {
     const forwarded = sent.filter((entry) => entry.channel === IPC.scanEvent).map((entry) => entry.payload as ScanEvent);
     expect(forwarded.some((event) => event.type === 'started')).toBe(true);
     expect(forwarded.some((event) => event.type === 'finished')).toBe(true);
+
+    const results = (await registrar.invoke(IPC.resultsGet, 'Z:\\')) as { source: string };
+    expect(results.source).toBe('empty');
+
+    await registrar.invoke(IPC.revealPath, 'T:\\Temp');
+    expect(revealed).toEqual(['T:\\Temp']);
 
     unsubscribe();
     host.dispose();

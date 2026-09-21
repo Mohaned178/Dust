@@ -251,6 +251,71 @@ describe('createEngineHost', () => {
     expect(host.getDashboard().scan).toBeNull();
   });
 
+  it('serves retained live results after a run and reports empty for other roots', async () => {
+    tree.file('temp/junk.bin', 'abcdefghij');
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+    });
+
+    const empty = host.getResults(tree.root);
+    expect(empty.source).toBe('empty');
+    expect(empty.categories).toHaveLength(5);
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    await finished;
+
+    const live = host.getResults(tree.root);
+    expect(live.source).toBe('live');
+    expect(live.depthLimited).toBe(false);
+    expect(live.rows.some((row) => row.path === join(tree.root, 'temp'))).toBe(true);
+    expect(live.categories.find((row) => row.category === 'temp')?.bytes).toBe(10);
+
+    expect(host.getResults('Z:\\').source).toBe('empty');
+  });
+
+  it('builds a depth-limited view from a saved snapshot when no live run matches', () => {
+    store.save({
+      schemaVersion: 2,
+      rulesVersion: '1',
+      root: 'C:\\',
+      startedAt: 1,
+      finishedAt: 2,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 25, items: 1 }],
+      projects: [],
+      folders: [
+        { path: 'C:\\', name: 'C:\\', bytes: 25, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
+        { path: 'C:\\Temp', name: 'Temp', bytes: 25, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 0 },
+      ],
+      matches: [
+        { path: 'C:\\Temp', ruleId: 'system-temp', category: 'temp', bytes: 25, grade: 'safe', evidence: 'fixture' },
+      ],
+    });
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+    });
+
+    const results = host.getResults('c:\\');
+    expect(results.source).toBe('snapshot');
+    expect(results.depthLimited).toBe(true);
+    expect(results.categories.find((row) => row.category === 'temp')?.bytes).toBe(25);
+    expect(results.rows.find((row) => row.path === 'C:\\Temp')?.action).toMatchObject({ ruleId: 'system-temp' });
+  });
+
   it('isolates a throwing listener from the run outcome', async () => {
     const fake = new FakeSession({ root: tree.root });
     const host = createEngineHost({
@@ -277,7 +342,7 @@ describe('createEngineHost', () => {
     const event = await finished;
 
     expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true });
-    expect(seen).toEqual(['started', 'finalizing', 'finished']);
+    expect(seen).toEqual(['started', 'finalizing', 'categories', 'matches', 'finished']);
     expect(seen).not.toContain('failed');
   });
 });

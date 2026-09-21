@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  RULES_VERSION,
   ScanSession,
   buildSnapshot,
   classifyProjects,
@@ -18,15 +19,26 @@ import type {
   RuleEnv,
   ScanResult,
   SessionOptions,
+  SnapshotMatch,
   VolumeInfo,
   VolumeUsage,
 } from '@dust/core';
 import type { SnapshotStore } from '@dust/core';
-import type { DashboardState, ScanEvent, StartAnalyzeResult } from '../../shared/ipc';
+import type {
+  CategorySummaryRow,
+  DashboardState,
+  ResultMatch,
+  ResultRow,
+  ResultsState,
+  ScanEvent,
+  StartAnalyzeResult,
+} from '../../shared/ipc';
 import { aggregateCategories, collectRuleMatches } from './analyze';
 import { buildDashboardState } from './dashboard';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
+import { buildRowsFromSnapshot, buildRowsFromTree, sameRoot, summarizeCategories } from './results';
+import type { ResultsEnv } from './results';
 
 export interface ScanSessionLike {
   start(): Promise<ScanResult>;
@@ -50,8 +62,17 @@ export interface EngineHost {
   getDashboard(): DashboardState;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
+  getResults(root: string): ResultsState;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
+}
+
+function guardEnv(env: RuleEnv): ResultsEnv {
+  return {
+    systemRoot: env.windowsDir || undefined,
+    programData: env.programData || undefined,
+    userProfile: env.userProfile || undefined,
+  };
 }
 
 export function createEngineHost(deps: EngineHostDeps): EngineHost {
@@ -67,6 +88,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const lock = new ScanLock();
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
+
+  let lastResults: {
+    root: string;
+    status: 'complete' | 'cancelled';
+    finishedAt: number;
+    categories: CategorySummaryRow[];
+    rows: ResultRow[];
+  } | null = null;
 
   function emit(event: ScanEvent): void {
     for (const listener of [...listeners]) {
@@ -96,6 +125,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
 
     const runId = randomUUID();
+    lastResults = null;
     const startedAt = now();
     const progress = new ThrottledEmitter<ScanEvent>((event) => emit(event), {
       intervalMs: deps.progressIntervalMs ?? 100,
@@ -153,6 +183,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
       const summary = await finalize(result, input.startedAt);
+      emit({ type: 'categories', runId: input.runId, categories: summary.categories });
+      emit({ type: 'matches', runId: input.runId, matches: summary.matches });
       emit({
         type: 'finished',
         runId: input.runId,
@@ -183,7 +215,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function finalize(
     result: ScanResult,
     startedAt: number,
-  ): Promise<{ finishedAt: number; projects: number; reclaimableBytes: number; saved: boolean }> {
+  ): Promise<{
+    finishedAt: number;
+    projects: number;
+    reclaimableBytes: number;
+    saved: boolean;
+    categories: CategorySummaryRow[];
+    matches: ResultMatch[];
+  }> {
     const probe = createNodeFsProbe();
     const existing = deps.store.load();
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
@@ -201,10 +240,20 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     });
     const rules = createRules(env, { pins, isExternal: external, now });
     const ctx: RuleContext = { root: result.root, tree: result.tree, markers: result.markers, probe };
-    const categories = aggregateCategories(await collectRuleMatches(rules, ctx));
+    const matches = await collectRuleMatches(rules, ctx);
+    const ruleCategories = aggregateCategories(matches);
+    const categories = summarizeCategories(ruleCategories);
+    const finishedAt = now();
+
+    lastResults = {
+      root: result.root,
+      status: result.status,
+      finishedAt,
+      categories,
+      rows: buildRowsFromTree(result.tree, result.root, matches, guardEnv(env)),
+    };
 
     const usage = getVolumeUsageFn(listVolumesFn().map((volume) => volume.root));
-    const finishedAt = now();
     const snapshot = buildSnapshot({
       root: result.root,
       startedAt,
@@ -212,7 +261,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       status: result.status,
       tree: result.tree,
       projects: analysis.projects,
-      categories,
+      categories: ruleCategories,
+      matches: matches.map(
+        (match): SnapshotMatch => ({
+          path: match.path,
+          ruleId: match.ruleId,
+          category: match.category,
+          bytes: match.bytes,
+          grade: match.grade,
+          evidence: match.evidence,
+        }),
+      ),
       disks: usage.map((entry) => ({
         volume: entry.volume,
         totalBytes: entry.totalBytes,
@@ -227,6 +286,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       projects: analysis.projects.length,
       reclaimableBytes: categories.reduce((sum, entry) => sum + entry.bytes, 0),
       saved: save.ok,
+      categories,
+      matches,
     };
   }
 
@@ -236,6 +297,46 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     run.session.cancel();
     await run.settled;
     return true;
+  }
+
+  function getResults(requestedRoot: string): ResultsState {
+    if (lastResults !== null && sameRoot(lastResults.root, requestedRoot)) {
+      return {
+        source: 'live',
+        root: lastResults.root,
+        finishedAt: lastResults.finishedAt,
+        status: lastResults.status,
+        rulesStale: false,
+        depthLimited: false,
+        categories: lastResults.categories,
+        rows: lastResults.rows,
+      };
+    }
+
+    const loaded = deps.store.load();
+    if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, requestedRoot)) {
+      return {
+        source: 'snapshot',
+        root: loaded.snapshot.root,
+        finishedAt: loaded.snapshot.finishedAt,
+        status: loaded.snapshot.status,
+        rulesStale: loaded.snapshot.rulesVersion !== RULES_VERSION,
+        depthLimited: true,
+        categories: summarizeCategories(loaded.snapshot.categories),
+        rows: buildRowsFromSnapshot(loaded.snapshot, guardEnv(env)),
+      };
+    }
+
+    return {
+      source: 'empty',
+      root: requestedRoot,
+      finishedAt: null,
+      status: null,
+      rulesStale: false,
+      depthLimited: false,
+      categories: summarizeCategories([]),
+      rows: [],
+    };
   }
 
   function onEvent(listener: (event: ScanEvent) => void): () => void {
@@ -250,5 +351,5 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     listeners.clear();
   }
 
-  return { getDashboard, startAnalyze, cancelScan, onEvent, dispose };
+  return { getDashboard, startAnalyze, cancelScan, getResults, onEvent, dispose };
 }

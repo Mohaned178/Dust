@@ -1,5 +1,5 @@
 import { SnapshotStore } from '@dust/core';
-import { BrowserWindow, app, ipcMain } from 'electron';
+import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import type { IpcRegistrar } from './ipc';
 import { registerIpcHandlers } from './ipc';
@@ -43,11 +43,20 @@ void app.whenReady().then(async () => {
       ipcMain.handle(channel, (event, ...args) => listener(event, ...args));
     },
   };
-  registerIpcHandlers(registrar, host, {
-    send: (channel, payload) => {
-      if (!window.webContents.isDestroyed()) window.webContents.send(channel, payload);
+  registerIpcHandlers(
+    registrar,
+    host,
+    {
+      send: (channel, payload) => {
+        if (!window.webContents.isDestroyed()) window.webContents.send(channel, payload);
+      },
     },
-  });
+    {
+      revealPath: async (path) => {
+        await shell.openPath(path);
+      },
+    },
+  );
 
   window.once('ready-to-show', () => window.show());
   app.on('before-quit', () => host.dispose());
