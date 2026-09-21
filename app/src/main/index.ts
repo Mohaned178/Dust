@@ -1,6 +1,8 @@
 import { SnapshotStore } from '@dust/core';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { buildElevationCommand } from './elevation';
 import type { IpcRegistrar } from './ipc';
 import { registerIpcHandlers } from './ipc';
 import { createEngineHost } from './host/engine-host';
@@ -54,6 +56,17 @@ void app.whenReady().then(async () => {
     {
       revealPath: async (path) => {
         shell.showItemInFolder(path);
+      },
+      relaunchElevated: async () => {
+        if (process.platform !== 'win32') return;
+        const args = app.isPackaged ? [] : [app.getAppPath()];
+        const child = spawn(
+          'powershell.exe',
+          ['-NoProfile', '-Command', buildElevationCommand(process.execPath, args)],
+          { detached: true, stdio: 'ignore' },
+        );
+        child.unref();
+        app.quit();
       },
     },
   );

@@ -53,6 +53,7 @@ describe('registerIpcHandlers', () => {
     const registrar = new FakeRegistrar();
     const sent: Array<{ channel: string; payload: unknown }> = [];
     const revealed: string[] = [];
+    const relaunched: number[] = [];
     const unsubscribe = registerIpcHandlers(
       registrar,
       host,
@@ -62,6 +63,9 @@ describe('registerIpcHandlers', () => {
       {
         revealPath: async (path) => {
           revealed.push(path);
+        },
+        relaunchElevated: async () => {
+          relaunched.push(1);
         },
       },
     );
@@ -93,6 +97,50 @@ describe('registerIpcHandlers', () => {
 
     await registrar.invoke(IPC.revealPath, 'T:\\Temp');
     expect(revealed).toEqual(['T:\\Temp']);
+
+    await registrar.invoke(IPC.relaunchElevated);
+    expect(relaunched).toEqual([1]);
+
+    unsubscribe();
+    host.dispose();
+  });
+
+  it('routes preview, execute, dev cleanup and pins through the host', async () => {
+    const { host } = makeHost(new FakeSession({ root: 'T:\\' }));
+    const registrar = new FakeRegistrar();
+    const unsubscribe = registerIpcHandlers(
+      registrar,
+      host,
+      {
+        send: () => {},
+      },
+      {
+        revealPath: async () => {},
+        relaunchElevated: async () => {},
+      },
+    );
+
+    expect(await registrar.invoke(IPC.cleanPreview, { scope: 'quick' })).toEqual({
+      ok: false,
+      reason: 'empty-selection',
+      message: 'Nothing to clean here',
+    });
+    expect(await registrar.invoke(IPC.cleanPreview, { scope: 'row', root: 'T:\\', paths: ['T:\\Temp'] })).toEqual({
+      ok: false,
+      reason: 'invalid-root',
+      message: 'No scan data for T:\\ - run an Analyze first',
+    });
+    expect(await registrar.invoke(IPC.cleanExecute, { cleanId: 'c1', planId: 'nope' })).toEqual({
+      ok: false,
+      reason: 'unknown-plan',
+    });
+    expect((await registrar.invoke(IPC.devCleanupGet, 'T:\\')) as { source: string }).toMatchObject({
+      source: 'empty',
+    });
+    expect(await registrar.invoke(IPC.pinsSet, 'T:\\dev\\app', true)).toEqual({
+      ok: true,
+      pins: ['T:\\dev\\app'],
+    });
 
     unsubscribe();
     host.dispose();
