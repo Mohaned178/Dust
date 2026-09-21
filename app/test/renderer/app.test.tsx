@@ -59,4 +59,16 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
   });
+
+  it('opens the results view from a disk card', async () => {
+    const api = makeApi();
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
+    expect(await screen.findByRole('heading', { name: 'Results' })).toBeInTheDocument();
+    expect(await screen.findByText('Users')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
+    expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
+  });
 });

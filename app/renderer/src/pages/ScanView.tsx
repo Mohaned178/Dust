@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DustApi, ScanEvent } from '../../../src/shared/ipc';
 import { formatBytes, formatCount, formatDuration } from '../format';
+import { ResultsView } from './ResultsView';
 
 export interface ScanViewProps {
   api: DustApi;
@@ -35,7 +36,7 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-8 py-10">
+    <main className="mx-auto max-w-6xl px-8 py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-neutral-100">{title}</h1>
         <p className="mt-1 text-sm text-neutral-400">{root}</p>
@@ -85,6 +86,10 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
           {failed.message}
         </section>
       )}
+
+      <div className="mt-6">
+        <ResultsView api={api} root={root} runId={runId} key={runId} />
+      </div>
 
       <button
         type="button"

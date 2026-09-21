@@ -6,9 +6,10 @@ import { DiskCard } from '../components/DiskCard';
 export interface DashboardProps {
   api: DustApi;
   onAnalyze: (root: string) => Promise<StartAnalyzeResult>;
+  onViewResults: (root: string) => void;
 }
 
-export function Dashboard({ api, onAnalyze }: DashboardProps) {
+export function Dashboard({ api, onAnalyze, onViewResults }: DashboardProps) {
   const [state, setState] = useState<DashboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export function Dashboard({ api, onAnalyze }: DashboardProps) {
             volume={volume}
             busy={busyRoot === volume.root}
             onAnalyze={() => void analyze(volume.root)}
+            onViewResults={() => onViewResults(volume.root)}
           />
         ))}
       </section>

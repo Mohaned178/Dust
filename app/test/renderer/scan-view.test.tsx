@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ScanView } from '../../renderer/src/pages/ScanView';
 import type { ScanEvent } from '../../src/shared/ipc';
@@ -94,5 +94,46 @@ describe('ScanView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('streams folder rows into the live results table', async () => {
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<ScanView api={api} root="C:\\" runId="run-1" event={null} onBack={vi.fn()} />);
+
+    act(() => {
+      handlers[0]?.({
+        type: 'folders',
+        runId: 'run-1',
+        folders: [
+          {
+            path: 'C:\\Temp',
+            name: 'Temp',
+            parent: 'C:\\',
+            bytes: 512,
+            allocatedBytes: 4096,
+            fileCount: 2,
+            folderCount: 0,
+            linkCount: 0,
+            newestMtimeMs: 0,
+            errorCount: 0,
+            partial: false,
+            complete: true,
+            childCount: 0,
+            grade: 'safe',
+            gradeReason: 'Temporary files — apps recreate them as needed',
+            action: null,
+          },
+        ],
+      });
+    });
+
+    expect(await screen.findByText('Temp')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Folder tree' })).toBeInTheDocument();
   });
 });

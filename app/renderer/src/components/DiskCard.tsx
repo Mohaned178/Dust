@@ -6,9 +6,10 @@ export interface DiskCardProps {
   volume: DashboardVolumeCard;
   busy: boolean;
   onAnalyze: () => void;
+  onViewResults: () => void;
 }
 
-export function DiskCard({ volume, busy, onAnalyze }: DiskCardProps) {
+export function DiskCard({ volume, busy, onAnalyze, onViewResults }: DiskCardProps) {
   const used =
     volume.totalBytes !== null && volume.freeBytes !== null ? volume.totalBytes - volume.freeBytes : null;
 
@@ -37,15 +38,27 @@ export function DiskCard({ volume, busy, onAnalyze }: DiskCardProps) {
       {volume.lastCleanedAt !== null && (
         <p className="mt-1 text-sm text-neutral-500">Last cleaned {formatRelativeTime(volume.lastCleanedAt)}</p>
       )}
-      <button
-        type="button"
-        aria-label={`Analyze ${volume.root}`}
-        disabled={busy}
-        onClick={onAnalyze}
-        className="mt-4 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-      >
-        Analyze
-      </button>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          aria-label={`Analyze ${volume.root}`}
+          disabled={busy}
+          onClick={onAnalyze}
+          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+        >
+          Analyze
+        </button>
+        {volume.lastAnalyzedAt !== null && (
+          <button
+            type="button"
+            aria-label={`View results for ${volume.root}`}
+            onClick={onViewResults}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200"
+          >
+            View results
+          </button>
+        )}
+      </div>
     </article>
   );
 }
