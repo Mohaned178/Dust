@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SNAPSHOT_SCHEMA_VERSION, SnapshotCorruptError, parseSnapshot } from '../src/snapshot/schema';
 import type { SnapshotData } from '../src/snapshot/schema';
+import type { ProjectRecord } from '../src/projects/types';
 
 function validSnapshot(): SnapshotData {
   return {
@@ -51,6 +52,58 @@ describe('parseSnapshot', () => {
     expect(() => parseSnapshot(JSON.stringify(badStatus))).toThrow(SnapshotCorruptError);
     const badFolders = { ...validSnapshot(), folders: [{ path: 'F:\\x' }] };
     expect(() => parseSnapshot(JSON.stringify(badFolders))).toThrow(SnapshotCorruptError);
+  });
+
+  it('accepts a full project record', () => {
+    const project: ProjectRecord = {
+      path: 'F:\\p',
+      name: 'p',
+      kind: 'project',
+      packageManager: 'npm',
+      pinned: false,
+      workspaceCount: 0,
+      nodeModules: { paths: [{ path: 'F:\\p\\node_modules', bytes: 5 }], bytes: 5 },
+      activity: { ms: 1234, source: 'git-reflog' },
+      recency: 'active',
+      restorability: { grade: 'green', reasons: ['lockfile'], restoreCommand: 'npm install' },
+      offered: true,
+      evidence: ['package.json'],
+    };
+    const snapshot = { ...validSnapshot(), projects: [project] };
+    expect(parseSnapshot(JSON.stringify(snapshot)).projects).toEqual([project]);
+  });
+
+  it('rejects a truncated project record', () => {
+    const truncated = { ...validSnapshot(), projects: [{ path: 'F:\\p', name: 'p' }] };
+    expect(() => parseSnapshot(JSON.stringify(truncated))).toThrow(SnapshotCorruptError);
+  });
+
+  it('rejects a project record with bad nested field types', () => {
+    const full = {
+      ...validSnapshot(),
+      projects: [
+        {
+          path: 'F:\\p',
+          name: 'p',
+          kind: 'project',
+          packageManager: 'npm',
+          pinned: false,
+          workspaceCount: 0,
+          nodeModules: { paths: [{ path: 'F:\\p\\node_modules', bytes: 5 }], bytes: 5 },
+          activity: { ms: 1234, source: 'git-reflog' },
+          recency: 'active',
+          restorability: { grade: 'green', reasons: ['lockfile'], restoreCommand: 'npm install' },
+          offered: true,
+          evidence: ['package.json'],
+        },
+      ],
+    };
+    const badGrade = structuredClone(full);
+    badGrade.projects[0].restorability.grade = 'red';
+    expect(() => parseSnapshot(JSON.stringify(badGrade))).toThrow(SnapshotCorruptError);
+    const badSource = structuredClone(full);
+    badSource.projects[0].activity.source = 'telepathy';
+    expect(() => parseSnapshot(JSON.stringify(badSource))).toThrow(SnapshotCorruptError);
   });
 
   it('accepts a foreign rulesVersion — the loader does not pin rules', () => {

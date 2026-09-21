@@ -123,7 +123,61 @@ function isSnapshotCategory(value: unknown): boolean {
 
 function isProjectRecord(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return typeof value.path === 'string' && typeof value.name === 'string';
+  return (
+    typeof value.path === 'string' &&
+    typeof value.name === 'string' &&
+    (value.kind === 'project' || value.kind === 'monorepo' || value.kind === 'orphaned-node-modules') &&
+    (value.packageManager === 'npm' ||
+      value.packageManager === 'yarn' ||
+      value.packageManager === 'pnpm' ||
+      value.packageManager === 'bun' ||
+      value.packageManager === 'unknown') &&
+    typeof value.pinned === 'boolean' &&
+    isFiniteNumber(value.workspaceCount) &&
+    isNodeModules(value.nodeModules) &&
+    isProjectActivity(value.activity) &&
+    (value.recency === 'active' ||
+      value.recency === 'occasional' ||
+      value.recency === 'dead' ||
+      value.recency === 'unknown') &&
+    isRestorability(value.restorability) &&
+    typeof value.offered === 'boolean' &&
+    isStringArray(value.evidence)
+  );
+}
+
+function isNodeModules(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return Array.isArray(value.paths) && value.paths.every(isNodeModulesLocation) && isFiniteNumber(value.bytes);
+}
+
+function isNodeModulesLocation(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.path === 'string' && isFiniteNumber(value.bytes);
+}
+
+function isProjectActivity(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    (value.ms === null || isFiniteNumber(value.ms)) &&
+    (value.source === 'files' ||
+      value.source === 'git-reflog' ||
+      value.source === 'manifest' ||
+      value.source === 'unknown')
+  );
+}
+
+function isRestorability(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    (value.grade === 'green' || value.grade === 'yellow' || value.grade === 'not-offered') &&
+    isStringArray(value.reasons) &&
+    (value.restoreCommand === null || typeof value.restoreCommand === 'string')
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 function isSnapshotFolder(value: unknown): boolean {
