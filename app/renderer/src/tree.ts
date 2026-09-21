@@ -151,6 +151,8 @@ function upsertRow(store: RowStore, row: ResultRow): void {
   const key = pathKey(row.path);
   const existing = store.nodes.get(key);
   if (existing) {
+    existing.name = row.name;
+    existing.parent = row.parent;
     existing.bytes = row.bytes;
     existing.allocatedBytes = row.allocatedBytes;
     existing.fileCount = row.fileCount;

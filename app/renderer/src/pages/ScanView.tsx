@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { DustApi, ScanEvent } from '../../../src/shared/ipc';
+import { useEffect, useState } from 'react';
+import type { DustApi, ScanEvent, ScanProgressPayload } from '../../../src/shared/ipc';
 import { formatBytes, formatCount, formatDuration } from '../format';
 import { ResultsView } from './ResultsView';
 
@@ -13,11 +13,22 @@ export interface ScanViewProps {
 
 export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [lastProgress, setLastProgress] = useState<ScanProgressPayload | null>(null);
   const current = event !== null && 'runId' in event && event.runId === runId ? event : null;
   const finished = current?.type === 'finished' ? current : null;
   const failed = current?.type === 'failed' ? current : null;
-  const progress = current?.type === 'progress' ? current.progress : null;
+  const progress = current?.type === 'progress' ? current.progress : lastProgress;
   const finalizing = current?.type === 'finalizing';
+
+  useEffect(() => {
+    setLastProgress(null);
+  }, [runId]);
+
+  useEffect(() => {
+    if (event !== null && 'runId' in event && event.runId === runId && event.type === 'progress') {
+      setLastProgress(event.progress);
+    }
+  }, [event, runId]);
 
   const title = finished
     ? finished.status === 'complete'

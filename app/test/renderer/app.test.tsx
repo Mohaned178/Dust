@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../renderer/src/App';
 import type { ScanEvent } from '../../src/shared/ipc';
-import { makeApi } from './fakes';
+import { makeApi, makeResultsState } from './fakes';
 
 describe('App', () => {
   it('moves from the dashboard through a scan and back', async () => {
@@ -61,12 +61,14 @@ describe('App', () => {
   });
 
   it('opens the results view from a disk card', async () => {
-    const api = makeApi();
+    const getResults = vi.fn(async (root: string) => makeResultsState({ root }));
+    const api = makeApi({ getResults });
     render(<App api={api} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
     expect(await screen.findByRole('heading', { name: 'Results' })).toBeInTheDocument();
     expect(await screen.findByText('Users')).toBeInTheDocument();
+    expect(getResults).toHaveBeenCalledWith('C:\\');
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();

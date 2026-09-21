@@ -13,6 +13,7 @@ describe('CategoryStrip', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.getByText('256 KB')).toBeInTheDocument();
+    expect(screen.getByText('1 item')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Recycle Bin/ })).toBeDisabled();
     expect(screen.getAllByText(/nothing to clean/)).toHaveLength(4);
   });

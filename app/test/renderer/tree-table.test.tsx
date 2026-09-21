@@ -5,7 +5,7 @@ import { createRowStore, flattenVisible, pathKey, upsertRows } from '../../rende
 import type { SortState } from '../../renderer/src/tree';
 import { makeResultsRows } from './fakes';
 
-function setup(overrides: { expanded?: ReadonlySet<string>; sort?: SortState } = {}) {
+function setup(overrides: { expanded?: ReadonlySet<string>; sort?: SortState; totalBytes?: number } = {}) {
   const store = createRowStore('C:\\');
   upsertRows(store, makeResultsRows());
   const expanded = overrides.expanded ?? new Set([pathKey('C:\\Users')]);
@@ -17,7 +17,7 @@ function setup(overrides: { expanded?: ReadonlySet<string>; sort?: SortState } =
   render(
     <TreeTable
       rows={flattenVisible(store, expanded, sort, null)}
-      totalBytes={1024 * 1024}
+      totalBytes={overrides.totalBytes ?? 1024 * 1024}
       sort={sort}
       onSortChange={onSortChange}
       expanded={expanded}
@@ -65,6 +65,14 @@ describe('TreeTable', () => {
 
     fireEvent.click(screen.getByRole('columnheader', { name: /Size/ }));
     expect(onSortChange).toHaveBeenCalledWith({ key: 'size', desc: false });
+  });
+
+  it('shows a percent placeholder before the total size is known', () => {
+    setup({ totalBytes: 0 });
+
+    expect(screen.queryByText('25.0%')).toBeNull();
+    expect(screen.queryAllByText('0.0%')).toHaveLength(0);
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 
   it('shows rule evidence and the action grade for matched rows', () => {

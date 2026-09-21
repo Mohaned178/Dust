@@ -53,6 +53,20 @@ describe('ResultsView', () => {
     expect(await screen.findByText(/No results yet/)).toBeInTheDocument();
   });
 
+  it('hides danger rows behind the Show danger toggle', async () => {
+    const api = makeApi({ getResults: async () => makeResultsState() });
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+
+    expect(await screen.findByText('Users')).toBeInTheDocument();
+    expect(screen.queryByText('Windows')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show danger/ }));
+    expect(await screen.findByText('Windows')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Hide danger/ }));
+    expect(screen.queryByText('Windows')).toBeNull();
+  });
+
   it('merges live folder and match events during a scan', async () => {
     const getResults = vi.fn(async () => makeResultsState());
     const handlers: Array<(event: ScanEvent) => void> = [];
@@ -91,7 +105,7 @@ describe('ResultsView', () => {
         ],
       });
     });
-    expect(await screen.findByText('Temp')).toBeInTheDocument();
+    expect((await screen.findAllByText('Temp')).length).toBeGreaterThan(0);
     expect(screen.getByText('512 B')).toBeInTheDocument();
 
     act(() => {

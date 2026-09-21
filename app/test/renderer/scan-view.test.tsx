@@ -29,6 +29,35 @@ describe('ScanView', () => {
     expect(cancelScan).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the last progress payload when non-progress events arrive', () => {
+    const progress: ScanEvent = {
+      type: 'progress',
+      runId: 'run-1',
+      progress: {
+        filesScanned: 1234,
+        bytesSeen: 2048,
+        currentPath: 'C:\\Windows\\Temp',
+        dirsCompleted: 3,
+        errors: 1,
+        elapsedMs: 5000,
+      },
+    };
+    const { rerender } = render(
+      <ScanView api={makeApi()} root="C:\\" runId="run-1" event={progress} onBack={vi.fn()} />,
+    );
+
+    expect(screen.getByText('1,234')).toBeInTheDocument();
+    expect(screen.getByText('5s')).toBeInTheDocument();
+    expect(screen.getByText('C:\\Windows\\Temp')).toBeInTheDocument();
+
+    const folders: ScanEvent = { type: 'folders', runId: 'run-1', folders: [] };
+    rerender(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={folders} onBack={vi.fn()} />);
+
+    expect(screen.getByText('1,234')).toBeInTheDocument();
+    expect(screen.getByText('5s')).toBeInTheDocument();
+    expect(screen.getByText('C:\\Windows\\Temp')).toBeInTheDocument();
+  });
+
   it('shows a message when cancelling the scan rejects', async () => {
     const cancelScan = vi.fn(async () => {
       throw new Error('nope');
@@ -133,7 +162,7 @@ describe('ScanView', () => {
       });
     });
 
-    expect(await screen.findByText('Temp')).toBeInTheDocument();
+    expect((await screen.findAllByText('Temp')).length).toBeGreaterThan(0);
     expect(screen.getByRole('table', { name: 'Folder tree' })).toBeInTheDocument();
   });
 });

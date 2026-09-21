@@ -30,7 +30,7 @@ export function CategoryStrip({ categories, active, onSelect }: CategoryStripPro
             <span className="block text-xs text-neutral-400">{row.label}</span>
             <span className="mt-1 block text-lg font-medium text-neutral-100">{formatBytes(row.bytes)}</span>
             <span className="mt-1 block text-xs text-neutral-500">
-              {empty ? 'nothing to clean' : `${formatCount(row.items)} items`}
+              {empty ? 'nothing to clean' : row.items === 1 ? '1 item' : `${formatCount(row.items)} items`}
             </span>
           </button>
         );

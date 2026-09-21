@@ -107,7 +107,10 @@ export function TreeTable({
         id: 'percent',
         header: '%',
         cell: (info) => {
-          const percent = totalBytes > 0 ? (info.getValue() / totalBytes) * 100 : 0;
+          if (totalBytes <= 0) {
+            return <span className="tabular-nums text-xs text-neutral-400">—</span>;
+          }
+          const percent = (info.getValue() / totalBytes) * 100;
           const clamped = Math.min(Math.max(percent, 0), 100);
           return (
             <div className="flex items-center gap-2">

@@ -69,6 +69,14 @@ describe('RowStore', () => {
     expect(flat[0]!.depth).toBe(0);
   });
 
+  it('refreshes name and parent when a real row replaces a stub', () => {
+    const store = createRowStore('C:\\');
+    upsertRows(store, [row('C:\\a', 'C:\\', { bytes: 5 })]);
+    upsertRows(store, [row('C:\\', null, { name: 'C:\\', bytes: 5, childCount: 1 })]);
+    expect(store.nodes.get(pathKey('C:\\'))?.name).toBe('C:\\');
+    expect(store.nodes.get(pathKey('C:\\'))?.complete).toBe(true);
+  });
+
   it('applies rule matches to existing rows', () => {
     const store = createRowStore('C:\\');
     upsertRows(store, [row('C:\\Temp', 'C:\\')]);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CategoryId } from '@dust/core';
+import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../../src/shared/categories';
 import type { DustApi, ResultsState } from '../../../src/shared/ipc';
 import { CategoryStrip } from '../components/CategoryStrip';
 import { TreeTable } from '../components/TreeTable';
@@ -25,11 +26,12 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   const [version, setVersion] = useState(0);
   const [state, setState] = useState<ResultsState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [liveCategories, setLiveCategories] = useState<ResultsState['categories']>([]);
+  const [liveCategories, setLiveCategories] = useState<ResultsState['categories']>(emptyCategories);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [sort, setSort] = useState<SortState>({ key: 'size', desc: true });
   const [filter, setFilter] = useState<CategoryId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showDanger, setShowDanger] = useState(false);
 
   useEffect(() => {
     if (runId !== null) return;
@@ -79,6 +81,11 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   const flatRows = useMemo(
     () => flattenVisible(storeRef.current, expanded, sort, filterSet),
     [version, expanded, sort, filterSet],
+  );
+  const dangerCount = useMemo(() => flatRows.filter((entry) => entry.row.grade === 'danger').length, [flatRows]);
+  const tableRows = useMemo(
+    () => (showDanger ? flatRows : flatRows.filter((entry) => entry.row.grade !== 'danger')),
+    [flatRows, showDanger],
   );
   const totalBytes = useMemo(() => storeRef.current.nodes.get(pathKey(root))?.bytes ?? 0, [version, root]);
 
@@ -132,59 +139,81 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
       {source === 'empty' ? (
         <p className="text-sm text-neutral-400">No results yet — run an Analyze from the dashboard.</p>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <TreeTable
-            rows={flatRows}
-            totalBytes={totalBytes}
-            sort={sort}
-            onSortChange={setSort}
-            expanded={expanded}
-            onToggle={toggle}
-            onReveal={reveal}
-            onSelect={setSelected}
-            selectedPath={selected}
-          />
-          <aside className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-sm">
-            {selectedRow ? (
-              <>
-                <p className="break-all text-xs text-neutral-500">{selectedRow.path}</p>
-                <dl className="mt-3 space-y-2">
-                  <Detail label="Size" value={formatBytes(selectedRow.bytes)} />
-                  <Detail label="Allocated" value={formatBytes(selectedRow.allocatedBytes)} />
-                  <Detail
-                    label="Files / folders"
-                    value={`${formatCount(selectedRow.fileCount)} / ${formatCount(selectedRow.folderCount)}`}
-                  />
-                  <Detail
-                    label="Last modified"
-                    value={selectedRow.newestMtimeMs > 0 ? formatRelativeTime(selectedRow.newestMtimeMs) : '—'}
-                  />
-                </dl>
-                <div className="mt-3 rounded-lg border border-neutral-800 p-3">
-                  <p className="text-xs uppercase tracking-wide text-neutral-500">Why this grade</p>
-                  <p className="mt-1 text-neutral-300">
-                    {selectedRow.action ? selectedRow.action.evidence : selectedRow.gradeReason}
-                  </p>
-                  {selectedRow.action && (
-                    <p className="mt-1 text-xs text-neutral-500">Rule: {selectedRow.action.ruleId}</p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => reveal(selectedRow.path)}
-                  className="mt-3 rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200"
-                >
-                  Explore
-                </button>
-              </>
-            ) : (
-              <p className="text-neutral-500">Select a row to see why it is graded this way.</p>
-            )}
-          </aside>
-        </div>
+        <>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              aria-pressed={showDanger}
+              onClick={() => setShowDanger((value) => !value)}
+              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200"
+            >
+              {showDanger ? 'Hide danger' : `Show danger (${formatCount(dangerCount)})`}
+            </button>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <TreeTable
+              rows={tableRows}
+              totalBytes={totalBytes}
+              sort={sort}
+              onSortChange={setSort}
+              expanded={expanded}
+              onToggle={toggle}
+              onReveal={reveal}
+              onSelect={setSelected}
+              selectedPath={selected}
+            />
+            <aside className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-sm">
+              {selectedRow ? (
+                <>
+                  <p className="break-all text-xs text-neutral-500">{selectedRow.path}</p>
+                  <dl className="mt-3 space-y-2">
+                    <Detail label="Size" value={formatBytes(selectedRow.bytes)} />
+                    <Detail label="Allocated" value={formatBytes(selectedRow.allocatedBytes)} />
+                    <Detail
+                      label="Files / folders"
+                      value={`${formatCount(selectedRow.fileCount)} / ${formatCount(selectedRow.folderCount)}`}
+                    />
+                    <Detail
+                      label="Last modified"
+                      value={selectedRow.newestMtimeMs > 0 ? formatRelativeTime(selectedRow.newestMtimeMs) : '—'}
+                    />
+                  </dl>
+                  <div className="mt-3 rounded-lg border border-neutral-800 p-3">
+                    <p className="text-xs uppercase tracking-wide text-neutral-500">Why this grade</p>
+                    <p className="mt-1 text-neutral-300">
+                      {selectedRow.action ? selectedRow.action.evidence : selectedRow.gradeReason}
+                    </p>
+                    {selectedRow.action && (
+                      <p className="mt-1 text-xs text-neutral-500">Rule: {selectedRow.action.ruleId}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => reveal(selectedRow.path)}
+                    className="mt-3 rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200"
+                  >
+                    Explore
+                  </button>
+                </>
+              ) : (
+                <p className="text-neutral-500">Select a row to see why it is graded this way.</p>
+              )}
+            </aside>
+          </div>
+        </>
       )}
     </section>
   );
+}
+
+function emptyCategories(): ResultsState['categories'] {
+  return CATEGORY_ORDER.map((category) => ({
+    category,
+    label: CATEGORY_LABELS[category],
+    bytes: 0,
+    items: 0,
+    ruleIds: [],
+  }));
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
