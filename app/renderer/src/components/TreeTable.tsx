@@ -31,6 +31,7 @@ export interface TreeTableProps {
   onToggle: (path: string) => void;
   onReveal: (path: string) => void;
   onSelect: (path: string) => void;
+  onClean: (path: string) => void;
   selectedPath: string | null;
 }
 
@@ -43,6 +44,7 @@ export function TreeTable({
   onToggle,
   onReveal,
   onSelect,
+  onClean,
   selectedPath,
 }: TreeTableProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -157,18 +159,33 @@ export function TreeTable({
       columnHelper.display({
         id: 'action',
         header: 'Action',
-        cell: (info) => (
-          <button
-            type="button"
-            onClick={() => onReveal(info.row.original.row.path)}
-            className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
-          >
-            Explore
-          </button>
-        ),
+        cell: (info) => {
+          const row = info.row.original.row;
+          return (
+            <div className="flex gap-1">
+              {row.action !== null && (
+                <button
+                  type="button"
+                  aria-label={`Clean ${row.name}`}
+                  onClick={() => onClean(row.path)}
+                  className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white"
+                >
+                  Clean
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onReveal(row.path)}
+                className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
+              >
+                Explore
+              </button>
+            </div>
+          );
+        },
       }),
     ],
-    [expanded, onReveal, onSelect, onToggle, totalBytes],
+    [expanded, onClean, onReveal, onSelect, onToggle, totalBytes],
   );
 
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });

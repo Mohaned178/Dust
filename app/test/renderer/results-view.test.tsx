@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ResultsView } from '../../renderer/src/pages/ResultsView';
-import type { ResultsState, ScanEvent } from '../../src/shared/ipc';
-import { makeApi, makeResultsState } from './fakes';
+import type { CleanExecuteRequest, ResultsState, ScanEvent } from '../../src/shared/ipc';
+import { makeApi, makeCategories, makeResultsState } from './fakes';
 
 describe('ResultsView', () => {
   it('shows a loading state while getResults is pending', async () => {
@@ -145,5 +145,69 @@ describe('ResultsView', () => {
     });
     expect(await screen.findByText('live evidence')).toBeInTheDocument();
     expect(getResults).not.toHaveBeenCalled();
+  });
+
+  it('opens a row cleanup dialog and executes the host plan', async () => {
+    const executeClean = vi.fn(async (_request: CleanExecuteRequest) => ({
+      ok: true as const,
+      report: {
+        planId: 'plan-1',
+        scope: 'row' as const,
+        root: 'C:\\',
+        startedAt: 1,
+        finishedAt: 2,
+        items: [],
+        deletedBytes: 1024,
+        skippedLocked: 0,
+        itemErrors: 0,
+        remainingReclaimableBytes: 0,
+        cleanedAt: 2,
+      },
+    }));
+    const api = makeApi({ getResults: async () => makeResultsState(), executeClean });
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clean Temp' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Clean C:\\Temp' });
+    expect(dialog).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+
+    await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
+    expect(executeClean.mock.calls[0]?.[0]).toMatchObject({ planId: 'plan-1' });
+    expect(await screen.findByText('Cleanup complete')).toBeInTheDocument();
+  });
+
+  it('refetches results after a cleaned event', async () => {
+    const getResults = vi.fn(async () => makeResultsState());
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      getResults,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    await screen.findByText('Users');
+    expect(getResults).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      handlers[0]?.({ type: 'cleaned', cleanId: 'clean-1', root: 'C:\\' });
+    });
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(2));
+  });
+
+  it('opens Dev Cleanup from the npm projects category', async () => {
+    const onOpenDevCleanup = vi.fn();
+    const categories = makeCategories().map((row) =>
+      row.category === 'npm-projects' ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] } : row,
+    );
+    const api = makeApi({ getResults: async () => makeResultsState({ categories }) });
+    render(<ResultsView api={api} root="C:\\" runId={null} onOpenDevCleanup={onOpenDevCleanup} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /npm projects/ }));
+    expect(onOpenDevCleanup).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Users')).not.toBeNull();
   });
 });

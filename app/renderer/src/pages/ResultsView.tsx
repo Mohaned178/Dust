@@ -4,6 +4,7 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../../src/shared/categories'
 import type { DustApi, ResultsState } from '../../../src/shared/ipc';
 import { CategoryStrip } from '../components/CategoryStrip';
 import { TreeTable } from '../components/TreeTable';
+import { RowCleanDialog } from '../components/RowCleanDialog';
 import { formatBytes, formatCount, formatRelativeTime } from '../format';
 import {
   createRowStore,
@@ -12,6 +13,7 @@ import {
   isRowVisible,
   mergeMatches,
   pathKey,
+  sameRoot,
   upsertRows,
 } from '../tree';
 import type { RowNode, RowStore, SortState } from '../tree';
@@ -20,9 +22,10 @@ export interface ResultsViewProps {
   api: DustApi;
   root: string;
   runId: string | null;
+  onOpenDevCleanup?: () => void;
 }
 
-export function ResultsView({ api, root, runId }: ResultsViewProps) {
+export function ResultsView({ api, root, runId, onOpenDevCleanup }: ResultsViewProps) {
   const storeRef = useRef<RowStore>(createRowStore(root));
   const [version, setVersion] = useState(0);
   const [state, setState] = useState<ResultsState | null>(null);
@@ -32,6 +35,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   const [sort, setSort] = useState<SortState>({ key: 'size', desc: true });
   const [filter, setFilter] = useState<CategoryId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [cleanPath, setCleanPath] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
   const expandedRef = useRef(expanded);
 
@@ -39,36 +43,38 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
     expandedRef.current = expanded;
   }, [expanded]);
 
+  const reload = useCallback(() => {
+    api
+      .getResults(root)
+      .then((next) => {
+        storeRef.current = createRowStore(root);
+        upsertRows(storeRef.current, next.rows);
+        setState(next);
+        setVersion((value) => value + 1);
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      });
+  }, [api, root]);
+
   useEffect(() => {
     if (runId !== null) return;
-    let active = true;
     storeRef.current = createRowStore(root);
     setState(null);
     setError(null);
     setExpanded(new Set());
     setFilter(null);
     setSelected(null);
-    api
-      .getResults(root)
-      .then((next) => {
-        if (!active) return;
-        upsertRows(storeRef.current, next.rows);
-        setState(next);
-        setVersion((value) => value + 1);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, root, runId]);
+    reload();
+  }, [reload, root, runId]);
 
   useEffect(() => {
-    if (runId === null) return;
     return api.onScanEvent((next) => {
-      if (!('runId' in next)) return;
-      if (next.runId !== runId) return;
+      if (next.type === 'cleaned') {
+        if (sameRoot(next.root, root)) reload();
+        return;
+      }
+      if (runId === null || !('runId' in next) || next.runId !== runId) return;
       if (next.type === 'folders') {
         const affectsVisible = next.folders.some((row) => isRowVisible(row.parent, root, expandedRef.current));
         upsertRows(storeRef.current, next.folders);
@@ -80,7 +86,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
         setVersion((value) => value + 1);
       }
     });
-  }, [api, root, runId]);
+  }, [api, root, runId, reload]);
 
   const filterSet = useMemo(
     () => filterPaths(storeRef.current, filter),
@@ -112,6 +118,17 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
     });
   }, []);
 
+  const selectCategory = useCallback(
+    (category: CategoryId | null) => {
+      if (category === 'npm-projects' && onOpenDevCleanup !== undefined) {
+        onOpenDevCleanup();
+        return;
+      }
+      setFilter(category);
+    },
+    [onOpenDevCleanup],
+  );
+
   const reveal = useCallback(
     (path: string) => {
       void api.revealPath(path).catch(() => {});
@@ -142,7 +159,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
         </p>
       )}
 
-      <CategoryStrip categories={categories} active={filter} onSelect={setFilter} />
+      <CategoryStrip categories={categories} active={filter} onSelect={selectCategory} />
 
       {source === 'loading' ? (
         <p className="text-sm text-neutral-400">Loading results…</p>
@@ -170,6 +187,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
               onToggle={toggle}
               onReveal={reveal}
               onSelect={setSelected}
+              onClean={setCleanPath}
               selectedPath={selected}
             />
             <aside className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-sm">
@@ -211,6 +229,10 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
             </aside>
           </div>
         </>
+      )}
+
+      {cleanPath !== null && (
+        <RowCleanDialog api={api} root={root} path={cleanPath} onClose={() => setCleanPath(null)} />
       )}
     </section>
   );

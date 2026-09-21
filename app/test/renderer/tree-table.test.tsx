@@ -13,6 +13,7 @@ function setup(overrides: { expanded?: ReadonlySet<string>; sort?: SortState; to
   const onToggle = vi.fn();
   const onReveal = vi.fn();
   const onSelect = vi.fn();
+  const onClean = vi.fn();
   const onSortChange = vi.fn();
   render(
     <TreeTable
@@ -24,10 +25,11 @@ function setup(overrides: { expanded?: ReadonlySet<string>; sort?: SortState; to
       onToggle={onToggle}
       onReveal={onReveal}
       onSelect={onSelect}
+      onClean={onClean}
       selectedPath={null}
     />,
   );
-  return { onToggle, onReveal, onSelect, onSortChange };
+  return { onToggle, onReveal, onSelect, onClean, onSortChange };
 }
 
 describe('TreeTable', () => {
@@ -81,5 +83,13 @@ describe('TreeTable', () => {
     expect(screen.getByText('User TEMP directory - junk by definition')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Why Temp is graded safe' }));
     expect(onSelect).toHaveBeenCalledWith('C:\\Temp');
+  });
+
+  it('offers Clean only for rule-matched rows', () => {
+    const { onClean } = setup();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clean Temp' }));
+    expect(onClean).toHaveBeenCalledWith('C:\\Temp');
+    expect(screen.queryByRole('button', { name: 'Clean Users' })).toBeNull();
   });
 });
