@@ -2,10 +2,12 @@
   "name": "dust",
   "private": true,
   "type": "module",
-  "workspaces": ["core"],
+  "workspaces": ["core", "app"],
   "engines": { "node": "^20.19.0 || >=22.12.0" },
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:app": "npm run dev -w app",
+    "build:app": "npm run build -w app"
   }
 }
