@@ -52,7 +52,7 @@ describe('ResultsView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Why Temp is graded safe' }));
 
     expect(screen.getByText('Why this grade')).toBeInTheDocument();
-    expect(screen.getAllByText('User TEMP directory — junk by definition').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('User TEMP directory - junk by definition').length).toBeGreaterThan(0);
     expect(screen.getByText('Rule: system-temp')).toBeInTheDocument();
   });
 

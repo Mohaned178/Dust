@@ -78,7 +78,7 @@ describe('TreeTable', () => {
   it('shows rule evidence and the action grade for matched rows', () => {
     const { onSelect } = setup();
 
-    expect(screen.getByText('User TEMP directory — junk by definition')).toBeInTheDocument();
+    expect(screen.getByText('User TEMP directory - junk by definition')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Why Temp is graded safe' }));
     expect(onSelect).toHaveBeenCalledWith('C:\\Temp');
   });

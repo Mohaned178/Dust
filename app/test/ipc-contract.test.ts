@@ -4,7 +4,7 @@ import { IPC } from '../src/shared/ipc';
 describe('IPC contract', () => {
   it('uses unique, namespaced channel names', () => {
     const channels = Object.values(IPC);
-    expect(channels).toHaveLength(6);
+    expect(channels).toHaveLength(11);
     expect(new Set(channels).size).toBe(channels.length);
     for (const channel of channels) expect(channel).toMatch(/^dust:/);
   });

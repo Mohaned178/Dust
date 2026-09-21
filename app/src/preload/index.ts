@@ -1,6 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../shared/ipc';
-import type { DashboardState, DustApi, ResultsState, ScanEvent, StartAnalyzeResult } from '../shared/ipc';
+import type {
+  CleanExecuteRequest,
+  CleanExecuteResult,
+  CleanPreviewRequest,
+  CleanPreviewResult,
+  DashboardState,
+  DevCleanupState,
+  DustApi,
+  ResultsState,
+  ScanEvent,
+  SetPinResult,
+  StartAnalyzeResult,
+} from '../shared/ipc';
 
 const api: DustApi = {
   getDashboard: () => ipcRenderer.invoke(IPC.dashboardGet) as Promise<DashboardState>,
@@ -8,6 +20,13 @@ const api: DustApi = {
   cancelScan: () => ipcRenderer.invoke(IPC.scanCancel) as Promise<void>,
   getResults: (root: string) => ipcRenderer.invoke(IPC.resultsGet, root) as Promise<ResultsState>,
   revealPath: (path: string) => ipcRenderer.invoke(IPC.revealPath, path) as Promise<void>,
+  previewClean: (request: CleanPreviewRequest) =>
+    ipcRenderer.invoke(IPC.cleanPreview, request) as Promise<CleanPreviewResult>,
+  executeClean: (request: CleanExecuteRequest) =>
+    ipcRenderer.invoke(IPC.cleanExecute, request) as Promise<CleanExecuteResult>,
+  getDevCleanup: (root: string) => ipcRenderer.invoke(IPC.devCleanupGet, root) as Promise<DevCleanupState>,
+  setPin: (path: string, pinned: boolean) => ipcRenderer.invoke(IPC.pinsSet, path, pinned) as Promise<SetPinResult>,
+  relaunchElevated: () => ipcRenderer.invoke(IPC.relaunchElevated) as Promise<void>,
   onScanEvent: (handler: (event: ScanEvent) => void) => {
     const listener = (_event: unknown, payload: ScanEvent) => handler(payload);
     ipcRenderer.on(IPC.scanEvent, listener);

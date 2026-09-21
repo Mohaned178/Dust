@@ -67,6 +67,7 @@ export function ResultsView({ api, root, runId }: ResultsViewProps) {
   useEffect(() => {
     if (runId === null) return;
     return api.onScanEvent((next) => {
+      if (!('runId' in next)) return;
       if (next.runId !== runId) return;
       if (next.type === 'folders') {
         const affectsVisible = next.folders.some((row) => isRowVisible(row.parent, root, expandedRef.current));
