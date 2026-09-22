@@ -21,7 +21,7 @@ Explicit non-competition: Dust does not chase WizTree-class MFT scan speed. It c
 
 In scope:
 
-1. Dashboard with all fixed disks, usage bars, and two actions: Analyze (deep scan) and Quick Clean (safe cleanup only).
+1. Dashboard with all fixed disks and usage bars. The system drive (boot volume, normally `C:\`) gets two actions: Analyze (deep scan) and Quick Clean (safe cleanup only); every other volume is browse-only (Section 2.1).
 2. Scanner engine (Node) that walks a disk or folder and collects size / type / last-modified.
 3. Results view: Category Summary Strip + Tree Table with safety classification (green / yellow / red) and "why this grade" explanations.
 4. Quick Clean: %TEMP%, C:\Windows\Temp, Recycle Bin, npm cache, application caches — plan screen, explicit confirmation, execute.
@@ -33,8 +33,26 @@ Superseded from the original project context (decided during brainstorming):
 - Browser caches were out of scope; they are now in scope via the Cache Registry.
 - Treemap stays Phase 2; the Tree Table covers navigation in MVP.
 - "Default action = move to Recycle Bin" is replaced by the per-category recovery model (Section 5.3): recycling frees zero bytes and the bin quota auto-purges large items, so it is not a safety net for GB-scale artifacts.
+- Equal treatment of all fixed disks is superseded: only the system drive gets the full Analyze/cleanup treatment; other volumes are browse-only (Section 2.1).
 
-Out of scope (Phase 2+): Docker, installed-apps manager, visual treemap, quarantine, snapshots, real pnpm/bun support (global store math), NVIDIA/Steam caches, cross-platform, global npm package audit, editor-MRU activity signals, background scheduled scans.
+Out of scope (Phase 2+): Docker, installed-apps manager, visual treemap, quarantine, snapshots, real pnpm/bun support (global store math), NVIDIA/Steam caches, cross-platform, global npm package audit, editor-MRU activity signals, background scheduled scans, move/quarantine for browse-only volumes.
+
+### 2.1 System drive vs browse-only volumes
+
+Dust is system-drive-focused. The system drive is the boot volume, resolved from `volumeRootOf(env.windowsDir)` with `%SystemDrive%` as fallback, and injected into the engine host so tests can substitute a fixture root.
+
+**System drive — full treatment:** Analyze (worker pool, progressive streaming), rule matching, action and display grades, safety classification, Quick Clean, Dev Cleanup, Cache Registry, and snapshot persistence.
+
+**Every other fixed, removable, or network volume — browse-only:**
+
+- The same scanner (`Enumerator`/`scanTree`, worker pool) walks the volume and shows size/structure. No rule matching, project classification, or npm discovery runs.
+- No Safety column, display grade, or action grade — Dust makes no safety judgment outside the system drive.
+- No Quick Clean, Dev Cleanup, or Cache Registry rules apply.
+- The tree offers a plain permanent Delete action (in-app, simple confirmation). No rule evidence, recovery statement, or plan-token flow. Move/quarantine is Phase 2 (Section 12).
+- The protected-path guard (Section 5.5) still runs for these deletes: volume roots, system paths, and their ancestors are refused.
+- Browse results are session-only: no snapshot, no relaunch persistence.
+
+Why: the rule inventory (npm cache, temp, cache registry) encodes system-drive paths; extending classification to arbitrary volumes adds correctness risk for unvalidated demand. Benchmarks showed cold scans of secondary HDDs are 4-7x slower than the SSD system drive, and real usage concentrates the cleanup pain on the system drive.
 
 ## 3. Locked Decisions
 
@@ -51,8 +69,9 @@ Out of scope (Phase 2+): Docker, installed-apps manager, visual treemap, quarant
 | 9 | **Action grade vs display grade are separate.** Only whitelisted rules produce action grades; unknown paths are never actionable. Tree rows get an informational display grade with a "why" explanation. |
 | 10 | **Quick Clean and Analyze are mutually exclusive.** Single global scan lock. Quick Clean uses the freshest data: its own targeted scan when no Analyze exists, or Analyze results without re-scan. |
 | 11 | **No restore feature.** Dust never runs package managers, manages background processes, or tracks rebuilds. After cleanup, each project shows a copyable restore command. A session-only "Recently cleaned" group holds them. |
-| 12 | **No one-click-and-done anywhere.** Every deletion requires plan → explicit user confirmation. Enforced by plan tokens in the cleaner API. |
+| 12 | **No one-click-and-done anywhere.** Every deletion requires an explicit user confirmation. System-drive cleanup is enforced by plan tokens in the cleaner API; the browse-only Delete (Section 2.1) is a separate guard-enforced path with a simple confirmation. |
 | 13 | **Tree Table is the main results surface,** coexisting with the Category Summary Strip. |
+| 14 | **System-drive focus.** Only the boot volume gets Analyze, rules, grades, cleanup, and snapshot persistence. All other volumes are browse-only with a guarded permanent Delete (Section 2.1). Browse scans share the single global scan lock and never write the snapshot. |
 
 ## 4. Architecture
 
@@ -98,7 +117,7 @@ Cloud placeholder files (OneDrive etc.) are counted at logical size — document
 
 ### 4.5 Persistence
 
-Single snapshot file at `userData/snapshot.json`:
+Single snapshot file at `userData/snapshot.json`. It is system-drive-only: browse scans of other volumes never read or write it (Section 2.1).
 
 - `schemaVersion`, `rulesVersion`
 - scan root, startedAt, finishedAt, status (`complete` or `cancelled`), `cleanedAt` (last successful cleanup, shown on disk cards)
@@ -131,12 +150,13 @@ interface RuleMatch {
 ```
 
 - Rules live in `core/rules/<id>.ts`; cache rules in `core/rules/caches/<app>.ts`.
-- The cleaner executes only actions declared by whitelisted rule ids. There is no generic "delete this path" entry point anywhere in the codebase, and the UI never touches fs directly.
+- **Rule matches are root-scoped.** A rule may only return paths on the volume of `ctx.root` (the system drive). Rules that resolve absolute system paths (temp, npm cache, caches, recycle bin) must filter candidates by `volumeRootOf(match.path) === volumeRootOf(ctx.root)`. This is a data-loss guard, not a UI nicety: without it, analyzing another volume could offer system-drive paths for deletion.
+- The cleaner executes only actions declared by whitelisted rule ids. There is no generic delete entry point in the system-drive cleanup flow, and the UI never touches fs directly. The browse-only Delete action on non-system volumes (Section 2.1) is a separate, guard-enforced path that never consults rules.
 
 ### 5.2 Action Grade vs Display Grade
 
 - **Action grade** — produced only by whitelisted rules. Green = regenerable or worthless, permanent delete allowed with the recovery statement shown. Yellow = heuristic evidence, incomplete evidence, or irreversible; entering a plan requires an explicit acknowledge.
-- **Display grade** — computed for every visible Tree Table row from path patterns. Known-safe patterns (`\Temp\`, `\Cache\`, `node_modules`, `Windows\Temp`) green; unknown yellow; system-critical red. Purely informational: clicking shows "why this grade"; never a cleanup button. When a rule matched the row, the cell shows the rule's action grade plus its evidence instead.
+- **Display grade** — computed for every visible Tree Table row on the system drive from path patterns. Known-safe patterns (`\Temp\`, `\Cache\`, `node_modules`, `Windows\Temp`) green; unknown yellow; system-critical red. Purely informational: clicking shows "why this grade"; never a cleanup button. When a rule matched the row, the cell shows the rule's action grade plus its evidence instead. Browse-only volumes have no display grade at all (Section 2.1).
 - No fourth color; yellow is the default for unknown. The cleaner never consults display grades.
 - Red list (read-only, hidden behind a "Show danger" toggle, never actionable): `C:\Windows`, Program Files / Program Files (x86), ProgramData, profile roots, volume roots.
 
@@ -154,18 +174,22 @@ interface RuleMatch {
 | `cache-discord` | Discord cache / Code Cache / GPUCache | green | Same pattern. |
 | `cache-slack` | Slack cache / Code Cache / GPUCache / CacheStorage | green | Same pattern. |
 
+The inventory is system-drive-scoped: these rules only run for the system drive (Section 2.1), and each only matches paths on its volume (Section 5.1).
+
 Cache rules: declared via a `paths(ctx)` resolver with profile wildcards (Chrome/Edge/Firefox multi-profile, Discord variants, Slack workspaces); a cache row renders only when its cache directory exists. Deletion is allowed while the app runs; locked files are skipped and counted. Adding a new cache is a ~10-line file with zero engine changes.
 
 Locked files anywhere: skipped and reported per action as "partially cleaned: N files in use"; never a batch error.
 
 ### 5.4 Plan Tokens & Invariants
 
-- `cleaner.execute(planId)` accepts only a plan produced by a prior plan preview. No other code path can delete.
+- `cleaner.execute(planId)` accepts only a plan produced by a prior plan preview. No other code path can delete within the system-drive cleanup flow; the browse-only Delete (Section 2.1) is a separate, guard-enforced path with explicit confirmation and no rule involvement.
 - Invariants: no automatic deletion ever; every deletion is explicitly confirmed by the user; red items never enter a plan; unknown paths never enter a plan; every plan item carries its recovery statement.
 
 ### 5.5 Protected-Path Guard
 
 Defense in depth enforced in the cleaner: refuses volume roots, `C:\Windows`, Program Files, ProgramData, profile roots, user-document-class directories, and Dust's own install — and any path that is an ancestor of these. Exception requires a rule match against an exact known path (temp dir, cache dir, or node_modules inside a discovered project root).
+
+The guard is drive-agnostic and applies to the browse-only Delete action on non-system volumes (Section 2.1), where it is the only safety net and no rule-match exemption exists. The system-drive policy itself is enforced by the host, not by the guard. Deletes are re-checked against the guard at execution time, never only at plan/confirmation time.
 
 ## 6. Project Discovery & Classification
 
@@ -189,7 +213,7 @@ Defense in depth enforced in the cleaner: refuses volume roots, `C:\Windows`, Pr
 - The git reflog signal exists because cloning or checking out an old repository resets file mtimes to today; raw mtime alone would call zombie projects "Active".
 - Groups: Active ≤ 30 d, Occasional 31–180 d, Dead > 180 d. Defaults live in one config constant.
 - "Keep" pin (stored in config) always wins: pinned projects are never suggested and appear in a Pinned group.
-- Removable and network drives are scanned if the user analyzes them, but their projects are never offered for cleanup ("external").
+- Projects are discovered and classified only on the system drive. Every other volume is browse-only (Section 2.1), so its projects are never offered for cleanup. The "external" predicate (removable/network) remains only as a dashboard label; it is no longer the cleanup gate.
 
 ### 6.4 Dev Cleanup Flow
 
@@ -204,11 +228,11 @@ Defense in depth enforced in the cleaner: refuses volume roots, `C:\Windows`, Pr
 
 ### 7.1 Dashboard
 
-Disk cards for fixed volumes with usage bars (`statfs`) and an "external" label for removable drives; per-disk Analyze; one global Quick Clean. With a snapshot present, the card shows "Last analyzed X d ago · Y GB reclaimable" plus View results.
+Disk cards for all fixed volumes with usage bars (`statfs`), plus an "external" label for removable drives. The system-drive card offers Analyze and, with a snapshot present, shows "Last analyzed X d ago · Y GB reclaimable" plus View results; it is the only card tied to the global Quick Clean. Every other card offers Browse (session-only tree, Section 2.1) and shows no reclaimable/last-analyzed framing — there is no rule-based reclaim story outside the system drive.
 
 ### 7.2 Scan Lock & Mutual Exclusion
 
-One global scan lock is held by whichever operation starts first (Analyze or Quick Clean). A conflicting attempt shows "A scan is already running. Cancel it first?" with [Cancel it] / [Wait]. Quick Clean before any Analyze runs its own targeted scan (seconds); after an Analyze it builds its plan from Analyze data without re-scanning, showing the scan age.
+One global scan lock is held by whichever operation starts first (Analyze, Quick Clean, or a browse scan). A conflicting attempt shows "A scan is already running. Cancel it first?" with [Cancel it] / [Wait]. Quick Clean before any Analyze runs its own targeted scan (seconds); after an Analyze it builds its plan from Analyze data without re-scanning, showing the scan age. Browse scans never use Analyze or Quick Clean data and never write the snapshot.
 
 ### 7.3 Quick Clean Flow
 
@@ -216,18 +240,21 @@ Targeted scan if needed → plan screen (per-category bytes, per-category recove
 
 ### 7.4 Analyze Flow
 
-Pick disk → live view: progress header (files scanned, bytes seen, current paths, elapsed, cancel), Category Summary Strip filling in, Tree Table streaming rows as folders complete. Cancel keeps partial results, labeled cancelled. Completion persists the snapshot.
+Pick the system drive → live view: progress header (files scanned, bytes seen, current paths, elapsed, cancel), Category Summary Strip filling in, Tree Table streaming rows as folders complete. Cancel keeps partial results, labeled cancelled. Completion persists the snapshot. Browse-only volumes use the same live view (progress header, cancel, streaming tree) but without the Category Summary Strip, grades, finalize, or snapshot.
 
 ### 7.5 Results Surfaces
 
-- **Category Summary Strip:** reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree. The fast path.
+- **Category Summary Strip:** reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree. The fast path. The strip appears only for the system drive; browse-only volumes have no rules, hence no categories.
 - **Tree Table:** columns Name (expand/collapse) | Size | Allocated (cluster-rounded approximation from the volume's cluster size; compressed files not decomposed) | file/folder count | % bar | Safety + why | Last modified | Action. Sortable on any column, default Size descending. In-place expansion to arbitrary depth; double-click opens Windows Explorer. Rows stream in and numbers finalize in place during scan. Virtualized for 100k+ rows (TanStack Table + react-virtual). The Action column shows Clean only for rule-matched rows; all others show Explore.
+
+  Columns are mode-dependent. On the system drive the table shows Safety + why and the Clean action. On browse-only volumes the Safety column is absent (no grade, no evidence) and the Action column offers Delete (guarded, simple confirmation) and Explore; every other column is shared.
 - Folder exploration is first-class: the analyzed root opens at the top level, every folder expands in place, arbitrary depth. This is the "where is my space going" experience with a Safety column.
 - The Category Summary Strip and Tree Table coexist and read one data model: the strip is the fast path, the tree is the deep path.
 
 ### 7.6 Post-Cleanup UI State (any cleanup — Quick Clean or Analyze-triggered)
 
 - **Tree Table:** cleaned rows are removed from the tree; parent sizes update in place. Collapsed parents update their numbers when the user next expands them.
+- **Browse-only deletes:** the in-memory tree updates in place; there is no category strip or snapshot to update, and the deletion is not carried across relaunch (Section 2.1).
 - **Category Summary Strip:** the cleaned category's value decreases to the new state. At zero it shows "0 B — nothing to clean" instead of disappearing (vanishing rows feel like bugs).
 - **Snapshot:** updated immediately with new sizes plus a `cleanedAt` timestamp, so relaunch shows accurate numbers; disk cards show a "Last cleaned" line.
 - **Success screen:** freed bytes, remaining reclaimable space, and a "View updated disk" button returning to the Results view. Dev Cleanup's summary additionally lists the copyable restore commands (Section 6.4).
@@ -244,17 +271,20 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 
 - 1M files on SSD: target < 45 s; 60 s acceptable; > 90 s unacceptable without visible progress.
 
+The budget applies to the system drive. Browse-only scans of other volumes are view-only and are not performance-gated; measured cold scans of secondary HDDs run 4-7x slower than the system SSD.
+
 **Validation spike before UI investment:** benchmark the Node sync worker walk on the developer's real disk (expect 2-4M entries). If the budget is missed, levers in order: worker-count tuning, batch-size tuning, native enumerator behind the `Enumerator` interface. Windows Defender real-time scanning is the main variance source; measure with it enabled.
 
 ## 9. Edge Cases & Error Handling
 
 - Scanner: per-entry try/catch; `EPERM` / `EACCES` / `EBUSY` counted and skipped; folder flagged "partially scanned" past a threshold. No single file can kill a scan.
 - Cleaner: verifies existence at plan time; vanished paths report "already gone"; locked files skip and count; permission denials report per action. Nothing fails silently; nothing partially applies without a report.
+- Browse-only Delete: the guard is re-checked at execution time; vanished paths report "already gone"; locked files are skipped and counted; refusals are surfaced per path. Nothing is deleted without the confirmation step.
 - Cloud placeholder files: counted at logical size (documented limitation).
 - Long paths: rely on Node's internal `\\?\` handling; verify during implementation.
 - Snapshot: version mismatch shows a rescan banner; corruption discards and prompts; write failure is non-fatal.
 - Non-NTFS volumes (exFAT, network): scanning works; cluster-size approximation falls back to 4096.
-- Renderer closed mid-scan: workers are owned by main; the scan completes into the snapshot.
+- Renderer closed mid-scan: workers are owned by main; a system-drive scan completes into the snapshot, a browse scan is discarded.
 - Multiple Windows user profiles: only the current user's caches are scanned in MVP.
 - Elevation: `C:\Windows\Temp` needs admin; MVP fallback is "Relaunch as Administrator" scoped to that action; a dedicated helper is an implementation-time decision.
 - Antivirus interference: performance variance is expected; benchmarks must be run with Defender enabled.
@@ -263,6 +293,9 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 
 - `core/` runs under vitest in plain Node with fixture trees generated in `os.tmpdir` (controlled sizes and mtimes).
 - Rules: table-driven match / no-match / grade / recovery tests per rule; cache rules assert "renders only when the cache directory exists".
+- Root-scoping: a regression test analyzes a non-system fixture root and asserts no rule ever returns a system-drive path (the data-loss guard from Section 5.1).
+- System-drive policy: the system root is injectable; tests use a fixture system root instead of a literal `C:\`.
+- Browse mode: a non-system scan produces rows without grade/action, never touches the snapshot, and refuses guarded paths on Delete.
 - Classifier fixtures: npm lockfile, yarn lockfile, monorepo workspace, orphaned node_modules, patched, private registry, pnpm/bun (not offered), Keep pin.
 - Display grade: table-driven — `C:\Users\X\AppData\Local\SomeApp\Cache` → green with reason; `C:\Users\X\RandomFolder` → yellow with reason; `C:\Windows\System32` → red with reason; a rule-matched path shows the rule's action grade instead of the pattern grade.
 - Cleaner: guard fuzzing — random candidate paths including protected roots must always be refused; locked-file test via an open handle; plan-token test — execute with a forged or expired planId is refused.
@@ -280,7 +313,9 @@ Pick disk → live view: progress header (files scanned, bytes seen, current pat
 4. Cluster-size query for the Allocated column — default 4096 fallback.
 5. Chrome/Edge cache paths drift across versions — centralized paths resolver plus fixture tests; treat as a maintenance surface.
 6. Private registry sampling can produce false negatives — the warning is advisory only.
+7. Rules matching system-drive paths while scanning another root — fixed by root-scoping rules to `ctx.root` (Section 5.1); covered by a regression test.
+8. Browse-only permanent Delete on arbitrary volumes has no recovery path — mitigated by the drive-agnostic guard, execution-time re-check, and explicit confirmation; move/quarantine is Phase 2.
 
 ## 12. Phase 2 Pointers
 
-Docker images, installed-apps manager, visual treemap, quarantine, snapshot versioning, real pnpm/bun support (global store math), Yarn Berry, broader browser cache coverage, editor-MRU activity signals, global npm package audit, NVIDIA/Steam caches, cross-platform, background scheduled scans, SQLite-backed full-tree persistence.
+Docker images, installed-apps manager, visual treemap, quarantine, snapshot versioning, real pnpm/bun support (global store math), Yarn Berry, broader browser cache coverage, editor-MRU activity signals, global npm package audit, NVIDIA/Steam caches, cross-platform, background scheduled scans, SQLite-backed full-tree persistence, move/quarantine for browse-only volumes.
