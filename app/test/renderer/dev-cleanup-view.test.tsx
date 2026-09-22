@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DevCleanupView } from '../../renderer/src/pages/DevCleanupView';
+import type { CleanExecuteRequest, CleanExecuteResult, ScanEvent } from '../../src/shared/ipc';
 import { makeApi, makeCleanReport, makeDevCleanupState } from './fakes';
 
 describe('DevCleanupView', () => {
@@ -80,5 +81,63 @@ describe('DevCleanupView', () => {
 
     expect(await screen.findByText('Recently cleaned (1)')).toBeInTheDocument();
     expect(screen.getByText('old')).toBeInTheDocument();
+  });
+
+  it('shows per-project progress while the cleanup executes', async () => {
+    let resolveExecute: (result: CleanExecuteResult) => void = () => {};
+    const executeClean = vi.fn(
+      (_request: CleanExecuteRequest) =>
+        new Promise<CleanExecuteResult>((resolve) => {
+          resolveExecute = resolve;
+        }),
+    );
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      getDevCleanup: async () => makeDevCleanupState(),
+      executeClean,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review cleanup' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
+
+    await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
+    const cleanId = executeClean.mock.calls[0]?.[0]?.cleanId;
+    expect(cleanId).toBeDefined();
+
+    act(() => {
+      handlers[0]?.({
+        type: 'clean-item',
+        cleanId: cleanId ?? '',
+        item: {
+          ruleId: 'npm-project-modules',
+          path: 'C:\\dev\\dead-app\\node_modules',
+          category: 'npm-projects',
+          action: 'delete-path',
+          status: 'done',
+          plannedBytes: 512,
+          deletedBytes: 512,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: 'npm ci',
+        },
+      });
+    });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('C:\\dev\\dead-app\\node_modules');
+    expect(status).toHaveTextContent('done');
+    expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled();
+
+    await act(async () => {
+      resolveExecute({ ok: true, report: makeCleanReport({ scope: 'dev' }) });
+    });
+    expect(await screen.findByText('Cleanup complete')).toBeInTheDocument();
   });
 });

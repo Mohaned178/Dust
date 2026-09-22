@@ -147,6 +147,16 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
         </p>
       </header>
 
+      {busy && progress.length > 0 && (
+        <ul role="status" className="mb-4 space-y-1 text-sm text-neutral-300">
+          {progress.map((item) => (
+            <li key={item.path}>
+              {item.path} - {item.status}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {state.source === 'empty' ? (
         <p className="text-sm text-neutral-400">
           No scan data for this volume - run an Analyze from the dashboard first.
@@ -175,15 +185,6 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
       ) : (
         <>
           {error !== null && <p className="mb-4 text-sm text-red-300">{error}</p>}
-          {busy && progress.length > 0 && (
-            <ul role="status" className="mb-4 space-y-1 text-sm text-neutral-300">
-              {progress.map((item) => (
-                <li key={item.path}>
-                  {item.path} - {item.status}
-                </li>
-              ))}
-            </ul>
-          )}
 
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <button
