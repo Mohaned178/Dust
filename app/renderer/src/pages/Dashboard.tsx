@@ -7,9 +7,10 @@ export interface DashboardProps {
   api: DustApi;
   onAnalyze: (root: string) => Promise<StartAnalyzeResult>;
   onViewResults: (root: string) => void;
+  onQuickClean: () => void;
 }
 
-export function Dashboard({ api, onAnalyze, onViewResults }: DashboardProps) {
+export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: DashboardProps) {
   const [state, setState] = useState<DashboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -69,8 +70,20 @@ export function Dashboard({ api, onAnalyze, onViewResults }: DashboardProps) {
   return (
     <main className="mx-auto max-w-5xl px-8 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-neutral-100">Dust</h1>
-        <p className="mt-1 text-sm text-neutral-400">Find what is safe to delete.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-neutral-100">Dust</h1>
+            <p className="mt-1 text-sm text-neutral-400">Find what is safe to delete.</p>
+          </div>
+          <button
+            type="button"
+            disabled={state.scan !== null || state.volumes.length === 0}
+            onClick={onQuickClean}
+            className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          >
+            Quick Clean
+          </button>
+        </div>
       </header>
 
       {state.snapshot.status === 'corrupt' && (

@@ -9,7 +9,7 @@ function okAnalyze() {
 
 describe('Dashboard', () => {
   it('renders volume cards with usage, external labels and snapshot age', async () => {
-    render(<Dashboard api={makeApi()} onAnalyze={okAnalyze()} onViewResults={vi.fn()} />);
+    render(<Dashboard api={makeApi()} onAnalyze={okAnalyze()} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
     expect(screen.getByText('System')).toBeInTheDocument();
@@ -21,7 +21,7 @@ describe('Dashboard', () => {
 
   it('starts an analyze run for the clicked volume', async () => {
     const onAnalyze = okAnalyze();
-    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} />);
+    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
     await waitFor(() => expect(onAnalyze).toHaveBeenCalledWith('C:\\'));
@@ -43,7 +43,7 @@ describe('Dashboard', () => {
           },
         }),
     });
-    render(<Dashboard api={api} onAnalyze={okAnalyze()} onViewResults={vi.fn()} />);
+    render(<Dashboard api={api} onAnalyze={okAnalyze()} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     expect(await screen.findByText(/Snapshot unreadable/)).toBeInTheDocument();
   });
@@ -54,7 +54,7 @@ describe('Dashboard', () => {
       .mockResolvedValueOnce({ ok: false, reason: 'busy', running: 'analyze' })
       .mockResolvedValueOnce({ ok: true, runId: 'run-2' });
     const cancelScan = vi.fn(async () => {});
-    render(<Dashboard api={makeApi({ cancelScan })} onAnalyze={onAnalyze} onViewResults={vi.fn()} />);
+    render(<Dashboard api={makeApi({ cancelScan })} onAnalyze={onAnalyze} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
     expect(await screen.findByRole('dialog', { name: 'Scan already running' })).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('Dashboard', () => {
 
   it('shows a banner when the scan cannot start', async () => {
     const onAnalyze = vi.fn(async () => ({ ok: false as const, reason: 'start-failed' as const, message: 'no worker' }));
-    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} />);
+    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
     expect(await screen.findByText(/Could not start the scan: no worker/)).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('Dashboard', () => {
     const onAnalyze = vi.fn(async () => {
       throw new Error('boom');
     });
-    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} />);
+    render(<Dashboard api={makeApi()} onAnalyze={onAnalyze} onViewResults={vi.fn()} onQuickClean={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze C:\\' }));
     expect(await screen.findByText(/Could not start the scan: boom/)).toBeInTheDocument();
@@ -84,10 +84,20 @@ describe('Dashboard', () => {
 
   it('opens the results view for an analyzed volume', async () => {
     const onViewResults = vi.fn();
-    render(<Dashboard api={makeApi()} onAnalyze={okAnalyze()} onViewResults={onViewResults} />);
+    render(<Dashboard api={makeApi()} onAnalyze={okAnalyze()} onViewResults={onViewResults} onQuickClean={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
     expect(onViewResults).toHaveBeenCalledWith('C:\\');
     expect(screen.queryByRole('button', { name: 'View results for E:\\' })).toBeNull();
+  });
+
+  it('opens quick clean from the dashboard', async () => {
+    const onQuickClean = vi.fn();
+    render(
+      <Dashboard api={makeApi()} onAnalyze={okAnalyze()} onViewResults={vi.fn()} onQuickClean={onQuickClean} />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quick Clean' }));
+    expect(onQuickClean).toHaveBeenCalledTimes(1);
   });
 });

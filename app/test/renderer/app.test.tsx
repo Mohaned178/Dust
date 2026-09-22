@@ -73,4 +73,15 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
   });
+
+  it('opens Quick Clean from the dashboard', async () => {
+    const api = makeApi();
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quick Clean' }));
+    expect(await screen.findByRole('heading', { name: 'Quick Clean' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
+    expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
+  });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DustApi, ScanEvent, StartAnalyzeResult } from '../../src/shared/ipc';
 import { Dashboard } from './pages/Dashboard';
+import { QuickCleanView } from './pages/QuickCleanView';
 import { ResultsView } from './pages/ResultsView';
 import { ScanView } from './pages/ScanView';
 
@@ -8,7 +9,11 @@ export interface AppProps {
   api: DustApi;
 }
 
-type View = { name: 'dashboard' } | { name: 'scan'; root: string; runId: string } | { name: 'results'; root: string };
+type View =
+  | { name: 'dashboard' }
+  | { name: 'scan'; root: string; runId: string }
+  | { name: 'results'; root: string }
+  | { name: 'quick-clean' };
 
 export function App({ api }: AppProps) {
   const [view, setView] = useState<View>({ name: 'dashboard' });
@@ -33,6 +38,11 @@ export function App({ api }: AppProps) {
   if (view.name === 'scan') {
     return <ScanView api={api} root={view.root} runId={view.runId} event={event} onBack={back} />;
   }
+  if (view.name === 'quick-clean') {
+    return (
+      <QuickCleanView api={api} onDone={back} onViewResults={(root) => setView({ name: 'results', root })} />
+    );
+  }
   if (view.name === 'results') {
     return (
       <main className="mx-auto max-w-6xl px-8 py-10">
@@ -51,5 +61,12 @@ export function App({ api }: AppProps) {
       </main>
     );
   }
-  return <Dashboard api={api} onAnalyze={analyze} onViewResults={(root) => setView({ name: 'results', root })} />;
+  return (
+    <Dashboard
+      api={api}
+      onAnalyze={analyze}
+      onViewResults={(root) => setView({ name: 'results', root })}
+      onQuickClean={() => setView({ name: 'quick-clean' })}
+    />
+  );
 }
