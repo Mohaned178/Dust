@@ -40,7 +40,9 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
         const result = await onAnalyze(root);
         if (!result.ok) {
           if (result.reason === 'busy') setPendingRoot(root);
-          else if (result.reason === 'start-failed') setStartError(result.message);
+          else if (result.reason === 'start-failed' || result.reason === 'not-system-drive') {
+            setStartError(result.message);
+          }
         }
       } catch (cause) {
         setStartError(cause instanceof Error ? cause.message : String(cause));

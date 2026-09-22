@@ -2,7 +2,7 @@ import { basename, dirname } from 'node:path';
 import { createDisplayGrader } from '@dust/core';
 import type { AggregateTree, CategoryId, DisplayGradeReason, SnapshotData } from '@dust/core';
 import { CATEGORY_LABELS, CATEGORY_ORDER, isCategoryId } from '../../shared/categories';
-import type { CategorySummaryRow, ResultAction, ResultMatch, ResultRow } from '../../shared/ipc';
+import type { BrowseRow, CategorySummaryRow, ResultAction, ResultMatch, ResultRow } from '../../shared/ipc';
 
 export interface ResultsEnv {
   systemRoot?: string;
@@ -69,6 +69,28 @@ export function toResultRow(record: RowInput, options: RowOptions): ResultRow {
     grade: display.grade,
     gradeReason: display.reason,
     action: options.action ?? null,
+  };
+}
+
+export function toBrowseRow(
+  record: RowInput,
+  options: { root: string; complete: boolean; childCount: number },
+): BrowseRow {
+  const isRoot = sameRoot(record.path, options.root);
+  return {
+    path: record.path,
+    name: isRoot ? record.path : basename(record.path),
+    parent: isRoot ? null : dirname(record.path),
+    bytes: record.bytes,
+    allocatedBytes: record.allocatedBytes,
+    fileCount: record.fileCount,
+    folderCount: record.folderCount,
+    linkCount: record.linkCount,
+    newestMtimeMs: record.newestMtimeMs,
+    errorCount: record.errorCount,
+    partial: record.partial,
+    complete: options.complete,
+    childCount: options.childCount,
   };
 }
 

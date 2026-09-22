@@ -39,6 +39,7 @@ describe('registerIpcHandlers', () => {
     const host = createEngineHost({
       store,
       pool: false,
+      systemRoot: 'T:\\',
       listVolumes: () => [{ root: 'T:\\', label: 'Test', driveType: 'fixed' }],
       getVolumeUsage: () => [{ volume: 'T:\\', label: 'Test', totalBytes: 1000, freeBytes: 400 }],
       createRules: () => [],

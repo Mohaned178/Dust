@@ -14,7 +14,7 @@ export const IPC = {
   relaunchElevated: 'dust:app:relaunch-elevated',
 } as const;
 
-export type ScanKind = 'analyze' | 'quick-clean';
+export type ScanKind = 'analyze' | 'quick-clean' | 'browse';
 
 export interface ScanState {
   kind: ScanKind;
@@ -60,6 +60,30 @@ export interface ResultRow {
   grade: DisplayGrade;
   gradeReason: string;
   action: ResultAction | null;
+}
+
+export interface BrowseRow {
+  path: string;
+  name: string;
+  parent: string | null;
+  bytes: number;
+  allocatedBytes: number;
+  fileCount: number;
+  folderCount: number;
+  linkCount: number;
+  newestMtimeMs: number;
+  errorCount: number;
+  partial: boolean;
+  complete: boolean;
+  childCount: number;
+}
+
+export interface BrowseState {
+  source: 'live' | 'empty';
+  root: string;
+  finishedAt: number | null;
+  status: 'complete' | 'cancelled' | null;
+  rows: BrowseRow[];
 }
 
 export interface CategorySummaryRow {
@@ -219,6 +243,17 @@ export type ScanEvent =
   | { type: 'started'; runId: string; root: string; startedAt: number }
   | { type: 'progress'; runId: string; progress: ScanProgressPayload }
   | { type: 'folders'; runId: string; folders: ResultRow[] }
+  | { type: 'browse-folders'; runId: string; folders: BrowseRow[] }
+  | {
+      type: 'browse-finished';
+      runId: string;
+      status: 'complete' | 'cancelled';
+      startedAt: number;
+      finishedAt: number;
+      filesScanned: number;
+      bytesSeen: number;
+      errors: number;
+    }
   | { type: 'categories'; runId: string; categories: CategorySummaryRow[] }
   | { type: 'matches'; runId: string; matches: ResultMatch[] }
   | { type: 'finalizing'; runId: string }
@@ -243,6 +278,7 @@ export type StartAnalyzeResult =
   | { ok: true; runId: string }
   | { ok: false; reason: 'busy'; running: ScanKind }
   | { ok: false; reason: 'invalid-volume'; message: string }
+  | { ok: false; reason: 'not-system-drive'; message: string }
   | { ok: false; reason: 'start-failed'; message: string };
 
 export interface DashboardVolumeCard {
