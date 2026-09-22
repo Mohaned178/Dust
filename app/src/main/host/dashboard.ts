@@ -7,11 +7,13 @@ export interface DashboardInput {
   usage: VolumeUsage[];
   snapshot: SnapshotLoadResult;
   scan: ScanState | null;
+  systemRoot: string;
 }
 
 export function buildDashboardState(input: DashboardInput): DashboardState {
   const snapshot = input.snapshot.kind === 'ok' ? input.snapshot.snapshot : null;
   const snapshotVolume = snapshot ? volumeRootOf(snapshot.root) : null;
+  const systemVolume = input.systemRoot.toLowerCase();
   const usageByVolume = new Map(input.usage.map((entry) => [entry.volume.toLowerCase(), entry]));
 
   const volumes: DashboardVolumeCard[] = input.volumes.map((volume) => {
@@ -21,6 +23,7 @@ export function buildDashboardState(input: DashboardInput): DashboardState {
       root: volume.root,
       label: volume.label,
       driveType: volume.driveType,
+      role: volume.root.toLowerCase() === systemVolume ? 'system' : 'browse',
       external: volume.driveType === 'removable' || volume.driveType === 'network',
       totalBytes: usage?.totalBytes ?? null,
       freeBytes: usage?.freeBytes ?? null,

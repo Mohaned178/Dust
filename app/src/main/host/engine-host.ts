@@ -12,6 +12,7 @@ import {
   createNodeFsProbe,
   defaultRecycleBinEnumeration,
   defaultRuleEnv,
+  deleteUnprotectedPath,
   getVolumeUsage,
   listVolumes,
   pruneSnapshotAfterCleanup,
@@ -19,6 +20,7 @@ import {
   volumeRootOf,
 } from '@dust/core';
 import type {
+  BrowseDeleteResult,
   CleanupPlan,
   CleanupReport as CoreCleanupReport,
   FolderRecord,
@@ -121,6 +123,7 @@ export interface EngineHost {
   cancelScan(): Promise<boolean>;
   getResults(root: string): ResultsState;
   getBrowseResults(root: string): BrowseState;
+  deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
   getDevCleanup(root: string): DevCleanupState;
@@ -227,7 +230,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   function getDashboard(): DashboardState {
     const volumes = listVolumesFn();
     const usage = getVolumeUsageFn(volumes.map((volume) => volume.root));
-    return buildDashboardState({ volumes, usage, snapshot: deps.store.load(), scan: lock.current() });
+    return buildDashboardState({
+      volumes,
+      usage,
+      snapshot: deps.store.load(),
+      scan: lock.current(),
+      systemRoot,
+    });
   }
 
   function liveSource(): PlanSource | null {
@@ -978,6 +987,43 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return { source: 'empty', root: requestedRoot, finishedAt: null, status: null, rows: [] };
   }
 
+  function browseRefusal(path: string, refusal: string): BrowseDeleteResult {
+    return { path, status: 'refused', deletedBytes: 0, skippedLocked: 0, errors: [], refusal };
+  }
+
+  function applyBrowseDelete(rows: BrowseRow[], result: BrowseDeleteResult): void {
+    if (result.status === 'refused' || result.status === 'failed' || result.deletedBytes === 0) return;
+
+    const removed = result.status === 'done' || result.status === 'already-gone';
+    for (const row of rows) {
+      const isTarget = samePath(row.path, result.path);
+      if (isTarget) {
+        if (!removed) row.bytes = Math.max(row.bytes - result.deletedBytes, 0);
+        continue;
+      }
+      if (isUnderAny(result.path, [row.path])) {
+        row.bytes = Math.max(row.bytes - result.deletedBytes, 0);
+      }
+    }
+
+    if (removed) {
+      const remaining = rows.filter((row) => !isUnderAny(row.path, [result.path]));
+      rows.length = 0;
+      rows.push(...remaining);
+    }
+  }
+
+  async function deleteBrowsePath(path: string): Promise<BrowseDeleteResult> {
+    if (active !== null) return browseRefusal(path, 'busy');
+    if (lastBrowse === null || !isUnderAny(path, [lastBrowse.root])) {
+      return browseRefusal(path, 'not-browsed');
+    }
+
+    const result = deleteUnprotectedPath(path, { guard: guardEnv(env) });
+    applyBrowseDelete(lastBrowse.rows, result);
+    return result;
+  }
+
   function onEvent(listener: (event: ScanEvent) => void): () => void {
     listeners.add(listener);
     return () => {
@@ -997,6 +1043,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     cancelScan,
     getResults,
     getBrowseResults,
+    deleteBrowsePath,
     previewClean,
     executeClean,
     getDevCleanup,

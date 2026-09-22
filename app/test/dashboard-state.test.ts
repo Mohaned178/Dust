@@ -32,19 +32,26 @@ const usage = [
 
 describe('buildDashboardState', () => {
   it('attaches snapshot analytics to the analyzed volume only and marks external drives', () => {
-    const state = buildDashboardState({ volumes, usage, snapshot: { kind: 'ok', snapshot: snapshot() }, scan: null });
+    const state = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'ok', snapshot: snapshot() },
+      scan: null,
+      systemRoot: 'C:\\',
+    });
     const system = state.volumes.find((volume) => volume.root === 'C:\\')!;
     const usb = state.volumes.find((volume) => volume.root === 'E:\\')!;
 
     expect(system).toMatchObject({
       label: 'System',
       external: false,
+      role: 'system',
       totalBytes: 1000,
       freeBytes: 400,
       lastAnalyzedAt: 20,
       reclaimableBytes: 100,
     });
-    expect(usb).toMatchObject({ external: true, lastAnalyzedAt: null, reclaimableBytes: null });
+    expect(usb).toMatchObject({ external: true, role: 'browse', lastAnalyzedAt: null, reclaimableBytes: null });
     expect(state.snapshot).toMatchObject({ status: 'ok', reclaimableBytes: 100, rulesStale: false });
     expect(state.scan).toBeNull();
   });
@@ -55,17 +62,24 @@ describe('buildDashboardState', () => {
       usage,
       snapshot: { kind: 'ok', snapshot: snapshot({ rulesVersion: '999', status: 'cancelled', cleanedAt: 30 }) },
       scan: { kind: 'analyze', root: 'C:\\', startedAt: 5 },
+      systemRoot: 'C:\\',
     });
     expect(state.snapshot).toMatchObject({ scanStatus: 'cancelled', rulesStale: true, cleanedAt: 30 });
     expect(state.scan).toEqual({ kind: 'analyze', root: 'C:\\', startedAt: 5 });
   });
 
   it('reports missing and corrupt snapshots', () => {
-    const missing = buildDashboardState({ volumes, usage, snapshot: { kind: 'missing' }, scan: null });
+    const missing = buildDashboardState({ volumes, usage, snapshot: { kind: 'missing' }, scan: null, systemRoot: 'C:\\' });
     expect(missing.snapshot).toMatchObject({ status: 'missing', reclaimableBytes: null, rulesStale: false });
     expect(missing.volumes.every((volume) => volume.lastAnalyzedAt === null)).toBe(true);
 
-    const corrupt = buildDashboardState({ volumes, usage, snapshot: { kind: 'corrupt', reason: 'invalid-json' }, scan: null });
+    const corrupt = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'corrupt', reason: 'invalid-json' },
+      scan: null,
+      systemRoot: 'C:\\',
+    });
     expect(corrupt.snapshot).toEqual({
       status: 'corrupt',
       reason: 'invalid-json',

@@ -1,4 +1,4 @@
-import type { ActionGrade, CategoryId, DisplayGrade, DriveType } from '@dust/core';
+import type { ActionGrade, BrowseDeleteResult, CategoryId, DisplayGrade, DriveType } from '@dust/core';
 
 export const IPC = {
   dashboardGet: 'dust:dashboard:get',
@@ -6,6 +6,9 @@ export const IPC = {
   scanCancel: 'dust:scan:cancel',
   scanEvent: 'dust:scan:event',
   resultsGet: 'dust:results:get',
+  browseStart: 'dust:browse:start',
+  browseResultsGet: 'dust:browse:results',
+  browseDelete: 'dust:browse:delete',
   revealPath: 'dust:shell:reveal',
   cleanPreview: 'dust:clean:preview',
   cleanExecute: 'dust:clean:execute',
@@ -13,6 +16,8 @@ export const IPC = {
   pinsSet: 'dust:pins:set',
   relaunchElevated: 'dust:app:relaunch-elevated',
 } as const;
+
+export type { BrowseDeleteResult };
 
 export type ScanKind = 'analyze' | 'quick-clean' | 'browse';
 
@@ -285,6 +290,7 @@ export interface DashboardVolumeCard {
   root: string;
   label: string | null;
   driveType: DriveType;
+  role: 'system' | 'browse';
   external: boolean;
   totalBytes: number | null;
   freeBytes: number | null;
@@ -313,8 +319,11 @@ export interface DashboardState {
 export interface DustApi {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
+  startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<void>;
   getResults(root: string): Promise<ResultsState>;
+  getBrowseResults(root: string): Promise<BrowseState>;
+  deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   revealPath(path: string): Promise<void>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
