@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createExternalPredicate,
   listVolumes,
   mapDriveType,
   parseVolumesJson,
+  systemDriveRoot,
   volumeRootOf,
 } from '../src/system/drive-type';
 
@@ -54,6 +55,35 @@ describe('volumeRootOf', () => {
   it('returns null for relative or non-drive paths', () => {
     expect(volumeRootOf('junk\\file.txt')).toBeNull();
     expect(volumeRootOf('\\\\server\\share\\file')).toBeNull();
+  });
+
+  it('normalizes forward slashes', () => {
+    expect(volumeRootOf('C:/Users/x')).toBe('C:\\');
+  });
+});
+
+describe('systemDriveRoot', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('derives the boot volume from the Windows directory', () => {
+    expect(systemDriveRoot({ windowsDir: 'D:\\Windows' })).toBe('D:\\');
+    expect(systemDriveRoot({ windowsDir: 'c:\\Windows' })).toBe('C:\\');
+  });
+
+  it('falls back to %SystemDrive%', () => {
+    vi.stubEnv('SystemRoot', '');
+    vi.stubEnv('windir', '');
+    vi.stubEnv('SystemDrive', 'e:');
+    expect(systemDriveRoot()).toBe('E:\\');
+  });
+
+  it('returns null when no source is available', () => {
+    vi.stubEnv('SystemRoot', '');
+    vi.stubEnv('windir', '');
+    vi.stubEnv('SystemDrive', '');
+    expect(systemDriveRoot()).toBeNull();
   });
 });
 

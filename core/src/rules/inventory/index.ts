@@ -1,6 +1,7 @@
 import type { Rule } from '../types';
 import type { RuleEnv } from '../paths';
 import type { ProjectOptions } from '../../projects/types';
+import { scopeRuleToRoot } from '../scope';
 import { systemTempRule } from './system-temp';
 import { recycleBinRule } from './recycle-bin';
 import { npmCacheRule } from './npm-cache';
@@ -22,5 +23,5 @@ export function createInventoryRules(
     npmCacheRule(env, { npmCacheDir: options.npmCacheDir }),
     ...cacheRegistryRules(env),
     npmProjectModulesRule(options.projects),
-  ];
+  ].map(scopeRuleToRoot);
 }

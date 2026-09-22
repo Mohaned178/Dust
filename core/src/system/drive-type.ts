@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { parse } from 'node:path';
+import { normalize, parse } from 'node:path';
 
 export type DriveType = 'fixed' | 'removable' | 'network' | 'cdrom' | 'ram' | 'unknown';
 
@@ -71,8 +71,23 @@ export function listVolumes(): VolumeInfo[] {
 }
 
 export function volumeRootOf(path: string): string | null {
-  const root = parse(path).root;
+  const root = parse(normalize(path)).root;
   return /^[A-Za-z]:\\$/.test(root) ? root : null;
+}
+
+export function systemDriveRoot(env: { windowsDir?: string } = {}): string | null {
+  const windowsDir = env.windowsDir ?? process.env.SystemRoot ?? process.env.windir ?? '';
+  const fromWindows = volumeRootOf(windowsDir);
+  if (fromWindows !== null) return upperDrive(fromWindows);
+
+  const systemDrive = process.env.SystemDrive ?? '';
+  if (systemDrive.length === 0) return null;
+  const root = volumeRootOf(/[\\/]$/.test(systemDrive) ? systemDrive : `${systemDrive}\\`);
+  return root === null ? null : upperDrive(root);
+}
+
+function upperDrive(root: string): string {
+  return `${root.slice(0, 1).toUpperCase()}${root.slice(1)}`;
 }
 
 export function createExternalPredicate(volumes: VolumeInfo[]): (path: string) => boolean {
