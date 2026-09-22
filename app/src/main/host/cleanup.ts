@@ -220,7 +220,8 @@ export function subtractCategories(categories: SnapshotCategory[], report: Clean
   const bytesByRule = new Map<string, number>();
   const itemsByRule = new Map<string, number>();
   for (const item of report.items) {
-    bytesByRule.set(item.ruleId, (bytesByRule.get(item.ruleId) ?? 0) + item.deletedBytes);
+    const freedBytes = item.status === 'already-gone' ? item.plannedBytes : item.deletedBytes;
+    bytesByRule.set(item.ruleId, (bytesByRule.get(item.ruleId) ?? 0) + freedBytes);
     if (item.status === 'done' || item.status === 'already-gone') {
       itemsByRule.set(item.ruleId, (itemsByRule.get(item.ruleId) ?? 0) + 1);
     }

@@ -26,7 +26,12 @@ export function registerIpcHandlers(
   registrar.handle(IPC.scanCancel, () => host.cancelScan());
   registrar.handle(IPC.resultsGet, (_event, root) => host.getResults(typeof root === 'string' ? root : ''));
   registrar.handle(IPC.revealPath, (_event, path) => shell.revealPath(typeof path === 'string' ? path : ''));
-  registrar.handle(IPC.cleanPreview, (_event, request) => host.previewClean(parseCleanPreviewRequest(request)));
+  registrar.handle(IPC.cleanPreview, (_event, request) => {
+    const parsed = parseCleanPreviewRequest(request);
+    return parsed === null
+      ? { ok: false, reason: 'failed', message: 'Invalid cleanup request' }
+      : host.previewClean(parsed);
+  });
   registrar.handle(IPC.cleanExecute, (_event, request) => host.executeClean(parseCleanExecuteRequest(request)));
   registrar.handle(IPC.devCleanupGet, (_event, root) => host.getDevCleanup(typeof root === 'string' ? root : ''));
   registrar.handle(IPC.pinsSet, (_event, path, pinned) =>
@@ -36,18 +41,22 @@ export function registerIpcHandlers(
   return host.onEvent((event: ScanEvent) => sender.send(IPC.scanEvent, event));
 }
 
-export function parseCleanPreviewRequest(value: unknown): CleanPreviewRequest {
+export function parseCleanPreviewRequest(value: unknown): CleanPreviewRequest | null {
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>;
     if (record.scope === 'quick') return { scope: 'quick' };
-    if ((record.scope === 'dev' || record.scope === 'row') && typeof record.root === 'string') {
+    if (
+      (record.scope === 'dev' || record.scope === 'row') &&
+      typeof record.root === 'string' &&
+      record.root.length > 0
+    ) {
       const paths = Array.isArray(record.paths)
         ? record.paths.filter((entry): entry is string => typeof entry === 'string')
         : [];
       return { scope: record.scope, root: record.root, paths };
     }
   }
-  return { scope: 'quick' };
+  return null;
 }
 
 export function parseCleanExecuteRequest(value: unknown): CleanExecuteRequest {

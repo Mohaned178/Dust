@@ -285,4 +285,86 @@ describe('toCleanReport and subtractCategories', () => {
     expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 16, items: 2 });
     expect(updated[1]).toEqual({ ruleId: 'npm-cache', category: 'npm-cache', bytes: 5, items: 1 });
   });
+
+  it('reduces already-gone bytes by plannedBytes and the item count by one', () => {
+    const coreReport: CleanReport = {
+      planId: 'plan-1',
+      scope: 'quick',
+      root: 'C:\\',
+      startedAt: 1,
+      finishedAt: 2,
+      items: [
+        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'already-gone', plannedBytes: 10, deletedBytes: 0, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+      ],
+      deletedBytes: 0,
+      skippedLocked: 0,
+      itemErrors: 0,
+      remainingReclaimableBytes: 0,
+      cleanedAt: 2,
+    };
+
+    const updated = subtractCategories(
+      [{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }],
+      coreReport,
+    );
+
+    expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 20, items: 2 });
+  });
+
+  it('uses deletedBytes for done and partial items', () => {
+    const coreReport: CleanReport = {
+      planId: 'plan-1',
+      scope: 'quick',
+      root: 'C:\\',
+      startedAt: 1,
+      finishedAt: 2,
+      items: [
+        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'done', plannedBytes: 20, deletedBytes: 8, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+        { ruleId: 'system-temp', path: 'C:\\Temp2', category: 'temp', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 5, skippedLocked: 1, errorCount: 0, restoreCommand: null },
+      ],
+      deletedBytes: 13,
+      skippedLocked: 1,
+      itemErrors: 0,
+      remainingReclaimableBytes: 0,
+      cleanedAt: 2,
+    };
+
+    const updated = subtractCategories(
+      [{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }],
+      coreReport,
+    );
+
+    expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 17, items: 2 });
+  });
+
+  it('handles mixed done, partial and already-gone items across rules', () => {
+    const coreReport: CleanReport = {
+      planId: 'plan-1',
+      scope: 'quick',
+      root: 'C:\\',
+      startedAt: 1,
+      finishedAt: 2,
+      items: [
+        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'done', plannedBytes: 10, deletedBytes: 10, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+        { ruleId: 'system-temp', path: 'C:\\Temp2', category: 'temp', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 4, skippedLocked: 1, errorCount: 0, restoreCommand: null },
+        { ruleId: 'npm-cache', path: 'C:\\npm-cache\\x', category: 'npm-cache', action: 'delete-path', status: 'already-gone', plannedBytes: 7, deletedBytes: 0, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+      ],
+      deletedBytes: 14,
+      skippedLocked: 1,
+      itemErrors: 0,
+      remainingReclaimableBytes: 0,
+      cleanedAt: 2,
+    };
+
+    const updated = subtractCategories(
+      [
+        { ruleId: 'system-temp', category: 'temp', bytes: 40, items: 4 },
+        { ruleId: 'npm-cache', category: 'npm-cache', bytes: 10, items: 2 },
+      ],
+      coreReport,
+    );
+
+    expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 26, items: 3 });
+    expect(updated[1]).toEqual({ ruleId: 'npm-cache', category: 'npm-cache', bytes: 3, items: 1 });
+  });
 });

@@ -1,7 +1,7 @@
 import { SnapshotStore } from '@dust/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
-import { registerIpcHandlers } from '../src/main/ipc';
+import { registerIpcHandlers, parseCleanPreviewRequest } from '../src/main/ipc';
 import type { IpcRegistrar } from '../src/main/ipc';
 import { IPC } from '../src/shared/ipc';
 import type { DashboardState, ScanEvent, StartAnalyzeResult } from '../src/shared/ipc';
@@ -130,6 +130,11 @@ describe('registerIpcHandlers', () => {
       reason: 'invalid-root',
       message: 'No scan data for T:\\ - run an Analyze first',
     });
+    expect(await registrar.invoke(IPC.cleanPreview, 'not-a-request')).toEqual({
+      ok: false,
+      reason: 'failed',
+      message: 'Invalid cleanup request',
+    });
     expect(await registrar.invoke(IPC.cleanExecute, { cleanId: 'c1', planId: 'nope' })).toEqual({
       ok: false,
       reason: 'unknown-plan',
@@ -144,5 +149,30 @@ describe('registerIpcHandlers', () => {
 
     unsubscribe();
     host.dispose();
+  });
+});
+
+describe('parseCleanPreviewRequest', () => {
+  it('returns null for malformed payloads', () => {
+    expect(parseCleanPreviewRequest(null)).toBeNull();
+    expect(parseCleanPreviewRequest('x')).toBeNull();
+    expect(parseCleanPreviewRequest([])).toBeNull();
+    expect(parseCleanPreviewRequest({ scope: 'nope' })).toBeNull();
+    expect(parseCleanPreviewRequest({ scope: 'row' })).toBeNull();
+    expect(parseCleanPreviewRequest({ scope: 'row', root: '' })).toBeNull();
+  });
+
+  it('parses valid requests and filters paths to strings', () => {
+    expect(parseCleanPreviewRequest({ scope: 'quick' })).toEqual({ scope: 'quick' });
+    expect(parseCleanPreviewRequest({ scope: 'row', root: 'T:\\' })).toEqual({
+      scope: 'row',
+      root: 'T:\\',
+      paths: [],
+    });
+    expect(parseCleanPreviewRequest({ scope: 'dev', root: 'T:\\', paths: ['T:\\a', 5] })).toEqual({
+      scope: 'dev',
+      root: 'T:\\',
+      paths: ['T:\\a'],
+    });
   });
 });
