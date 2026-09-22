@@ -1,6 +1,7 @@
 import { IPC } from '../shared/ipc';
 import type { CleanExecuteRequest, CleanPreviewRequest, ScanEvent } from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
+import { instrument } from './host/instrument';
 
 export interface IpcRegistrar {
   handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void;
@@ -38,7 +39,9 @@ export function registerIpcHandlers(
     host.setPin(typeof path === 'string' ? path : '', pinned === true),
   );
   registrar.handle(IPC.relaunchElevated, () => shell.relaunchElevated());
-  return host.onEvent((event: ScanEvent) => sender.send(IPC.scanEvent, event));
+  return host.onEvent((event: ScanEvent) => {
+    instrument('ipc.send', () => sender.send(IPC.scanEvent, event));
+  });
 }
 
 export function parseCleanPreviewRequest(value: unknown): CleanPreviewRequest | null {

@@ -6,6 +6,7 @@ import { CategoryStrip } from '../components/CategoryStrip';
 import { TreeTable } from '../components/TreeTable';
 import { RowCleanDialog } from '../components/RowCleanDialog';
 import { formatBytes, formatCount, formatRelativeTime } from '../format';
+import { recordRendererSample } from '../instrument';
 import {
   createRowStore,
   filterPaths,
@@ -76,37 +77,56 @@ export function ResultsView({ api, root, runId, onOpenDevCleanup }: ResultsViewP
 
   useEffect(() => {
     return api.onScanEvent((next) => {
-      if (next.type === 'cleaned') {
-        if (sameRoot(next.root, root)) reload();
-        return;
-      }
-      if (runId === null || !('runId' in next) || next.runId !== runId) return;
-      if (next.type === 'folders') {
-        const affectsVisible = next.folders.some((row) => isRowVisible(row.parent, root, expandedRef.current));
-        upsertRows(storeRef.current, next.folders);
-        if (affectsVisible) setVersion((value) => value + 1);
-      } else if (next.type === 'categories') {
-        setLiveCategories(next.categories);
-      } else if (next.type === 'matches') {
-        mergeMatches(storeRef.current, next.matches);
-        setVersion((value) => value + 1);
+      const startedAt = performance.now();
+      try {
+        if (next.type === 'cleaned') {
+          if (sameRoot(next.root, root)) reload();
+          return;
+        }
+        if (runId === null || !('runId' in next) || next.runId !== runId) return;
+        if (next.type === 'folders') {
+          const affectsVisible = next.folders.some((row) => isRowVisible(row.parent, root, expandedRef.current));
+          const upsertStartedAt = performance.now();
+          upsertRows(storeRef.current, next.folders);
+          recordRendererSample('results.upsertRows', performance.now() - upsertStartedAt);
+          if (affectsVisible) setVersion((value) => value + 1);
+          const frameStartedAt = performance.now();
+          requestAnimationFrame(() => {
+            recordRendererSample('results.frameDelay', performance.now() - frameStartedAt);
+          });
+        } else if (next.type === 'categories') {
+          setLiveCategories(next.categories);
+        } else if (next.type === 'matches') {
+          const mergeStartedAt = performance.now();
+          mergeMatches(storeRef.current, next.matches);
+          recordRendererSample('results.mergeMatches', performance.now() - mergeStartedAt);
+          setVersion((value) => value + 1);
+        }
+      } finally {
+        recordRendererSample('results.event', performance.now() - startedAt);
       }
     });
   }, [api, root, runId, reload]);
 
-  const filterSet = useMemo(
-    () => filterPaths(storeRef.current, filter),
-    [filter, version],
-  );
-  const flatRows = useMemo(
-    () => flattenVisible(storeRef.current, expanded, sort, filterSet),
-    [version, expanded, sort, filterSet],
-  );
+  const filterSet = useMemo(() => {
+    const startedAt = performance.now();
+    const next = filterPaths(storeRef.current, filter);
+    recordRendererSample('results.filterPaths', performance.now() - startedAt);
+    return next;
+  }, [filter, version]);
+  const flatRows = useMemo(() => {
+    const startedAt = performance.now();
+    const next = flattenVisible(storeRef.current, expanded, sort, filterSet);
+    recordRendererSample('results.flattenVisible', performance.now() - startedAt);
+    return next;
+  }, [version, expanded, sort, filterSet]);
   const dangerCount = useMemo(() => flatRows.filter((entry) => entry.row.grade === 'danger').length, [flatRows]);
-  const tableRows = useMemo(
-    () => (showDanger ? flatRows : flatRows.filter((entry) => entry.row.grade !== 'danger')),
-    [flatRows, showDanger],
-  );
+  const tableRows = useMemo(() => {
+    const startedAt = performance.now();
+    const next = showDanger ? flatRows : flatRows.filter((entry) => entry.row.grade !== 'danger');
+    recordRendererSample('results.tableRows', performance.now() - startedAt);
+    return next;
+  }, [flatRows, showDanger]);
   const totalBytes = useMemo(() => storeRef.current.nodes.get(pathKey(root))?.bytes ?? 0, [version, root]);
 
   const categories = runId !== null ? liveCategories : state?.categories ?? [];

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DustApi, ScanEvent, StartAnalyzeResult } from '../../src/shared/ipc';
+import { bumpRendererCount, recordRendererSample } from './instrument';
 import { Dashboard } from './pages/Dashboard';
 import { DevCleanupView } from './pages/DevCleanupView';
 import { QuickCleanView } from './pages/QuickCleanView';
@@ -21,7 +22,17 @@ export function App({ api }: AppProps) {
   const [view, setView] = useState<View>({ name: 'dashboard' });
   const [event, setEvent] = useState<ScanEvent | null>(null);
 
-  useEffect(() => api.onScanEvent(setEvent), [api]);
+  useEffect(
+    () =>
+      api.onScanEvent((next) => {
+        const startedAt = performance.now();
+        setEvent(next);
+        recordRendererSample('app.event', performance.now() - startedAt);
+        bumpRendererCount(`app.event.${next.type}`);
+        if (next.type === 'folders') bumpRendererCount('app.event.folders.rows', next.folders.length);
+      }),
+    [api],
+  );
 
   const analyze = useCallback(
     async (root: string): Promise<StartAnalyzeResult> => {
