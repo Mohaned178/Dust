@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../renderer/src/App';
 import type { ScanEvent } from '../../src/shared/ipc';
-import { makeApi, makeResultsState } from './fakes';
+import { makeApi, makeCategories, makeResultsState } from './fakes';
 
 describe('App', () => {
   it('moves from the dashboard through a scan and back', async () => {
@@ -83,5 +83,21 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
+  });
+
+  it('opens Dev Cleanup from the results category strip', async () => {
+    const categories = makeCategories().map((row) =>
+      row.category === 'npm-projects'
+        ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] }
+        : row,
+    );
+    const api = makeApi({ getResults: async (root) => makeResultsState({ root, categories }) });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
+    fireEvent.click(await screen.findByRole('button', { name: /npm projects/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Dev Cleanup' })).toBeInTheDocument();
+    expect(await screen.findByText('dead-app')).toBeInTheDocument();
   });
 });
