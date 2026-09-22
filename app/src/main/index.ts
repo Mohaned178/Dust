@@ -42,6 +42,7 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 
 async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string): Promise<void> {
   const root = rawRoot.replace(/\//g, '\\');
+  const browse = process.env.DUST_BENCH_MODE === 'browse';
   const reportPath = process.env.DUST_BENCH_REPORT ?? join(app.getPath('userData'), 'bench-report.json');
   let startedAt = 0;
   let finalizingAt = 0;
@@ -61,7 +62,10 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
           reclaimableBytes: event.reclaimableBytes,
         };
       }
-      if (event.type === 'finished' || event.type === 'failed') {
+      if (event.type === 'browse-finished') {
+        scanStats = { files: event.filesScanned, bytes: event.bytesSeen, projects: 0, reclaimableBytes: 0 };
+      }
+      if (event.type === 'finished' || event.type === 'browse-finished' || event.type === 'failed') {
         finishedAt = Date.now();
         off();
         resolve();
@@ -70,7 +74,7 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
   });
 
   const clickScript = `(() => {
-    const label = ${JSON.stringify(`Analyze ${root}`)};
+    const label = ${JSON.stringify(`${browse ? 'Browse' : 'Analyze'} ${root}`)};
     const button = [...document.querySelectorAll('button')].find((element) => element.getAttribute('aria-label') === label);
     if (!button) return false;
     button.click();
@@ -82,7 +86,7 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
     if (!clicked) await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (!clicked) {
-    const started = await host.startAnalyze(root);
+    const started = await (browse ? host.startBrowse(root) : host.startAnalyze(root));
     if (!started.ok) {
       const report = { root, ok: false, result: started, samples: reportSamples(), renderer: [] };
       writeFileSync(reportPath, JSON.stringify(report, null, 2));
@@ -110,10 +114,11 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
   );
   const report = {
     root,
+    mode: browse ? 'browse' : 'analyze',
     ok: failedMessage === null,
     failedMessage,
-    scanMs: finalizingAt - startedAt,
-    finalizeMs: finishedAt - finalizingAt,
+    scanMs: (browse ? finishedAt : finalizingAt) - startedAt,
+    finalizeMs: browse ? 0 : finishedAt - finalizingAt,
     totalMs: finishedAt - startedAt,
     scanStats,
     memory: {

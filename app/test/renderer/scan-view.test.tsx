@@ -125,6 +125,46 @@ describe('ScanView', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it('renders browse mode without reclaimable framing', () => {
+    const finished: ScanEvent = {
+      type: 'browse-finished',
+      runId: 'b1',
+      status: 'complete',
+      startedAt: 0,
+      finishedAt: 65_000,
+      filesScanned: 100,
+      bytesSeen: 2048,
+      errors: 0,
+    };
+    render(
+      <ScanView api={makeApi()} mode="browse" root="E:\\" runId="b1" event={finished} onBack={vi.fn()} />,
+    );
+
+    expect(screen.getByText('Browse complete')).toBeInTheDocument();
+    expect(screen.queryByText('Projects')).toBeNull();
+    expect(screen.queryByText(/reclaimable/)).toBeNull();
+    expect(screen.getByText('100')).toBeInTheDocument();
+  });
+
+  it('shows the browsing title while a browse run is active', () => {
+    const event: ScanEvent = {
+      type: 'progress',
+      runId: 'b1',
+      progress: {
+        filesScanned: 5,
+        bytesSeen: 1024,
+        currentPath: 'E:\\Games',
+        dirsCompleted: 1,
+        errors: 0,
+        elapsedMs: 1000,
+      },
+    };
+    render(<ScanView api={makeApi()} mode="browse" root="E:\\" runId="b1" event={event} onBack={vi.fn()} />);
+
+    expect(screen.getByText('Browsing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeInTheDocument();
+  });
+
   it('streams folder rows into the live results table', async () => {
     const handlers: Array<(event: ScanEvent) => void> = [];
     const api = makeApi({

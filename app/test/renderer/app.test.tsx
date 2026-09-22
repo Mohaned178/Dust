@@ -60,6 +60,53 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
   });
 
+  it('browses a non-system volume and streams rows', async () => {
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const startBrowse = vi.fn(async () => ({ ok: true as const, runId: 'browse-1' }));
+    const api = makeApi({
+      startBrowse,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Browse E:\\' }));
+    expect(await screen.findByText('Browsing')).toBeInTheDocument();
+    expect(startBrowse).toHaveBeenCalledWith('E:\\');
+
+    await act(async () => {
+      const event: ScanEvent = {
+        type: 'browse-folders',
+        runId: 'browse-1',
+        folders: [
+          {
+            path: 'E:\\Games',
+            name: 'Games',
+            parent: 'E:\\',
+            bytes: 512,
+            allocatedBytes: 4096,
+            fileCount: 2,
+            folderCount: 0,
+            linkCount: 0,
+            newestMtimeMs: 0,
+            errorCount: 0,
+            partial: false,
+            complete: true,
+            childCount: 0,
+          },
+        ],
+      };
+      for (const handler of handlers) handler(event);
+    });
+    expect(await screen.findByText('Games')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Safety' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
+    expect(await screen.findByRole('heading', { name: 'Dust' })).toBeInTheDocument();
+  });
+
   it('opens the results view from a disk card', async () => {
     const getResults = vi.fn(async (root: string) => makeResultsState({ root }));
     const api = makeApi({ getResults });

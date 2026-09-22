@@ -6,16 +6,19 @@ import { DiskCard } from '../components/DiskCard';
 export interface DashboardProps {
   api: DustApi;
   onAnalyze: (root: string) => Promise<StartAnalyzeResult>;
+  onBrowse: (root: string) => Promise<StartAnalyzeResult>;
   onViewResults: (root: string) => void;
   onQuickClean: () => void;
 }
 
-export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: DashboardProps) {
+type ScanMode = 'analyze' | 'browse';
+
+export function Dashboard({ api, onAnalyze, onBrowse, onViewResults, onQuickClean }: DashboardProps) {
   const [state, setState] = useState<DashboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [busyRoot, setBusyRoot] = useState<string | null>(null);
-  const [pendingRoot, setPendingRoot] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ root: string; mode: ScanMode } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -32,14 +35,14 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
     };
   }, [api]);
 
-  const analyze = useCallback(
-    async (root: string) => {
+  const start = useCallback(
+    async (root: string, mode: ScanMode) => {
       setBusyRoot(root);
       setStartError(null);
       try {
-        const result = await onAnalyze(root);
+        const result = await (mode === 'analyze' ? onAnalyze(root) : onBrowse(root));
         if (!result.ok) {
-          if (result.reason === 'busy') setPendingRoot(root);
+          if (result.reason === 'busy') setPending({ root, mode });
           else if (result.reason === 'start-failed' || result.reason === 'not-system-drive') {
             setStartError(result.message);
           }
@@ -50,24 +53,26 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
         setBusyRoot(null);
       }
     },
-    [onAnalyze],
+    [onAnalyze, onBrowse],
   );
 
   const cancelAndRetry = useCallback(async () => {
-    const root = pendingRoot;
-    setPendingRoot(null);
-    if (!root) return;
+    const target = pending;
+    setPending(null);
+    if (!target) return;
     try {
       await api.cancelScan();
     } catch (cause) {
       setStartError(cause instanceof Error ? cause.message : String(cause));
       return;
     }
-    await analyze(root);
-  }, [api, analyze, pendingRoot]);
+    await start(target.root, target.mode);
+  }, [api, pending, start]);
 
   if (error) return <main className="p-8 text-red-300">{error}</main>;
   if (!state) return <main className="p-8 text-neutral-400">Loading volumes…</main>;
+
+  const hasSystemVolume = state.volumes.some((volume) => volume.role === 'system');
 
   return (
     <main className="mx-auto max-w-5xl px-8 py-10">
@@ -79,7 +84,7 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
           </div>
           <button
             type="button"
-            disabled={state.scan !== null || state.volumes.length === 0}
+            disabled={state.scan !== null || !hasSystemVolume}
             onClick={onQuickClean}
             className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
@@ -108,7 +113,8 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
             key={volume.root}
             volume={volume}
             busy={busyRoot === volume.root}
-            onAnalyze={() => void analyze(volume.root)}
+            onAnalyze={() => void start(volume.root, 'analyze')}
+            onBrowse={() => void start(volume.root, 'browse')}
             onViewResults={() => onViewResults(volume.root)}
           />
         ))}
@@ -116,7 +122,7 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
 
       {state.volumes.length === 0 && <p className="text-neutral-400">No volumes detected.</p>}
 
-      {pendingRoot !== null && (
+      {pending !== null && (
         <div
           role="dialog"
           aria-label="Scan already running"
@@ -134,7 +140,7 @@ export function Dashboard({ api, onAnalyze, onViewResults, onQuickClean }: Dashb
               </button>
               <button
                 type="button"
-                onClick={() => setPendingRoot(null)}
+                onClick={() => setPending(null)}
                 className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300"
               >
                 Wait

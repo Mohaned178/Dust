@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DustApi, ScanEvent, ScanProgressPayload } from '../../../src/shared/ipc';
 import { formatBytes, formatCount, formatDuration } from '../format';
+import { BrowseView } from './BrowseView';
 import { ResultsView } from './ResultsView';
 
 export interface ScanViewProps {
@@ -9,13 +10,17 @@ export interface ScanViewProps {
   runId: string;
   event: ScanEvent | null;
   onBack: () => void;
+  mode?: 'analyze' | 'browse';
 }
 
-export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
+export function ScanView({ api, root, runId, event, onBack, mode = 'analyze' }: ScanViewProps) {
+  const browse = mode === 'browse';
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<ScanProgressPayload | null>(null);
   const current = event !== null && 'runId' in event && event.runId === runId ? event : null;
   const finished = current?.type === 'finished' ? current : null;
+  const browseFinished = current?.type === 'browse-finished' ? current : null;
+  const done = finished ?? browseFinished;
   const failed = current?.type === 'failed' ? current : null;
   const progress = current?.type === 'progress' ? current.progress : lastProgress;
   const finalizing = current?.type === 'finalizing';
@@ -30,13 +35,21 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
     }
   }, [event, runId]);
 
-  const title = finished
-    ? finished.status === 'complete'
-      ? 'Scan complete'
-      : 'Scan cancelled'
+  const title = done
+    ? done.status === 'complete'
+      ? browse
+        ? 'Browse complete'
+        : 'Scan complete'
+      : browse
+        ? 'Browse cancelled'
+        : 'Scan cancelled'
     : failed
-      ? 'Scan failed'
-      : 'Scanning';
+      ? browse
+        ? 'Browse failed'
+        : 'Scan failed'
+      : browse
+        ? 'Browsing'
+        : 'Scanning';
 
   const cancel = async () => {
     try {
@@ -53,7 +66,7 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
         <p className="mt-1 text-sm text-neutral-400">{root}</p>
       </header>
 
-      {!finished && !failed && (
+      {!done && !failed && (
         <section aria-label="Scan progress" className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
           <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <Stat label="Files scanned" value={formatCount(progress?.filesScanned ?? 0)} />
@@ -75,16 +88,18 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
         </section>
       )}
 
-      {finished && (
+      {done && (
         <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
-          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-            <Stat label="Files scanned" value={formatCount(finished.filesScanned)} />
-            <Stat label="Bytes seen" value={formatBytes(finished.bytesSeen)} />
-            <Stat label="Projects" value={formatCount(finished.projects)} />
-            <Stat label="Elapsed" value={formatDuration(finished.finishedAt - finished.startedAt)} />
+          <dl className={`grid grid-cols-2 gap-4 text-sm ${browse ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
+            <Stat label="Files scanned" value={formatCount(done.filesScanned)} />
+            <Stat label="Bytes seen" value={formatBytes(done.bytesSeen)} />
+            {finished && <Stat label="Projects" value={formatCount(finished.projects)} />}
+            <Stat label="Elapsed" value={formatDuration(done.finishedAt - done.startedAt)} />
           </dl>
-          <p className="mt-4 text-sm text-neutral-300">{formatBytes(finished.reclaimableBytes)} reclaimable found.</p>
-          {!finished.saved && (
+          {finished && (
+            <p className="mt-4 text-sm text-neutral-300">{formatBytes(finished.reclaimableBytes)} reclaimable found.</p>
+          )}
+          {finished && !finished.saved && (
             <p className="mt-2 text-sm text-amber-300">
               Snapshot could not be saved — these results are for this session only.
             </p>
@@ -99,7 +114,11 @@ export function ScanView({ api, root, runId, event, onBack }: ScanViewProps) {
       )}
 
       <div className="mt-6">
-        <ResultsView api={api} root={root} runId={runId} key={runId} />
+        {browse ? (
+          <BrowseView api={api} root={root} runId={runId} key={runId} />
+        ) : (
+          <ResultsView api={api} root={root} runId={runId} key={runId} />
+        )}
       </div>
 
       <button

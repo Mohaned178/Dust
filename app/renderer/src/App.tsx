@@ -13,7 +13,7 @@ export interface AppProps {
 
 type View =
   | { name: 'dashboard' }
-  | { name: 'scan'; root: string; runId: string }
+  | { name: 'scan'; root: string; runId: string; mode: 'analyze' | 'browse' }
   | { name: 'results'; root: string }
   | { name: 'quick-clean' }
   | { name: 'dev-cleanup'; root: string };
@@ -30,26 +30,39 @@ export function App({ api }: AppProps) {
         recordRendererSample('app.event', performance.now() - startedAt);
         bumpRendererCount(`app.event.${next.type}`);
         if (next.type === 'folders') bumpRendererCount('app.event.folders.rows', next.folders.length);
+        if (next.type === 'browse-folders') bumpRendererCount('app.event.browse.rows', next.folders.length);
       }),
     [api],
   );
 
-  const analyze = useCallback(
-    async (root: string): Promise<StartAnalyzeResult> => {
-      const result = await api.startAnalyze(root);
+  const startScan = useCallback(
+    async (root: string, mode: 'analyze' | 'browse'): Promise<StartAnalyzeResult> => {
+      const result = await (mode === 'analyze' ? api.startAnalyze(root) : api.startBrowse(root));
       if (result.ok) {
         setEvent(null);
-        setView({ name: 'scan', root, runId: result.runId });
+        setView({ name: 'scan', root, runId: result.runId, mode });
       }
       return result;
     },
     [api],
   );
 
+  const analyze = useCallback((root: string) => startScan(root, 'analyze'), [startScan]);
+  const browse = useCallback((root: string) => startScan(root, 'browse'), [startScan]);
+
   const back = useCallback(() => setView({ name: 'dashboard' }), []);
 
   if (view.name === 'scan') {
-    return <ScanView api={api} root={view.root} runId={view.runId} event={event} onBack={back} />;
+    return (
+      <ScanView
+        api={api}
+        root={view.root}
+        runId={view.runId}
+        mode={view.mode}
+        event={event}
+        onBack={back}
+      />
+    );
   }
   if (view.name === 'quick-clean') {
     return (
@@ -93,6 +106,7 @@ export function App({ api }: AppProps) {
     <Dashboard
       api={api}
       onAnalyze={analyze}
+      onBrowse={browse}
       onViewResults={(root) => setView({ name: 'results', root })}
       onQuickClean={() => setView({ name: 'quick-clean' })}
     />

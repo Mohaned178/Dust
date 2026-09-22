@@ -6,10 +6,12 @@ export interface DiskCardProps {
   volume: DashboardVolumeCard;
   busy: boolean;
   onAnalyze: () => void;
+  onBrowse: () => void;
   onViewResults: () => void;
 }
 
-export function DiskCard({ volume, busy, onAnalyze, onViewResults }: DiskCardProps) {
+export function DiskCard({ volume, busy, onAnalyze, onBrowse, onViewResults }: DiskCardProps) {
+  const system = volume.role === 'system';
   const used =
     volume.totalBytes !== null && volume.freeBytes !== null ? volume.totalBytes - volume.freeBytes : null;
 
@@ -30,25 +32,38 @@ export function DiskCard({ volume, busy, onAnalyze, onViewResults }: DiskCardPro
       <p className="mt-2 text-sm text-neutral-400">
         {formatBytes(used)} used of {formatBytes(volume.totalBytes)} · {formatBytes(volume.freeBytes)} free
       </p>
-      {volume.lastAnalyzedAt !== null && (
+      {system && volume.lastAnalyzedAt !== null && (
         <p className="mt-1 text-sm text-neutral-400">
           Last analyzed {formatRelativeTime(volume.lastAnalyzedAt)} · {formatBytes(volume.reclaimableBytes)} reclaimable
         </p>
       )}
-      {volume.lastCleanedAt !== null && (
+      {system && volume.lastCleanedAt !== null && (
         <p className="mt-1 text-sm text-neutral-500">Last cleaned {formatRelativeTime(volume.lastCleanedAt)}</p>
       )}
+      {!system && <p className="mt-1 text-sm text-neutral-500">Browse-only — no cleanup rules apply here.</p>}
       <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          aria-label={`Analyze ${volume.root}`}
-          disabled={busy}
-          onClick={onAnalyze}
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-        >
-          Analyze
-        </button>
-        {volume.lastAnalyzedAt !== null && (
+        {system ? (
+          <button
+            type="button"
+            aria-label={`Analyze ${volume.root}`}
+            disabled={busy}
+            onClick={onAnalyze}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          >
+            Analyze
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label={`Browse ${volume.root}`}
+            disabled={busy}
+            onClick={onBrowse}
+            className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 disabled:opacity-40"
+          >
+            Browse
+          </button>
+        )}
+        {system && volume.lastAnalyzedAt !== null && (
           <button
             type="button"
             aria-label={`View results for ${volume.root}`}
