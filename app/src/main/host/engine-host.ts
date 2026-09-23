@@ -725,7 +725,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, liveRows, finishLive });
+    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, liveRows, finishLive, volumeList });
 
     return { ok: true, runId };
   }
@@ -868,13 +868,22 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     probe: RuleContext['probe'];
     liveRows: ResultRow[];
     finishLive: (result: ScanResult | null) => void;
+    volumeList: VolumeInfo[];
   }): Promise<void> {
     try {
       const result = await input.session.start();
       input.finishLive(result);
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
-      const summary = await finalize(result, input.startedAt, input.rules, input.probe, input.liveRows, input.runId);
+      const summary = await finalize(
+        result,
+        input.startedAt,
+        input.rules,
+        input.probe,
+        input.liveRows,
+        input.runId,
+        input.volumeList,
+      );
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({
         type: 'matches',
@@ -923,6 +932,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     probe: RuleContext['probe'],
     liveRows: ResultRow[],
     runId: string,
+    volumeList: VolumeInfo[],
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -934,7 +944,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     emit({ type: 'finalize-progress', runId, step: 'projects' });
     const existing = instrument('finalize.store.load', () => deps.store.load());
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
-    const volumeList = await instrumentAsync('finalize.listVolumes', () => volumes.get());
     const external = createExternalPredicate(volumeList);
     const pins = deps.store.getPins();
 

@@ -121,6 +121,30 @@ describe('createEngineHost', () => {
     expect(listVolumes).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses the scan-start volume list when the TTL expires mid-scan', async () => {
+    let clock = 0;
+    const listVolumes = vi.fn(volumeList);
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    await host.getDashboard();
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    clock += 30_001;
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    expect(listVolumes).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a second analyze while the first is running', async () => {
     const fake = new FakeSession({ root: tree.root });
     const host = createEngineHost({
