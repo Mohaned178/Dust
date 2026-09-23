@@ -2,8 +2,10 @@ import { execFile, execFileSync } from 'node:child_process';
 import { normalize, parse } from 'node:path';
 import { promisify } from 'node:util';
 
-const LIST_VOLUMES_SCRIPT = `$parts = @(Get-Partition | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, DiskNumber);
-$disks = @{}; foreach ($disk in Get-PhysicalDisk) { $disks[[string]$disk.DeviceId] = $disk.MediaType }
+export const LIST_VOLUMES_SCRIPT = `$parts = @();
+try { $parts = @(Get-Partition -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, DiskNumber) } catch {}
+$disks = @{};
+try { foreach ($disk in Get-PhysicalDisk -ErrorAction SilentlyContinue) { $disks[[string]$disk.DeviceId] = $disk.MediaType } } catch {}
 $volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object {
   $root = "$($_.DriveLetter):\\";
   $part = $parts | Where-Object { $_.root -eq $root } | Select-Object -First 1;

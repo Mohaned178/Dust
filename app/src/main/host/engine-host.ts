@@ -1042,6 +1042,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function cancelScan(): Promise<boolean> {
     const run = active;
     if (run) {
+      if (quickPreviewActive) quickCancelRequested = true;
       run.session.cancel();
       await run.settled;
       return true;

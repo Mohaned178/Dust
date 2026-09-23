@@ -1163,4 +1163,52 @@ describe('createEngineHost', () => {
     expect(sessions).toHaveLength(1);
     expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
   });
+
+  it('cancels a quick clean when the in-flight session resolves complete', async () => {
+    const sessions: FakeSession[] = [];
+    const twoPathRule: Rule = {
+      id: 'fixture-two',
+      category: 'temp',
+      title: 'Fixture two',
+      action: { kind: 'delete-path' },
+      match: () => [
+        {
+          path: join(tree.root, 'temp'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+        {
+          path: join(tree.root, 'temp2'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+      ],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [twoPathRule],
+      createSession: (options) => {
+        const fake = new FakeSession(options);
+        sessions.push(fake);
+        return fake;
+      },
+    });
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await vi.waitFor(() => expect(sessions).toHaveLength(1));
+    const cancelled = host.cancelScan();
+    sessions[0]!.finish(emptyScanResult(join(tree.root, 'temp'), 'complete'));
+    expect(await cancelled).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessions).toHaveLength(1);
+    expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
 });

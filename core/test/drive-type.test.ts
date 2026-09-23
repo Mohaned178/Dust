@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  LIST_VOLUMES_SCRIPT,
   createExternalPredicate,
   listVolumes,
   listVolumesAsync,
@@ -136,6 +138,27 @@ describe('listVolumes', () => {
       expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
       expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
       expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
+    }
+  });
+
+  it('keeps volume discovery working when the storage cmdlets fail', (ctx) => {
+    if (process.platform !== 'win32') {
+      ctx.skip();
+      return;
+    }
+    const shadowed = [
+      "function Get-Partition { [CmdletBinding()] param() throw 'Get-Partition unavailable' }",
+      "function Get-PhysicalDisk { [CmdletBinding()] param() throw 'Get-PhysicalDisk unavailable' }",
+      LIST_VOLUMES_SCRIPT,
+    ].join('\n');
+    const raw = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', shadowed], {
+      encoding: 'utf8',
+      timeout: 15_000,
+    });
+    const volumes = parseVolumesJson(raw);
+    expect(volumes.length).toBeGreaterThan(0);
+    for (const volume of volumes) {
+      expect(volume.mediaType).toBe('unknown');
     }
   });
 });
