@@ -180,6 +180,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
+  let quickPreviewActive = false;
+  let quickCancelRequested = false;
 
   let lastResults: {
     root: string;
@@ -285,6 +287,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function targetedSource(root: string): Promise<PlanSource> {
     const probe = createNodeFsProbe();
     const volumeList = await volumes.get();
+    if (quickCancelRequested) throw new Error('Quick clean cancelled');
     const rules = createRules(
       env,
       { pins: deps.store.getPins(), isExternal: createExternalPredicate(volumeList), now },
@@ -297,6 +300,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       markers: [],
       probe,
     });
+    if (quickCancelRequested) throw new Error('Quick clean cancelled');
 
     const quickRunId = randomUUID();
     const startedAt = now();
@@ -305,6 +309,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const tree = await measureDirectories(
       discovery.filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin').map((match) => match.path),
       async (path) => {
+        if (cancelled || quickCancelRequested) {
+          cancelled = true;
+          return null;
+        }
         const session = createSession({
           root: path,
           pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
@@ -329,7 +337,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         active = { runId: quickRunId, session, settled };
         try {
           const result = await session.start();
-          if (result.status === 'cancelled') {
+          if (result.status === 'cancelled' || quickCancelRequested) {
             cancelled = true;
             return null;
           }
@@ -341,7 +349,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       },
     );
 
-    if (cancelled) throw new Error('Quick clean cancelled');
+    if (cancelled || quickCancelRequested) throw new Error('Quick clean cancelled');
     return { source: 'targeted', root, scanAgeMs: null, rules, ctx: { root, tree, markers: [], probe } };
   }
 
@@ -376,8 +384,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
     const acquired = lock.acquire('quick-clean', lockRoot, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
+    const quick = scope === 'quick';
+    if (quick) {
+      quickPreviewActive = true;
+      quickCancelRequested = false;
+    }
     try {
       const base = scope === 'quick' ? await resolveQuickSource() : await resolveRootSource(request.root);
+      if (quick && quickCancelRequested) throw new Error('Quick clean cancelled');
       if (base === null) {
         return {
           ok: false,
@@ -387,6 +401,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       }
       const selection = scope === 'quick' ? [] : request.paths;
       const plan = await cleaner.preview(scopeRules(base.rules, scope, selection), base.ctx);
+      if (quick && quickCancelRequested) throw new Error('Quick clean cancelled');
       if (plan.items.length === 0) {
         return { ok: false, reason: 'empty-selection', message: 'Nothing to clean here' };
       }
@@ -400,6 +415,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     } catch (error) {
       return { ok: false, reason: 'failed', message: messageOf(error) };
     } finally {
+      if (quick) quickPreviewActive = false;
       lock.release();
     }
   }
@@ -1009,10 +1025,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function cancelScan(): Promise<boolean> {
     const run = active;
-    if (!run) return false;
-    run.session.cancel();
-    await run.settled;
-    return true;
+    if (run) {
+      run.session.cancel();
+      await run.settled;
+      return true;
+    }
+    if (quickPreviewActive) {
+      quickCancelRequested = true;
+      return true;
+    }
+    return false;
   }
 
   function getResults(requestedRoot: string): ResultsState {
