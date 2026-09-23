@@ -12,6 +12,7 @@ function record(path: string, overrides: Partial<FolderRecord> = {}): FolderReco
   return {
     path,
     bytes: 0,
+    allocatedBytes: 0,
     fileCount: 0,
     folderCount: 0,
     linkCount: 0,
@@ -25,13 +26,14 @@ function record(path: string, overrides: Partial<FolderRecord> = {}): FolderReco
 describe('AggregateTree', () => {
   it('links a child record to a stub parent added later', () => {
     const tree = new AggregateTree();
-    tree.addFolder(record(child, { bytes: 5, fileCount: 1 }));
+    tree.addFolder(record(child, { bytes: 5, allocatedBytes: 8192, fileCount: 1 }));
 
     const stub = tree.get(parent);
     expect(stub).toBeDefined();
     expect(stub?.complete).toBe(false);
     expect(stub?.children).toEqual([child]);
     expect(tree.get(child)?.complete).toBe(true);
+    expect(tree.get(child)?.allocatedBytes).toBe(8192);
   });
 
   it('merges the real parent record without losing children', () => {

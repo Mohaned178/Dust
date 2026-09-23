@@ -1,12 +1,14 @@
-import { join } from 'node:path';
-import type { Entry, FolderRecord, Marker, ProgressUpdate } from '../model/types';
+import { basename } from 'node:path';
+import type { FolderRecord, Marker, ProgressUpdate } from '../model/types';
 import type { Enumerator } from './enumerator';
+import { isMtimeTrackedChild, scanDirectory } from './dir-scan';
 
 export interface ScanConfig {
   root: string;
   enumerator: Enumerator;
   isExcluded: (absPath: string) => boolean;
   signal?: AbortSignal;
+  clusterSize?: number;
   progressEvery?: number;
   onFolder?: (record: FolderRecord) => void;
   onMarker?: (marker: Marker) => void;
@@ -59,96 +61,82 @@ function scanDir(dir: string, trackMtime: boolean, config: ScanConfig, state: Sc
     return emptyRecord(dir, true);
   }
 
-  let entries: Entry[];
-  let entryErrors: number;
-  try {
-    const listing = config.enumerator.list(dir);
-    entries = listing.entries;
-    entryErrors = listing.entryErrors;
-  } catch {
-    state.errors += 1;
-    state.dirsCompleted += 1;
-    return emptyRecord(dir, true, 1);
-  }
-  state.errors += entryErrors;
+  const result = scanDirectory(dir, trackMtime, {
+    enumerator: config.enumerator,
+    isExcluded: config.isExcluded,
+    clusterSize: config.clusterSize,
+    shouldAbort: () => config.signal?.aborted === true,
+    onEntry: (c) => {
+      state.entriesSeen += 1;
+      state.filesScanned += c.files;
+      state.bytesSeen += c.bytes;
+      emitProgress(config, state, dir);
+    },
+  });
+  state.errors += result.errorCount;
+  if (result.aborted) state.aborted = true;
 
-  let bytes = 0;
-  let fileCount = 0;
+  let bytes = result.directBytes;
+  let allocatedBytes = result.directAllocatedBytes;
+  let fileCount = result.directFileCount;
   let folderCount = 0;
-  let linkCount = 0;
-  let newestMtimeMs = 0;
-  let errorCount = entryErrors;
-  let partial = false;
+  let linkCount = result.linkCount;
+  let errorCount = result.errorCount;
+  let newestMtimeMs = result.newestMtimeMs;
+  let partial = result.partial;
 
-  for (const entry of entries) {
+  for (const marker of result.markers) {
+    state.markers.push(marker);
+    config.onMarker?.(marker);
+  }
+  for (const linkPath of result.linkPaths) {
+    config.onFolder?.({
+      path: linkPath,
+      bytes: 0,
+      allocatedBytes: 0,
+      fileCount: 0,
+      folderCount: 0,
+      linkCount: 1,
+      newestMtimeMs: 0,
+      errorCount: 0,
+      partial: false,
+    });
+  }
+
+  for (const childPath of result.childDirs) {
     if (config.signal?.aborted) {
       state.aborted = true;
       partial = true;
       break;
     }
-    const abs = join(dir, entry.name);
-
-    if (!config.isExcluded(abs)) {
-      if (entry.kind === 'link') {
-        linkCount += 1;
-        config.onFolder?.({
-          path: abs,
-          bytes: 0,
-          fileCount: 0,
-          folderCount: 0,
-          linkCount: 1,
-          newestMtimeMs: 0,
-          errorCount: 0,
-          partial: false,
-        });
-      } else if (entry.kind === 'file') {
-        bytes += entry.size;
-        fileCount += 1;
-        state.filesScanned += 1;
-        state.bytesSeen += entry.size;
-        if (trackMtime && entry.mtimeMs > newestMtimeMs) newestMtimeMs = entry.mtimeMs;
-        if (entry.name.toLowerCase() === 'package.json' && !pathHasNodeModules(dir)) {
-          emitMarker(config, state, { kind: 'package-json', path: abs });
-        }
-      } else {
-        if (entry.name.toLowerCase() === 'node_modules' && !pathHasNodeModules(dir)) {
-          emitMarker(config, state, { kind: 'node-modules', path: abs });
-        }
-        if (entry.name.toLowerCase() === '.git') {
-          emitMarker(config, state, { kind: 'git-dir', path: abs });
-        }
-
-        const childTrackMtime =
-          trackMtime &&
-          entry.name.toLowerCase() !== 'node_modules' &&
-          entry.name.toLowerCase() !== '.git';
-        const child = scanDir(abs, childTrackMtime, config, state);
-
-        bytes += child.bytes;
-        fileCount += child.fileCount;
-        folderCount += 1 + child.folderCount;
-        linkCount += child.linkCount;
-        errorCount += child.errorCount;
-        if (child.partial) partial = true;
-        if (trackMtime && child.newestMtimeMs > newestMtimeMs) newestMtimeMs = child.newestMtimeMs;
-        config.onFolder?.(child);
-      }
-    }
-
-    state.entriesSeen += 1;
-    emitProgress(config, state, dir);
+    const child = scanDir(childPath, trackMtime && isMtimeTrackedChild(basename(childPath)), config, state);
+    bytes += child.bytes;
+    allocatedBytes += child.allocatedBytes;
+    fileCount += child.fileCount;
+    folderCount += 1 + child.folderCount;
+    linkCount += child.linkCount;
+    errorCount += child.errorCount;
+    if (child.partial) partial = true;
+    if (trackMtime && child.newestMtimeMs > newestMtimeMs) newestMtimeMs = child.newestMtimeMs;
+    config.onFolder?.(child);
   }
 
   state.dirsCompleted += 1;
+  if (config.signal?.aborted) {
+    state.aborted = true;
+    partial = true;
+  }
+
   return {
     path: dir,
     bytes,
+    allocatedBytes,
     fileCount,
     folderCount,
     linkCount,
     newestMtimeMs,
     errorCount,
-    partial: partial || state.aborted,
+    partial,
   };
 }
 
@@ -156,6 +144,7 @@ function emptyRecord(path: string, partial: boolean, errorCount = 0): FolderReco
   return {
     path,
     bytes: 0,
+    allocatedBytes: 0,
     fileCount: 0,
     folderCount: 0,
     linkCount: 0,
@@ -163,11 +152,6 @@ function emptyRecord(path: string, partial: boolean, errorCount = 0): FolderReco
     errorCount,
     partial,
   };
-}
-
-function emitMarker(config: ScanConfig, state: ScanState, marker: Marker): void {
-  state.markers.push(marker);
-  config.onMarker?.(marker);
 }
 
 function emitProgress(config: ScanConfig, state: ScanState, currentPath: string): void {
@@ -181,8 +165,4 @@ function emitProgress(config: ScanConfig, state: ScanState, currentPath: string)
     dirsCompleted: state.dirsCompleted,
     errors: state.errors,
   });
-}
-
-function pathHasNodeModules(dir: string): boolean {
-  return dir.toLowerCase().split(/[\\/]/).includes('node_modules');
 }

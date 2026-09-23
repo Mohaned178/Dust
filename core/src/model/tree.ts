@@ -13,6 +13,7 @@ export class AggregateTree {
   addFolder(record: FolderRecord): TreeNode {
     const node = this.ensure(record.path);
     node.bytes = record.bytes;
+    node.allocatedBytes = record.allocatedBytes;
     node.fileCount = record.fileCount;
     node.folderCount = record.folderCount;
     node.linkCount = record.linkCount;
@@ -58,6 +59,7 @@ export class AggregateTree {
     const node: TreeNode = {
       path,
       bytes: 0,
+      allocatedBytes: 0,
       fileCount: 0,
       folderCount: 0,
       linkCount: 0,
