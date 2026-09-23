@@ -85,7 +85,7 @@ export function ScanView({ api, root, runId, event, onBack, mode = 'analyze' }: 
           <button
             type="button"
             onClick={() => void cancel()}
-            disabled={finalizing}
+            disabled={finalizing || finalizeStep !== null}
             className="mt-4 rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 disabled:opacity-40"
           >
             Cancel scan

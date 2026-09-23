@@ -211,4 +211,10 @@ describe('ScanView', () => {
     render(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
     expect(screen.getByText('Analyzing results… (rows)')).toBeInTheDocument();
   });
+
+  it('disables cancel while a finalize step is in progress', () => {
+    const event: ScanEvent = { type: 'finalize-progress', runId: 'run-1', step: 'snapshot' };
+    render(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeDisabled();
+  });
 });
