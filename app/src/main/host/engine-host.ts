@@ -615,6 +615,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       session = createSession({
         root: volume,
         pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        tree: liveTree,
         onFolder: onLiveFolder,
         onMarker: (marker) => liveMarkers.push(marker),
         onProgress: (update) => {
@@ -713,6 +714,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       session = createSession({
         root: volume,
         pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        tree: liveTree,
         onFolder: onLiveFolder,
         onProgress: (update) => {
           progress.push({
