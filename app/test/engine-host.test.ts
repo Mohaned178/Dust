@@ -316,6 +316,7 @@ describe('createEngineHost', () => {
     expect(live.source).toBe('live');
     expect(live.depthLimited).toBe(false);
     expect(live.rows.some((row) => row.path === join(tree.root, 'temp'))).toBe(true);
+    expect(live.rows.find((row) => row.path === join(tree.root, 'temp'))?.action?.ruleId).toBe('fixture-temp');
     expect(live.categories.find((row) => row.category === 'temp')?.bytes).toBe(10);
 
     expect(host.getResults('Z:\\').source).toBe('empty');

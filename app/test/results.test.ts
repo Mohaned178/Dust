@@ -3,6 +3,7 @@ import { AggregateTree } from '@dust/core';
 import type { FolderRecord, SnapshotData } from '@dust/core';
 import { describe, expect, it } from 'vitest';
 import {
+  applyMatchesToRows,
   buildRowsFromSnapshot,
   buildRowsFromTree,
   sameRoot,
@@ -148,6 +149,29 @@ describe('buildRowsFromSnapshot', () => {
     expect(byPath.get('C:\\deep\\a\\b')?.parent).toBe('C:\\deep');
     expect(byPath.get('C:\\deep\\a\\b')?.action).toMatchObject({ ruleId: 'system-temp', grade: 'safe' });
     expect(byPath.get('C:\\deep\\a\\b')?.grade).toBe('review');
+  });
+});
+
+describe('applyMatchesToRows', () => {
+  const row = (path: string) => toResultRow(record(path), { root, complete: true, childCount: 0, env: ENV });
+
+  it('applies rule matches to existing rows and leaves others untouched', () => {
+    const rows = [row('C:\\Temp'), row('C:\\Users')];
+    const matches = [
+      {
+        path: 'C:\\Temp',
+        bytes: 10,
+        ruleId: 'system-temp',
+        category: 'temp' as const,
+        grade: 'safe' as const,
+        evidence: 'junk',
+      },
+    ];
+
+    const updated = applyMatchesToRows(rows, matches);
+
+    expect(updated[0]?.action?.ruleId).toBe('system-temp');
+    expect(updated[1]?.action).toBeNull();
   });
 });
 

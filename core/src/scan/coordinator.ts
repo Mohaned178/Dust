@@ -53,12 +53,9 @@ interface Accumulator {
 }
 
 export class ScanCoordinator {
-  // Accumulators are retained for the whole scan by design: finalization needs
-  // the full child rollup, so there is no release until a path is finalized.
-  // At 1M-directory scale this is unmeasured — the spec §8 real-disk spike
-  // (Defender enabled) must record peak RSS with `--root` mode before Plans 3-9
-  // build on this. Revisit with a finalized-paths release strategy only if the
-  // spike shows a problem.
+  // Accumulators hold each directory's rollup until it finalizes; a finalized
+  // entry is released immediately after it has been accounted for, so peak
+  // memory tracks in-flight directories rather than every directory scanned.
   private readonly accumulators = new Map<string, Accumulator>();
   private readonly queue: Task[] = [];
   private readonly idle: number[] = [];
@@ -88,6 +85,10 @@ export class ScanCoordinator {
         this.forceFinalize(this.options.root);
       }
     });
+  }
+
+  pendingAccumulators(): number {
+    return this.accumulators.size;
   }
 
   cancel(): void {
@@ -206,6 +207,7 @@ export class ScanCoordinator {
       if (accumulator.isRoot) {
         this.rootRecord = record;
         this.finish();
+        this.accumulators.delete(accumulator.path);
         return;
       }
 
@@ -220,6 +222,7 @@ export class ScanCoordinator {
       parent.sumErrors += record.errorCount;
       parent.sumNewest = Math.max(parent.sumNewest, record.newestMtimeMs);
       if (record.partial) parent.childPartial = true;
+      this.accumulators.delete(accumulator.path);
       current = parent.path;
     }
   }

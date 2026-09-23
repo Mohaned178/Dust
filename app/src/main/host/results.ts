@@ -132,6 +132,24 @@ export function buildRowsFromTree(
   return rows;
 }
 
+export function applyMatchesToRows(rows: ResultRow[], matches: ResultMatch[]): ResultRow[] {
+  if (matches.length === 0) return rows;
+  const actions = new Map<string, ResultAction>();
+  for (const match of matches) {
+    actions.set(pathKey(match.path), {
+      ruleId: match.ruleId,
+      category: match.category,
+      grade: match.grade,
+      evidence: match.evidence,
+    });
+  }
+  for (const row of rows) {
+    const action = actions.get(pathKey(row.path));
+    if (action) row.action = action;
+  }
+  return rows;
+}
+
 export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv): ResultRow[] {
   const foldersByPath = new Set(snapshot.folders.map((folder) => pathKey(folder.path)));
   const actions = new Map<string, ResultAction>();

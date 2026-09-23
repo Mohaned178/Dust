@@ -68,8 +68,8 @@ import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
 import { createVolumeCache } from './volumes';
 import {
+  applyMatchesToRows,
   buildRowsFromSnapshot,
-  buildRowsFromTree,
   sameRoot,
   summarizeCategories,
   toBrowseRow,
@@ -524,6 +524,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
+    const liveRows: ResultRow[] = [];
     const folderBuffer: ResultRow[] = [];
     let lastFolderFlush = 0;
     let lastCategoryRun = 0;
@@ -560,16 +561,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       instrument('tree.live.addFolder', () => {
         liveTree.addFolder(record);
       });
-      folderBuffer.push(
-        instrument('row.build.live', () =>
-          toResultRow(record, {
-            root: targetRoot,
-            complete: true,
-            childCount: liveTree.children(record.path).length,
-            env: guard,
-          }),
-        ),
+      const row = instrument('row.build.live', () =>
+        toResultRow(record, {
+          root: targetRoot,
+          complete: true,
+          childCount: liveTree.children(record.path).length,
+          env: guard,
+        }),
       );
+      liveRows.push(row);
+      folderBuffer.push(row);
       const stamp = now();
       if (stamp - lastFolderFlush >= folderIntervalMs) {
         lastFolderFlush = stamp;
@@ -583,14 +584,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       if (result !== null) {
         const rootNode = result.tree.get(result.root);
         if (rootNode) {
-          folderBuffer.push(
-            toResultRow(rootNode, {
-              root: result.root,
-              complete: rootNode.complete,
-              childCount: result.tree.children(result.root).length,
-              env: guard,
-            }),
-          );
+          const row = toResultRow(rootNode, {
+            root: result.root,
+            complete: rootNode.complete,
+            childCount: result.tree.children(result.root).length,
+            env: guard,
+          });
+          liveRows.push(row);
+          folderBuffer.push(row);
         }
       }
       flushFolders();
@@ -652,7 +653,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, finishLive });
+    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, liveRows, finishLive });
 
     return { ok: true, runId };
   }
@@ -793,6 +794,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     settle: () => void;
     rules: Rule[];
     probe: RuleContext['probe'];
+    liveRows: ResultRow[];
     finishLive: (result: ScanResult | null) => void;
   }): Promise<void> {
     try {
@@ -800,7 +802,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       input.finishLive(result);
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
-      const summary = await finalize(result, input.startedAt, input.rules, input.probe);
+      const summary = await finalize(result, input.startedAt, input.rules, input.probe, input.liveRows);
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({
         type: 'matches',
@@ -847,6 +849,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     startedAt: number,
     rules: Rule[],
     probe: RuleContext['probe'],
+    liveRows: ResultRow[],
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -889,7 +892,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       status: result.status,
       finishedAt,
       categories,
-      rows: instrument('row.build.final', () => buildRowsFromTree(result.tree, result.root, matches, guard)),
+      rows: instrument('row.applyMatches', () => applyMatchesToRows(liveRows, matches)),
     };
 
     lastRun = {
