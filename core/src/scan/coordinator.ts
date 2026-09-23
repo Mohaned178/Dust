@@ -57,6 +57,12 @@ export class ScanCoordinator {
   // entry is released immediately after it has been accounted for, so peak
   // memory tracks in-flight directories rather than every directory scanned.
   private readonly accumulators = new Map<string, Accumulator>();
+  // Tombstones of finalized, released directories. A crashed worker's task is
+  // re-dispatched and can re-deliver a DirOpen for a directory that was already
+  // accounted for; without this marker the recreation would double-roll the
+  // record into its parent. The set retains one path reference per released
+  // directory - a small fraction of the accumulator it replaces.
+  private readonly finalizedPaths = new Set<string>();
   private readonly queue: Task[] = [];
   private readonly idle: number[] = [];
   private readonly inflight = new Map<number, Task>();
@@ -153,6 +159,7 @@ export class ScanCoordinator {
   }
 
   private onDirOpen(open: DirOpen): void {
+    if (this.finalizedPaths.has(open.path)) return;
     const accumulator = this.ensure(open.path);
     if (!accumulator.opened) {
       accumulator.opened = true;
@@ -207,7 +214,7 @@ export class ScanCoordinator {
       if (accumulator.isRoot) {
         this.rootRecord = record;
         this.finish();
-        this.accumulators.delete(accumulator.path);
+        this.release(accumulator);
         return;
       }
 
@@ -222,7 +229,7 @@ export class ScanCoordinator {
       parent.sumErrors += record.errorCount;
       parent.sumNewest = Math.max(parent.sumNewest, record.newestMtimeMs);
       if (record.partial) parent.childPartial = true;
-      this.accumulators.delete(accumulator.path);
+      this.release(accumulator);
       current = parent.path;
     }
   }
@@ -239,6 +246,11 @@ export class ScanCoordinator {
       errorCount: accumulator.errorCount + accumulator.sumErrors,
       partial: accumulator.partial || accumulator.childPartial,
     };
+  }
+
+  private release(accumulator: Accumulator): void {
+    this.finalizedPaths.add(accumulator.path);
+    this.accumulators.delete(accumulator.path);
   }
 
   private ensure(path: string): Accumulator {
@@ -350,7 +362,7 @@ export class ScanCoordinator {
       return;
     }
 
-    if (task) {
+    if (task && !this.finalizedPaths.has(task.path)) {
       const accumulator = this.ensure(task.path);
       if (!accumulator.opened) accumulator.opened = true;
       if (task.isRoot) accumulator.isRoot = true;
