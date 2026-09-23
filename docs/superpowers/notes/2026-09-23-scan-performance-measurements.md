@@ -167,9 +167,10 @@ Main-process samples (ms, count):
 | Renderer JS heap (end) | 215 MB | 242 MB | 10 MB | 10 MB |
 
 `row.build.final` is gone; `row.applyMatches` replaces it and reuses the rows streamed during
-the scan (135 ms vs the 1,881 ms "ResultRow + display grade" baseline). Finalize emits four
-`finalize-progress` steps (`projects`, `rules`, `rows`, `snapshot`); the renderer received all
-four (`app.event.finalize-progress`, count 4).
+the scan. Row building plus match application now totals 1,598 ms warm (1,466.07 + 131.70) vs
+the 1,881 ms "ResultRow + display grade" baseline. Finalize emits four `finalize-progress`
+steps (`projects`, `rules`, `rows`, `snapshot`); the renderer received all four
+(`app.event.finalize-progress`, count 4).
 
 ### PowerShell and finalize comparison
 
@@ -190,7 +191,8 @@ Observations:
    30,000 ms, the warm C: scan took 30,084 ms (a ~100 ms miss) and the cold one 108 s, so the
    finalize re-runs PowerShell. Warm finalize is still 2,692 ms vs the 3,935–4,164 ms baseline,
    but ~1.24 s of it is this avoidable re-list. Session-long caching (or reusing the start-time
-   volume list in finalize) would take warm finalize to ~1.4 s and total PowerShell to ~0.
+   volume list in finalize) would remove that ~1.24 s and take total PowerShell per Analyze to
+   ~0.
 3. Warm C: total 32,776 ms vs baseline 33,026–33,492 ms (within noise); warm G: browse 662 ms
    vs baseline 880 ms (25% faster) even though G: is an HDD and now uses `workers: 2`.
 4. The C: cold run (108 s) is not comparable to the baseline "cold-ish" 46.8 s: the baseline
