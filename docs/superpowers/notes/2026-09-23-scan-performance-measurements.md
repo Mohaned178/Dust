@@ -128,3 +128,76 @@ Warm reference (no eviction, back-to-back, cache warm from run 6):
   controller ruling for a confounded curve, `HDD_WORKERS = 2`. This also matches the design
   spec's "HDD -> 1-2 workers" guidance and avoids head-seek contention. The warm pass above was
   fastest at 8 workers, but warm throughput is not the target for a spinning disk.
+
+## After (perf plan) — Task 11
+
+Same machine, same instrumented harness (`npm run build -w app`, then `DUST_BENCH_ROOT=...`
+`DUST_BENCH_REPORT=...` `npm run start -w app`). Each root was run twice: the first run is
+cold/first-touch for this session, the second immediately after is warm. Dirs are the live
+folder rows reported by `row.build.live` (analyze) / `row.build.browse` (browse); the bench
+report does not carry a dirs field. Baseline rows are copied from the two tables above.
+
+| Run | Root | Files | Dirs | Cache state | scanMs | finalizeMs | totalMs |
+|---|---|---|---|---|---|---|---|
+| Baseline warm, UI-driven | C:\ | 728k | 278k | warm | 29,328 | 4,164 | 33,492 |
+| After warm, UI-driven | C:\ | 737,554 | 279k | warm | 30,084 | 2,692 | 32,776 |
+| Baseline cold-ish, dashboard-only | C:\ | 728k | 278k | partially cold | 46,767 | 4,494 | 51,261 |
+| After cold (first run after build) | C:\ | 737,549 | 279k | cold | 108,153 | 8,560 | 116,713 |
+| Baseline browse, warm | G:\ | 62,990 | — | warm | 880 | 0 | 880 |
+| After browse, warm | G:\ | 63,116 | 981 | warm | 662 | 0 | 662 |
+| After browse, cold (first touch) | G:\ | 63,116 | 981 | cold | 4,832 | 0 | 4,832 |
+
+Main-process samples (ms, count):
+
+| Sample | C: cold (116.7s) | C: warm (32.8s) | G: cold browse | G: warm browse |
+|---|---|---|---|---|
+| start.listVolumes | 0.06 (1) | 0.03 (1) | 0.02 (1) | 0.08 (1) |
+| finalize.listVolumes | 2,528.01 (1) | 1,239.82 (1) | — | — |
+| finalize.volumes (usage) | 0.42 (1) | 0.31 (1) | — | — |
+| finalize.classifyProjects | 4,691.98 (1) | 176.95 (1) | — | — |
+| finalize.collectRuleMatches | 460.14 (1) | 415.98 (1) | — | — |
+| row.applyMatches | 135.06 (1) | 131.70 (1) | — | — |
+| row.build.live / row.build.browse | 1,474.69 (279,103) | 1,466.07 (279,104) | 2.53 (981) | 2.29 (981) |
+| tree.addFolder.total | 470.65 (558,207) | 421.19 (558,209) | 1.99 (1,963) | 1.69 (1,963) |
+| ipc.send | 506.58 (1,047) | 449.06 (609) | 4.08 (34) | 2.52 (14) |
+| finalize.buildSnapshot | 638.63 (1) | 556.18 (1) | — | — |
+| finalize.store.save | 96.12 (1) | 103.77 (1) | — | — |
+| finalize.store.load | 7.78 (1) | 65.93 (1) | — | — |
+| Main process RSS (end) | 434 MB | 716 MB | 191 MB | 188 MB |
+| Renderer JS heap (end) | 215 MB | 242 MB | 10 MB | 10 MB |
+
+`row.build.final` is gone; `row.applyMatches` replaces it and reuses the rows streamed during
+the scan (135 ms vs the 1,881 ms "ResultRow + display grade" baseline). Finalize emits four
+`finalize-progress` steps (`projects`, `rules`, `rows`, `snapshot`); the renderer received all
+four (`app.event.finalize-progress`, count 4).
+
+### PowerShell and finalize comparison
+
+| Cost per Analyze | Baseline C: warm | After C: warm | After C: cold |
+|---|---|---|---|
+| PowerShell `listVolumes` at scan start | 2,560 ms (×2 calls) | 0.03 ms | 0.06 ms |
+| PowerShell `listVolumes` at finalize | part of 2,390 ms | 1,239.82 ms | 2,528.01 ms |
+| PowerShell volume usage at finalize | part of 2,390 ms | 0.31 ms (statfs) | 0.42 ms (statfs) |
+| Total PowerShell per Analyze | ~4,950 ms | ~1,240 ms | ~2,530 ms |
+| finalizeMs (wall) | 3,935–4,164 ms | 2,692 ms | 8,560 ms |
+
+Observations:
+
+1. `start.listVolumes` collapses to ~0 because the dashboard already populated the volume cache
+   before Analyze starts; the usage call now uses `statfs` and costs ~0.3 ms (was the PowerShell
+   half of the ~2.4 s finalize block).
+2. `finalize.listVolumes` does **not** collapse on runs longer than 30 s: the cache TTL is
+   30,000 ms, the warm C: scan took 30,084 ms (a ~100 ms miss) and the cold one 108 s, so the
+   finalize re-runs PowerShell. Warm finalize is still 2,692 ms vs the 3,935–4,164 ms baseline,
+   but ~1.24 s of it is this avoidable re-list. Session-long caching (or reusing the start-time
+   volume list in finalize) would take warm finalize to ~1.4 s and total PowerShell to ~0.
+3. Warm C: total 32,776 ms vs baseline 33,026–33,492 ms (within noise); warm G: browse 662 ms
+   vs baseline 880 ms (25% faster) even though G: is an HDD and now uses `workers: 2`.
+4. The C: cold run (108 s) is not comparable to the baseline "cold-ish" 46.8 s: the baseline
+   eviction was itself shown to be too weak (see caveats above), and this run was first-touch
+   after the build. Only the warm pairs are like-for-like.
+5. Memory is higher than the baseline: main RSS 716 MB warm (was 258 MB) because Task 7 keeps
+   all `liveRows` (279k folders) until finalize, and the renderer heap reads 242 MB vs the
+   baseline's 28 MB with the same ~279k-node row store. The renderer number is the more
+   suspicious one and is not explained by the perf-plan diff; it may be GC timing/measurement
+   noise. Worth a follow-up memory pass, not a correctness blocker.
