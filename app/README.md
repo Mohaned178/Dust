@@ -25,7 +25,9 @@ npm run typecheck -w app
 
 ## Manual smoke checklist (MVP)
 
-1. `npm run dev -w app` opens the Dust window on the Dashboard; every fixed volume has a card with a usage bar, and removable/network volumes carry the `external` label.
+### System drive (C:) — full treatment
+
+1. `npm run dev -w app` opens the Dust window on the Dashboard; every fixed volume has a card with a usage bar, and removable/network volumes carry the `external` label. The system-drive card offers `Analyze`; every other volume offers `Browse` (see the browse-only section below).
 2. Click `Analyze` on a real drive: the view switches to Scan, files scanned / bytes seen / errors / elapsed advance, and the current path updates. `Cancel scan` stops within ~1 s and shows "Scan cancelled" with a Back button.
 3. Analyze again to completion. The summary shows files, bytes, projects and reclaimable bytes; back on the Dashboard the card shows "Last analyzed just now · N GB reclaimable".
 4. While a scan runs, click `Analyze` on another card: the "A scan is already running" dialog appears. `Wait` dismisses it; `Cancel it` cancels the running scan and starts the new one.
@@ -44,3 +46,15 @@ npm run typecheck -w app
 17. With `C:\Windows\Temp` present, the Quick Clean plan marks that row `Needs administrator rights` and shows `Relaunch as Administrator`; clicking it relaunches the app elevated and the window closes.
 18. From Results click the `npm projects` strip row: Dev Cleanup opens with Dead / Occasional / Active / Orphaned / Pinned groups. `Select all Dead + green` then `Review cleanup` shows the plan with rebuild commands; confirming cleans the node_modules directories and the summary lists the copyable commands. The collapsed `Recently cleaned` group keeps them for the session; relaunching clears it.
 19. Click `Keep` on a project: it moves to the Pinned group and is never selectable; `Unpin` restores it. Locked files are skipped with "partially cleaned: N files in use" and never fail the batch.
+
+### Browse-only volumes (D:, E:, …)
+
+20. A non-system card shows `Browse` (never `Analyze`) and the line "Browse-only — no cleanup rules apply here"; the system card keeps `Analyze` and its last-analyzed/reclaimable lines.
+21. Click `Browse`: the view switches to `Browsing`; files scanned / bytes seen / errors / elapsed advance; `Cancel scan` stops within ~1 s and shows "Browse cancelled".
+22. Let it finish: the summary shows files / bytes / elapsed only — no projects, no reclaimable bytes. The tree streams rows without a `Safety` column (Name / Size / Allocated / Files-Folders / % / Last modified / Action) and no Category Summary Strip.
+23. Expand folders with the chevrons, re-sort columns, and double-click a name (or click `Explore`) to open Windows Explorer.
+24. Click `Delete` on a row: a simple confirmation shows the path and that it cannot be undone. `Cancel` keeps it; `Delete permanently` removes the row and shrinks parent sizes.
+25. Try to delete a protected path (a volume root, a system path, or a user document folder): the dialog shows `Delete refused (…)` and the row stays.
+26. Relaunch after browsing: the volume shows no `Last analyzed`/`reclaimable` line (browse results are session-only), and the C: snapshot is untouched.
+27. While a scan runs, clicking `Browse` on another card shows the same "A scan is already running" dialog; `Cancel it` cancels the running scan and starts the browse.
+28. With no system volume present, `Quick Clean` is disabled.
