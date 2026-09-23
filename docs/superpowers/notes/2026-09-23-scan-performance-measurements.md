@@ -271,3 +271,10 @@ emitted a row per folder, so the baseline's 28 MB reading is inconsistent with t
 filled, or a dashboard-only run recorded in the UI-driven table), not a perf-plan regression.
 No refactor was started; a follow-up memory pass (trim/release the renderer store or virtualize
 it) is recommended for the final review.
+
+## Final review: accepted follow-ups and recorded deviations
+
+- Finalize stays phase-level granular (yields between phases, not inside `classifyProjects`/`buildSnapshot`): cold classify ~4.7s / warm ~177ms, buildSnapshot 556–639ms; the renderer runs in a separate process and its longtasks stayed <=56ms, so UI paint is not blocked. Follow-up: chunk those two phases.
+- Memory: main RSS ~723MB (deliberate `liveRows` retention from the rows-once design) and renderer store ~228MB (renderer code unchanged by this plan). Follow-up memory pass.
+- Evidence gap: no before/after Quick Clean measurement; the warm-SSD end-to-end total is within noise (32,776ms vs 33,026–33,492ms) — the verified wins are finalize (4,164 -> 1,408–1,804ms) and session PowerShell (~4,950 -> ~0.3ms). Cold HDD app-level A/B was not measurable on this machine.
+- Spec E deviations: `splitAfterEntries` stays 20k and the queue stays FIFO; eager root split covers the ramp-up intent.
