@@ -90,6 +90,8 @@ import {
 import { groupDevProjects, projectNameOf, toDevProjects } from './dev-cleanup';
 import { measureDirectories } from './targeted';
 
+const MAX_FOLDER_BATCH = 2000;
+
 export interface ScanSessionLike {
   start(): Promise<ScanResult>;
   cancel(): void;
@@ -172,6 +174,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
   const guard = guardEnv(env);
+
+  function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
 
@@ -572,7 +578,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       liveRows.push(row);
       folderBuffer.push(row);
       const stamp = now();
-      if (stamp - lastFolderFlush >= folderIntervalMs) {
+      if (folderBuffer.length >= MAX_FOLDER_BATCH) {
+        lastFolderFlush = stamp;
+        flushFolders();
+      } else if (stamp - lastFolderFlush >= folderIntervalMs) {
         lastFolderFlush = stamp;
         flushFolders();
       }
@@ -802,7 +811,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       input.finishLive(result);
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
-      const summary = await finalize(result, input.startedAt, input.rules, input.probe, input.liveRows);
+      const summary = await finalize(result, input.startedAt, input.rules, input.probe, input.liveRows, input.runId);
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({
         type: 'matches',
@@ -850,6 +859,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     rules: Rule[],
     probe: RuleContext['probe'],
     liveRows: ResultRow[],
+    runId: string,
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -858,6 +868,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     categories: CategorySummaryRow[];
     matches: ResultMatch[];
   }> {
+    emit({ type: 'finalize-progress', runId, step: 'projects' });
     const existing = instrument('finalize.store.load', () => deps.store.load());
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
     const volumeList = await instrumentAsync('finalize.listVolumes', () => volumes.get());
@@ -875,6 +886,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         now,
       }),
     );
+    await yieldToEventLoop();
+
+    emit({ type: 'finalize-progress', runId, step: 'rules' });
     const ctx: RuleContext = {
       root: result.root,
       tree: result.tree,
@@ -883,6 +897,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       projects: analysis.projects,
     };
     const matches = await instrumentAsync('finalize.collectRuleMatches', () => collectRuleMatches(rules, ctx));
+    await yieldToEventLoop();
+
+    emit({ type: 'finalize-progress', runId, step: 'rows' });
     const ruleCategories = instrument('finalize.categories', () => aggregateCategories(matches));
     const categories = instrument('finalize.categories', () => summarizeCategories(ruleCategories));
     const finishedAt = now();
@@ -905,7 +922,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       ruleCategories,
       finishedAt,
     };
+    await yieldToEventLoop();
 
+    emit({ type: 'finalize-progress', runId, step: 'snapshot' });
     const usage = instrument('finalize.volumes', () =>
       getVolumeUsageFn(volumeList.map((volume) => volume.root)),
     );

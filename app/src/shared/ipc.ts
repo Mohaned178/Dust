@@ -262,6 +262,7 @@ export type ScanEvent =
   | { type: 'categories'; runId: string; categories: CategorySummaryRow[] }
   | { type: 'matches'; runId: string; matches: ResultMatch[] }
   | { type: 'finalizing'; runId: string }
+  | { type: 'finalize-progress'; runId: string; step: string }
   | {
       type: 'finished';
       runId: string;

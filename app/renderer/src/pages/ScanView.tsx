@@ -24,6 +24,7 @@ export function ScanView({ api, root, runId, event, onBack, mode = 'analyze' }: 
   const failed = current?.type === 'failed' ? current : null;
   const progress = current?.type === 'progress' ? current.progress : lastProgress;
   const finalizing = current?.type === 'finalizing';
+  const finalizeStep = current?.type === 'finalize-progress' ? current.step : null;
 
   useEffect(() => {
     setLastProgress(null);
@@ -75,7 +76,11 @@ export function ScanView({ api, root, runId, event, onBack, mode = 'analyze' }: 
             <Stat label="Elapsed" value={formatDuration(progress?.elapsedMs ?? 0)} />
           </dl>
           <p className="mt-4 truncate text-xs text-neutral-500">{progress?.currentPath ?? 'Preparing…'}</p>
-          {finalizing && <p className="mt-2 text-sm text-emerald-300">Analyzing results…</p>}
+          {(finalizing || finalizeStep !== null) && (
+            <p className="mt-2 text-sm text-emerald-300">
+              Analyzing results…{finalizeStep !== null ? ` (${finalizeStep})` : ''}
+            </p>
+          )}
           {cancelError !== null && <p className="mt-2 text-sm text-red-300">Cancel failed: {cancelError}</p>}
           <button
             type="button"

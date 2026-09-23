@@ -205,4 +205,10 @@ describe('ScanView', () => {
     expect((await screen.findAllByText('Temp')).length).toBeGreaterThan(0);
     expect(screen.getByRole('table', { name: 'Folder tree' })).toBeInTheDocument();
   });
+
+  it('shows the finalize step while results are built', () => {
+    const event: ScanEvent = { type: 'finalize-progress', runId: 'run-1', step: 'rows' };
+    render(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
+    expect(screen.getByText('Analyzing results… (rows)')).toBeInTheDocument();
+  });
 });

@@ -412,7 +412,17 @@ describe('createEngineHost', () => {
     const event = await finished;
 
     expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true });
-    expect(seen).toEqual(['started', 'finalizing', 'categories', 'matches', 'finished']);
+    expect(seen).toEqual([
+      'started',
+      'finalizing',
+      'finalize-progress',
+      'finalize-progress',
+      'finalize-progress',
+      'finalize-progress',
+      'categories',
+      'matches',
+      'finished',
+    ]);
     expect(seen).not.toContain('failed');
   });
 
@@ -950,5 +960,50 @@ describe('createEngineHost', () => {
     const finished = nextEvent(host, 'finished');
     fake.finish(emptyScanResult(tree.root, 'complete'));
     await finished;
+  });
+
+  it('emits finalize progress steps and caps folder batches', async () => {
+    let fake!: FakeSession;
+    const events: ScanEvent[] = [];
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: (options) => (fake = new FakeSession(options)),
+      folderIntervalMs: 60_000,
+    });
+    host.onEvent((event) => events.push(event));
+
+    await host.startAnalyze(tree.root);
+    for (let index = 0; index < 4500; index += 1) {
+      fake.options.onFolder?.({
+        path: join(tree.root, `d${index}`),
+        bytes: 1,
+        allocatedBytes: 1,
+        fileCount: 0,
+        folderCount: 0,
+        linkCount: 0,
+        newestMtimeMs: 0,
+        errorCount: 0,
+        partial: false,
+      });
+    }
+
+    const folderEvents = events.filter((event) => event.type === 'folders');
+    expect(folderEvents.length).toBeGreaterThanOrEqual(3);
+    for (const event of folderEvents) {
+      if (event.type === 'folders') expect(event.folders.length).toBeLessThanOrEqual(2000);
+    }
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    const steps = events
+      .filter((event): event is Extract<ScanEvent, { type: 'finalize-progress' }> => event.type === 'finalize-progress')
+      .map((event) => event.step);
+    expect(steps).toEqual(['projects', 'rules', 'rows', 'snapshot']);
   });
 });
