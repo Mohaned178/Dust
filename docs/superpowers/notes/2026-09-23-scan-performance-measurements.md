@@ -203,3 +203,71 @@ Observations:
    baseline's 28 MB with the same ~279k-node row store. The renderer number is the more
    suspicious one and is not explained by the perf-plan diff; it may be GC timing/measurement
    noise. Worth a follow-up memory pass, not a correctness blocker.
+
+## Re-measurement (Task 11 follow-up)
+
+Three controller-requested follow-ups: the A1 TTL re-list fix, a repeat of the cold C: app run
+plus an isolated engine run, and two back-to-back warm C: runs for the memory question.
+
+### 1. A1 fix: reuse the scan-start volume list in finalize
+
+`startAnalyze` already awaits `volumes.get()` for the target lookup; that `volumeList` is now
+threaded through `runAnalysis` into `finalize`, which uses it for `createExternalPredicate` and
+`getVolumeUsageFn` instead of re-calling `volumes.get()`. The `finalize.listVolumes` sample no
+longer exists. Dashboard and the start-time target lookup keep using the 30 s TTL cache.
+
+New app test (`app/test/engine-host.test.ts`): with `now: () => clock`, dashboard + analyze,
+`clock += 30_001` mid-scan, then finish. RED (before the fix): `expected "volumeList" to be
+called 1 times, but got 2 times`. GREEN (after): 28/28 tests pass. Commands run:
+`npm run typecheck -w app` (clean), `npm run test -w app -- test/engine-host.test.ts`
+(28 passed), `npm run typecheck -w core` (clean); full app suite 174 passed.
+
+Real-app confirmation (same build/bench harness, fixed code):
+
+| Run | Root | Files | Cache state | scanMs | finalizeMs | totalMs | start.listVolumes | finalize.listVolumes | finalize.volumes |
+|---|---|---|---|---|---|---|---|---|---|
+| After fix, repeat cold-ish | C:\ | 737,562 | warm by then | 28,464 | 1,804 | 30,268 | 0.02 ms | absent | 0.30 ms |
+| After fix, mem run 1 | C:\ | 737,567 | warm | 23,670 | 1,408 | 25,078 | 0.06 ms | absent | 0.32 ms |
+| After fix, mem run 2 | C:\ | 737,567 | warm | 29,184 | 1,433 | 30,617 | 0.03 ms | absent | 0.39 ms |
+
+Total PowerShell per Analyze is now ~0.3–0.4 ms (was ~1,240 ms warm / ~2,530 ms cold in the
+Task 11 table, and ~4,950 ms at baseline). Warm finalize is 1,408–1,804 ms vs 2,692 ms before
+the fix and 4,164 ms at baseline. Observation 2 in the Task 11 section is superseded.
+
+### 2. Cold C: app repeat and isolated engine C:
+
+| Run | Files | Folders | Cache state | elapsedMs | files/s |
+|---|---|---|---|---|---|
+| App repeat (`DUST_BENCH_ROOT="C:/"`, analyze) | 737,562 | 279,116 | warm (could not reproduce cold) | 28,464 scan / 30,268 total | 25,912 scan |
+| Isolated engine (`npx tsx scripts/bench-scan.ts --root "C:/"`, pool, default 8 workers) | 737,564 | 279,117 | warm-ish | 50,644 | 14,564 |
+
+Recorded isolated cold-ish reference: 81.9 s raw / 67.7 s pool. The engine is faster than both,
+so there is no engine regression to escalate. The Task 11 cold app run (108,153 ms) was
+first-touch cache state, not a code regression: the same command now returns 28.5 s and the
+memory runs returned 23.7–29.2 s. The earlier notes already established that this machine
+cannot be forced cold (the 12 GB eviction does not evict the NTFS metadata cache), so the
+cold/warm spread is an environment property; the isolated run is warm-ish for the same reason.
+
+### 3. Memory: two back-to-back warm C: runs
+
+| Run | Files | scanMs | totalMs | memory.rssMb | memory.heapUsedMb | renderer usedJsHeapMb | renderer totalJsHeapMb |
+|---|---|---|---|---|---|---|---|
+| Mem run 1 | 737,567 | 23,670 | 25,078 | 729 | 294 | 228 | 273 |
+| Mem run 2 | 737,567 | 29,184 | 30,617 | 723 | 261 | 228 | 290 |
+| After-fix repeat (for context) | 737,562 | 28,464 | 30,268 | 701 | 276 | 228 | 290 |
+| Task 11 warm runs (for context) | 737,554 | 30,084 | 32,776 | 716 | 300 | 242 | 290 |
+
+The renderer heap is **228 MB in every repeat** (Task 11 runs: 215–242 MB), so this is a
+consistent finding, not GC timing. Hypothesis grounded in the code: the renderer row store
+(`app/renderer/src/tree.ts`) keeps one `RowNode` per scanned folder — ~279k nodes, each with a
+`children: string[]` and a `childSet: Set` — and the main process streams one `folders` row per
+folder (`app.event.folders.rows` = 279,117), which `upsertRows` materializes and retains for
+the life of the view. The main-process RSS of 700–729 MB is the deliberate Task 7 trade-off
+(all `liveRows` retained until finalize; baseline 258 MB). Important context for the final
+review: `git diff 4eaf9c9..HEAD` over `app/renderer/src/pages/ResultsView.tsx`,
+`app/renderer/src/App.tsx` and `app/renderer/src/tree.ts` is empty, and the pre-plan host also
+emitted a row per folder, so the baseline's 28 MB reading is inconsistent with the same
+~279k-node store. The most likely explanation is a baseline measurement artifact (store not yet
+filled, or a dashboard-only run recorded in the UI-driven table), not a perf-plan regression.
+No refactor was started; a follow-up memory pass (trim/release the renderer store or virtualize
+it) is recommended for the final review.
