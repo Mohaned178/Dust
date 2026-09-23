@@ -919,7 +919,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         priorCleanedAt,
       }),
     );
-    const save = instrument('finalize.store.save', () => deps.store.save(snapshot));
+    const save = await instrumentAsync('finalize.store.save', () => deps.store.saveAsync(snapshot));
 
     return {
       finishedAt,

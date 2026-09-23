@@ -107,4 +107,50 @@ describe('SnapshotStore', () => {
     writeFileSync(join(dir, 'user.json'), JSON.stringify({ pins: 'not-an-array' }));
     expect(store.getPins()).toEqual([]);
   });
+
+  it('saves asynchronously and round-trips through load', async () => {
+    const snapshot = {
+      schemaVersion: 2 as const,
+      rulesVersion: '1',
+      root: 'C:\\',
+      startedAt: 10,
+      finishedAt: 20,
+      status: 'complete' as const,
+      cleanedAt: null,
+      disks: [],
+      categories: [],
+      matches: [],
+      projects: [],
+      folders: [],
+    };
+    const result = await store.saveAsync(snapshot);
+    expect(result).toEqual({ ok: true });
+    const loaded = store.load();
+    expect(loaded.kind).toBe('ok');
+    if (loaded.kind !== 'ok') return;
+    expect(loaded.snapshot.root).toBe('C:\\');
+  });
+
+  it('reports a failed async save instead of throwing', async () => {
+    const blocked = new SnapshotStore({
+      snapshotPath: join(dir, 'missing-dir'),
+      userPath: join(dir, 'user.json'),
+    });
+    mkdirSync(join(dir, 'missing-dir'));
+    const result = await blocked.saveAsync({
+      schemaVersion: 2,
+      rulesVersion: '1',
+      root: 'C:\\',
+      startedAt: 0,
+      finishedAt: 0,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [],
+      matches: [],
+      projects: [],
+      folders: [],
+    });
+    expect(result.ok).toBe(false);
+  });
 });
