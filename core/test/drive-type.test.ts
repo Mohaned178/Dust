@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createExternalPredicate,
   listVolumes,
+  listVolumesAsync,
   mapDriveType,
   parseVolumesJson,
   systemDriveRoot,
@@ -119,6 +120,21 @@ describe('listVolumes', () => {
       return;
     }
     const volumes = listVolumes();
+    expect(volumes.length).toBeGreaterThan(0);
+    for (const volume of volumes) {
+      expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
+      expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
+    }
+  });
+});
+
+describe('listVolumesAsync', () => {
+  it('lists real volumes with a matching shape on Windows', async (ctx) => {
+    if (process.platform !== 'win32') {
+      ctx.skip();
+      return;
+    }
+    const volumes = await listVolumesAsync();
     expect(volumes.length).toBeGreaterThan(0);
     for (const volume of volumes) {
       expect(volume.root).toMatch(/^[A-Za-z]:\\$/);

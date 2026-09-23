@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
 import type { ScanEvent } from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
@@ -93,9 +93,32 @@ describe('createEngineHost', () => {
     expect(loaded.snapshot.projects.map((project) => project.name)).toContain('proj');
     expect(loaded.snapshot.folders.some((folder) => folder.path === join(tree.root, 'temp'))).toBe(true);
 
-    const card = host.getDashboard().volumes.find((volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase());
+    const card = (await host.getDashboard()).volumes.find(
+      (volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase(),
+    );
     expect(card?.lastAnalyzedAt).not.toBeNull();
     expect(card?.reclaimableBytes).toBe(10);
+  });
+
+  it('resolves volumes once per session', async () => {
+    const listVolumes = vi.fn(volumeList);
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    await host.getDashboard();
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    expect(listVolumes).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a second analyze while the first is running', async () => {
@@ -113,13 +136,13 @@ describe('createEngineHost', () => {
     expect(first.ok).toBe(true);
     const second = await host.startAnalyze(tree.root);
     expect(second).toEqual({ ok: false, reason: 'busy', running: 'analyze' });
-    expect(host.getDashboard().scan).toMatchObject({ kind: 'analyze', root: volumeList()[0]!.root });
+    expect((await host.getDashboard()).scan).toMatchObject({ kind: 'analyze', root: volumeList()[0]!.root });
 
     const cancelled = host.cancelScan();
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
     await nextEvent(host, 'finished');
     expect(await cancelled).toBe(true);
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('cancels a running scan and persists a cancelled snapshot', async () => {
@@ -160,11 +183,11 @@ describe('createEngineHost', () => {
     await host.startAnalyze(tree.root);
     const cancelled = host.cancelScan();
     expect(fake.cancelled).toBe(true);
-    expect(host.getDashboard().scan).not.toBeNull();
+    expect((await host.getDashboard()).scan).not.toBeNull();
 
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
     expect(await cancelled).toBe(true);
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
     expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: true });
 
     const retried = host.cancelScan();
@@ -189,7 +212,7 @@ describe('createEngineHost', () => {
     const event = await failed;
 
     expect(event).toMatchObject({ type: 'failed', message: 'worker exploded' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('passes pins and an external-drive predicate into rule creation', async () => {
@@ -234,7 +257,7 @@ describe('createEngineHost', () => {
       reason: 'invalid-volume',
       message: 'unknown volume: Z:\\',
     });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('reports a start failure and releases the lock', async () => {
@@ -250,7 +273,7 @@ describe('createEngineHost', () => {
     });
 
     expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no worker' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('releases the lock when rule creation throws', async () => {
@@ -265,7 +288,7 @@ describe('createEngineHost', () => {
     });
 
     expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no rules' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
     expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: false, reason: 'start-failed' });
   });
 

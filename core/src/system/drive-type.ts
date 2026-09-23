@@ -1,5 +1,8 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { normalize, parse } from 'node:path';
+import { promisify } from 'node:util';
+
+const LIST_VOLUMES_SCRIPT = `$volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, FileSystemLabel, DriveType); ConvertTo-Json -InputObject $volumes -Compress`;
 
 export type DriveType = 'fixed' | 'removable' | 'network' | 'cdrom' | 'ram' | 'unknown';
 
@@ -54,17 +57,25 @@ export function parseVolumesJson(raw: string): VolumeInfo[] {
 export function listVolumes(): VolumeInfo[] {
   if (process.platform !== 'win32') return [];
   try {
-    const raw = execFileSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `$volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, FileSystemLabel, DriveType); ConvertTo-Json -InputObject $volumes -Compress`,
-      ],
-      { encoding: 'utf8', timeout: 15_000 },
-    );
+    const raw = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', LIST_VOLUMES_SCRIPT], {
+      encoding: 'utf8',
+      timeout: 15_000,
+    });
     return parseVolumesJson(raw);
+  } catch {
+    return [];
+  }
+}
+
+export async function listVolumesAsync(): Promise<VolumeInfo[]> {
+  if (process.platform !== 'win32') return [];
+  try {
+    const { stdout } = await promisify(execFile)(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', LIST_VOLUMES_SCRIPT],
+      { encoding: 'utf8', timeout: 15_000, windowsHide: true },
+    );
+    return parseVolumesJson(stdout);
   } catch {
     return [];
   }

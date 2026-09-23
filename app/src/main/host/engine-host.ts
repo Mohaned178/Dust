@@ -14,7 +14,7 @@ import {
   defaultRuleEnv,
   deleteUnprotectedPath,
   getVolumeUsage,
-  listVolumes,
+  listVolumesAsync,
   pruneSnapshotAfterCleanup,
   systemDriveRoot,
   volumeRootOf,
@@ -66,6 +66,7 @@ import { buildDashboardState } from './dashboard';
 import { instrument, instrumentAsync } from './instrument';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
+import { createVolumeCache } from './volumes';
 import {
   buildRowsFromSnapshot,
   buildRowsFromTree,
@@ -104,6 +105,7 @@ export interface EngineHostDeps {
   progressIntervalMs?: number;
   folderIntervalMs?: number;
   categoryIntervalMs?: number;
+  volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   getVolumeUsage?: (volumes: string[]) => VolumeUsage[];
   createSession?: (options: SessionOptions) => ScanSessionLike;
@@ -117,7 +119,7 @@ export interface EngineHostDeps {
 }
 
 export interface EngineHost {
-  getDashboard(): DashboardState;
+  getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
   startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
@@ -157,7 +159,8 @@ interface PendingPlan {
 
 export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const now = deps.now ?? Date.now;
-  const listVolumesFn = deps.listVolumes ?? listVolumes;
+  const volumeSource = deps.listVolumes ?? listVolumesAsync;
+  const volumes = createVolumeCache(() => Promise.resolve(volumeSource()), deps.volumesTtlMs ?? 30_000, now);
   const getVolumeUsageFn = deps.getVolumeUsage ?? getVolumeUsage;
   const env = deps.env ?? defaultRuleEnv();
   const systemRoot = deps.systemRoot ?? systemDriveRoot(env) ?? 'C:\\';
@@ -227,11 +230,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
   }
 
-  function getDashboard(): DashboardState {
-    const volumes = listVolumesFn();
-    const usage = getVolumeUsageFn(volumes.map((volume) => volume.root));
+  async function getDashboard(): Promise<DashboardState> {
+    const volumeList = await volumes.get();
+    const usage = getVolumeUsageFn(volumeList.map((volume) => volume.root));
     return buildDashboardState({
-      volumes,
+      volumes: volumeList,
       usage,
       snapshot: deps.store.load(),
       scan: lock.current(),
@@ -269,9 +272,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function targetedSource(root: string): Promise<PlanSource> {
     const probe = createNodeFsProbe();
+    const volumeList = await volumes.get();
     const rules = createRules(
       env,
-      { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
+      { pins: deps.store.getPins(), isExternal: createExternalPredicate(volumeList), now },
       { recycleBin: { enumerate: () => defaultRecycleBinEnumeration() } },
     );
     const actions = new Map(rules.map((rule) => [rule.id, rule.action.kind]));
@@ -484,12 +488,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
+    const volumeList =
+      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
-        : instrument('start.listVolumes', () =>
-            listVolumesFn().find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase()),
-          );
+        : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
     const targetRoot = target.root;
     if (!onSystemDrive(targetRoot)) {
@@ -593,7 +597,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         env,
         {
           pins: deps.store.getPins(),
-          isExternal: instrument('start.listVolumes', () => createExternalPredicate(listVolumesFn())),
+          isExternal: createExternalPredicate(volumeList),
           now,
         },
         {
@@ -648,12 +652,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function startBrowse(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
+    const volumeList =
+      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
-        : instrument('start.listVolumes', () =>
-            listVolumesFn().find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase()),
-          );
+        : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
     const targetRoot = target.root;
 
@@ -845,7 +849,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }> {
     const existing = instrument('finalize.store.load', () => deps.store.load());
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
-    const external = instrument('finalize.listVolumes', () => createExternalPredicate(listVolumesFn()));
+    const volumeList = await instrumentAsync('finalize.listVolumes', () => volumes.get());
+    const external = createExternalPredicate(volumeList);
     const pins = deps.store.getPins();
 
     const analysis = instrument('finalize.classifyProjects', () =>
@@ -885,7 +890,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
 
     const usage = instrument('finalize.volumes', () =>
-      getVolumeUsageFn(listVolumesFn().map((volume) => volume.root)),
+      getVolumeUsageFn(volumeList.map((volume) => volume.root)),
     );
     const snapshot = instrument('finalize.buildSnapshot', () =>
       buildSnapshot({
