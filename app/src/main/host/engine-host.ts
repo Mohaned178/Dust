@@ -249,7 +249,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       root: lastRun.root,
       scanAgeMs: Math.max(now() - lastRun.finishedAt, 0),
       rules: lastRun.rules,
-      ctx: { root: lastRun.root, tree: lastRun.tree, markers: lastRun.markers, probe: lastRun.probe },
+      ctx: {
+        root: lastRun.root,
+        tree: lastRun.tree,
+        markers: lastRun.markers,
+        probe: lastRun.probe,
+        projects: lastRun.projects,
+      },
     };
   }
 
