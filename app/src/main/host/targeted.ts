@@ -15,17 +15,17 @@ export function measurePath(path: string): FolderRecord | null {
   }
 }
 
-export function measureDirectories(
+export async function measureDirectories(
   paths: readonly string[],
-  measure: (path: string) => FolderRecord | null = measurePath,
-): AggregateTree {
+  measure: (path: string) => Promise<FolderRecord | null> | FolderRecord | null,
+): Promise<AggregateTree> {
   const tree = new AggregateTree();
   const seen = new Set<string>();
   for (const path of paths) {
     const key = path.replace(/[\\/]+$/, '').toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    const record = measure(path);
+    const record = await measure(path);
     if (record !== null) tree.addFolder(record);
   }
   return tree;

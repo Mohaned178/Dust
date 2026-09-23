@@ -1006,4 +1006,37 @@ describe('createEngineHost', () => {
       .map((event) => event.step);
     expect(steps).toEqual(['projects', 'rules', 'rows', 'snapshot']);
   });
+
+  it('streams quick-clean progress and cancels the targeted measurement', async () => {
+    let fake!: FakeSession;
+    const events: ScanEvent[] = [];
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+      createSession: (options) => (fake = new FakeSession(options)),
+    });
+    host.onEvent((event) => events.push(event));
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fake.options.onProgress?.({
+      filesScanned: 5,
+      bytesSeen: 10,
+      currentPath: join(tree.root, 'temp'),
+      dirsCompleted: 1,
+      errors: 0,
+    });
+    expect(events.some((event) => event.type === 'quick-clean-progress')).toBe(true);
+
+    const cancelled = host.cancelScan();
+    fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    expect(await cancelled).toBe(true);
+
+    const preview = await pending;
+    expect(preview).toMatchObject({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
 });

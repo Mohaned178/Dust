@@ -4,9 +4,9 @@ import { measureDirectories, measurePath } from '../src/main/host/targeted';
 import { TempTree } from './fixtures';
 
 describe('measureDirectories', () => {
-  it('measures unique directories, keeps order, and skips missing paths', () => {
+  it('measures unique directories, keeps order, and skips missing paths', async () => {
     const calls: string[] = [];
-    const tree = measureDirectories(['C:\\a', 'c:\\a', 'C:\\b'], (path) => {
+    const tree = await measureDirectories(['C:\\a', 'c:\\a', 'C:\\b'], (path) => {
       calls.push(path);
       if (path.toLowerCase() === 'c:\\b') return null;
       return {
@@ -26,6 +26,27 @@ describe('measureDirectories', () => {
     expect(tree.get('C:\\a')?.bytes).toBe(5);
     expect(tree.get('C:\\a')?.allocatedBytes).toBe(4096);
     expect(tree.get('C:\\b')).toBeUndefined();
+  });
+
+  it('awaits an async measure and skips duplicates', async () => {
+    const measured: string[] = [];
+    const tree = await measureDirectories(['C:\\A', 'C:\\a\\', 'C:\\B'], async (path) => {
+      measured.push(path);
+      return {
+        path,
+        bytes: 5,
+        allocatedBytes: 4096,
+        fileCount: 1,
+        folderCount: 0,
+        linkCount: 0,
+        newestMtimeMs: 0,
+        errorCount: 0,
+        partial: false,
+      };
+    });
+
+    expect(measured).toEqual(['C:\\A', 'C:\\B']);
+    expect(tree.size()).toBe(3);
   });
 });
 

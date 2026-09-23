@@ -297,11 +297,51 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       markers: [],
       probe,
     });
-    const tree = measureDirectories(
-      discovery
-        .filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin')
-        .map((match) => match.path),
+
+    const quickRunId = randomUUID();
+    const startedAt = now();
+    let cancelled = false;
+
+    const tree = await measureDirectories(
+      discovery.filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin').map((match) => match.path),
+      async (path) => {
+        const session = createSession({
+          root: path,
+          pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+          onProgress: (update) => {
+            emit({
+              type: 'quick-clean-progress',
+              progress: {
+                filesScanned: update.filesScanned,
+                bytesSeen: update.bytesSeen,
+                currentPath: update.currentPath,
+                dirsCompleted: update.dirsCompleted,
+                errors: update.errors,
+                elapsedMs: Math.max(now() - startedAt, 0),
+              },
+            });
+          },
+        });
+        let settle!: () => void;
+        const settled = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        active = { runId: quickRunId, session, settled };
+        try {
+          const result = await session.start();
+          if (result.status === 'cancelled') {
+            cancelled = true;
+            return null;
+          }
+          return result.tree.get(result.root) ?? null;
+        } finally {
+          active = null;
+          settle();
+        }
+      },
     );
+
+    if (cancelled) throw new Error('Quick clean cancelled');
     return { source: 'targeted', root, scanAgeMs: null, rules, ctx: { root, tree, markers: [], probe } };
   }
 

@@ -247,6 +247,7 @@ export type SetPinResult = { ok: true; pins: string[] } | { ok: false; message: 
 export type ScanEvent =
   | { type: 'started'; runId: string; root: string; startedAt: number }
   | { type: 'progress'; runId: string; progress: ScanProgressPayload }
+  | { type: 'quick-clean-progress'; progress: ScanProgressPayload }
   | { type: 'folders'; runId: string; folders: ResultRow[] }
   | { type: 'browse-folders'; runId: string; folders: BrowseRow[] }
   | {

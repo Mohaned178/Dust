@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CleanPreview, CleanReport, DustApi } from '../../../src/shared/ipc';
+import type { CleanPreview, CleanReport, DustApi, ScanProgressPayload } from '../../../src/shared/ipc';
 import { CleanPlan } from '../components/CleanPlan';
 import { CleanSummary } from '../components/CleanSummary';
 import { cleanErrorMessage, newCleanId } from '../clean';
+import { formatCount } from '../format';
 
 export interface QuickCleanViewProps {
   api: DustApi;
@@ -16,6 +17,7 @@ export function QuickCleanView({ api, onDone, onViewResults }: QuickCleanViewPro
   const [error, setError] = useState<string | null>(null);
   const [acknowledge, setAcknowledge] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ScanProgressPayload | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -35,6 +37,14 @@ export function QuickCleanView({ api, onDone, onViewResults }: QuickCleanViewPro
       active = false;
     };
   }, [api]);
+
+  useEffect(
+    () =>
+      api.onScanEvent((event) => {
+        if (event.type === 'quick-clean-progress') setProgress(event.progress);
+      }),
+    [api],
+  );
 
   const confirm = useCallback(async () => {
     if (preview === null) return;
@@ -73,7 +83,25 @@ export function QuickCleanView({ api, onDone, onViewResults }: QuickCleanViewPro
       {report !== null ? (
         <CleanSummary report={report} onDone={() => onViewResults(report.root)} doneLabel="View updated disk" />
       ) : preview === null ? (
-        error === null && <p className="text-sm text-neutral-400">Building the cleanup plan.</p>
+        error === null && (
+          <>
+            <p className="text-sm text-neutral-400">Building the cleanup plan.</p>
+            {progress !== null && (
+              <p className="mt-2 text-xs text-neutral-500">
+                {formatCount(progress.filesScanned)} files scanned · {progress.currentPath}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                void api.cancelScan().catch(() => {});
+              }}
+              className="mt-3 rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200"
+            >
+              Cancel
+            </button>
+          </>
+        )
       ) : (
         <CleanPlan
           preview={preview}
