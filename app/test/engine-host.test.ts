@@ -830,4 +830,124 @@ describe('createEngineHost', () => {
     if (!acknowledged.ok) return;
     expect(acknowledged.report.items[0]?.status).toBe('already-gone');
   });
+
+  it('keeps the recycle-bin rule off live ticks and runs it at finalize', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    let recycleCalls = 0;
+    const recycleRule: Rule = {
+      id: 'recycle-bin',
+      category: 'recycle-bin',
+      title: 'Recycle Bin',
+      action: { kind: 'empty-recycle-bin' },
+      match: () => {
+        recycleCalls += 1;
+        return [];
+      },
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [recycleRule],
+      createSession: (options) => (fake = new FakeSession(options)),
+      categoryIntervalMs: 1,
+    });
+
+    await host.startAnalyze(tree.root);
+    clock = 100;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'a'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(recycleCalls).toBe(0);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+    expect(recycleCalls).toBe(1);
+  });
+
+  it('runs live category ticks on the slower default interval', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    const events: ScanEvent[] = [];
+    const rule: Rule = {
+      id: 'fixture-temp',
+      category: 'temp',
+      title: 'Fixture temp',
+      action: { kind: 'delete-path' },
+      match: () => [],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [rule],
+      createSession: (options) => (fake = new FakeSession(options)),
+    });
+    host.onEvent((event) => events.push(event));
+
+    await host.startAnalyze(tree.root);
+    clock = 5_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'a'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(1);
+
+    clock = 9_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'b'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(1);
+
+    clock = 10_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'c'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(2);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+  });
 });

@@ -514,7 +514,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     });
 
     const folderIntervalMs = deps.folderIntervalMs ?? 100;
-    const categoryIntervalMs = deps.categoryIntervalMs ?? 2000;
+    const categoryIntervalMs = deps.categoryIntervalMs ?? 5000;
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
@@ -537,7 +537,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       if (stamp - lastCategoryRun < categoryIntervalMs) return;
       lastCategoryRun = stamp;
       categoryRunning = true;
-      const liveRules = rules.filter((rule) => rule.category !== 'npm-projects');
+      const liveRules = rules.filter((rule) => rule.category !== 'npm-projects' && rule.id !== 'recycle-bin');
       void collectRuleMatches(liveRules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
         .then((matches) => {
           if (liveEnded) return;

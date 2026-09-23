@@ -21,7 +21,24 @@ export function defaultRuleEnv(): RuleEnv {
   };
 }
 
+const expansionCache = new WeakMap<FsProbe, Map<string, string[]>>();
+
 export function expandProfileWildcard(base: string, pattern: string, probe: FsProbe): string[] {
+  let perProbe = expansionCache.get(probe);
+  if (perProbe === undefined) {
+    perProbe = new Map();
+    expansionCache.set(probe, perProbe);
+  }
+  const key = `${base}\u0000${pattern}`;
+  const cached = perProbe.get(key);
+  if (cached !== undefined) return cached;
+
+  const result = expandUncached(base, pattern, probe);
+  perProbe.set(key, result);
+  return result;
+}
+
+function expandUncached(base: string, pattern: string, probe: FsProbe): string[] {
   const segments = pattern.split(/[\\/]+/).filter((segment) => segment.length > 0);
   let candidates: string[] = [base];
 
