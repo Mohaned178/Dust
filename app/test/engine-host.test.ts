@@ -60,7 +60,7 @@ describe('createEngineHost', () => {
   });
 
   function volumeList(): VolumeInfo[] {
-    return [{ root: volumeRootOf(tree.root)!, label: 'Fixtures', driveType: 'fixed' }];
+    return [{ root: volumeRootOf(tree.root)!, label: 'Fixtures', driveType: 'fixed', mediaType: 'unknown' }];
   }
 
   it('runs a real scan end to end and persists the snapshot', async () => {
@@ -223,7 +223,7 @@ describe('createEngineHost', () => {
     const host = createEngineHost({
       store,
       pool: false,
-      listVolumes: () => [...volumeList(), { root: externalRoot, label: 'USB', driveType: 'removable' }],
+      listVolumes: () => [...volumeList(), { root: externalRoot, label: 'USB', driveType: 'removable', mediaType: 'unknown' }],
       getVolumeUsage: () => [],
       createRules: (_env, projects) => {
         captured.push(projects);

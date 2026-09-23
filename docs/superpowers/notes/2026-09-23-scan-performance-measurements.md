@@ -73,3 +73,58 @@ Volumes: C: = T-FORCE 256GB SATA SSD; F: and G: = WDC WD10EZEX 1TB HDD.
 Browse runs stream `browse-folders` rows only and finish with `browse-finished`; the
 main-process work is one aggregate tree merge plus one row build per folder (measured
 at 1.97 ms / 1.77 ms total for G:).
+
+## Cold HDD worker A/B (Task 10, F:\ root, rules disabled)
+
+F:\ is the file-dense HDD volume (397,169 files / 37,814 dirs in this run; G:\ has only ~63k
+files), so the controlled A/B ran against `F:\`. Before each run the standby cache was
+approximated as cold by reading 12 GB from the largest file on G:\ (`G:\Cyberpunk 2077 [DODI
+Repack]\data1.doi`, 64.6 GB). Exact commands, run back-to-back from `core/`:
+
+```bash
+node -e 'const fs=require("fs");const p=process.argv[1];const target=12*1024*1024*1024;const buf=Buffer.alloc(8*1024*1024);const fd=fs.openSync(p,"r");let total=0;while(total<target){const n=fs.readSync(fd,buf,0,buf.length,total);if(n<=0)break;total+=n;}fs.closeSync(fd);console.log(total);' "G:/Cyberpunk 2077 [DODI Repack]/data1.doi"
+npx tsx scripts/bench-scan.ts --root 'F:\' --workers 1
+# repeat the eviction, then --workers 2, then 4, then 8
+```
+
+Every run reported `status: complete`, 397,169 files, 37,814 folders, 5 errors and
+35,772,327,811 bytes.
+
+| Run | Root | Workers | Cache state (intended) | elapsedMs | files/s |
+|---|---|---|---|---|---|
+| 1 | F:\ | 1 | 12 GB eviction | 550,284 | 722 |
+| 2 | F:\ | 2 | 12 GB eviction | 355,715 | 1,117 |
+| 3 | F:\ | 4 | 12 GB eviction | 140,971 | 2,817 |
+| 4 | F:\ | 8 | 12 GB eviction | 37,284 | 10,653 |
+
+Confound checks (reverse order and stronger eviction, same commands):
+
+| Run | Workers | Eviction | elapsedMs | files/s |
+|---|---|---|---|---|
+| 5 | 8 | 12 GB | 17,832 | 22,273 |
+| 6 | 8 | 32 GB | 42,642 | 9,314 |
+
+Warm reference (no eviction, back-to-back, cache warm from run 6):
+
+| Workers | elapsedMs | files/s |
+|---|---|---|
+| 1 | 10,484 | 37,883 |
+| 2 | 6,685 | 59,412 |
+| 4 | 7,379 | 53,824 |
+| 8 | 3,731 | 106,451 |
+
+### Caveats
+
+- The cold curve is confounded by cache state, not a real worker-count effect. It is monotonic
+  in the direction that is physically impossible for a single 7200 rpm HDD (8 workers sustained
+  10.6k files/s cold, far above cold random-IOPS), and run 5 with 8 workers was *faster* than
+  run 4 despite the same eviction. Each run warms the NTFS metadata/directory cache and the
+  eviction does not undo it.
+- The 12 GB eviction is too weak: only 9.64 GB of the 16 GB RAM was free, so most of the read
+  lands in free pages instead of evicting F:\'s cached metadata; even a 32 GB read only slowed
+  workers=8 to 42.6 s, nowhere near the 550 s of run 1.
+- Run 1 (workers=1) is the only genuinely cold-ish point and is not comparable to runs 2-4.
+- A valid cold curve cannot be measured on this machine with this eviction method. Per the
+  controller ruling for a confounded curve, `HDD_WORKERS = 2`. This also matches the design
+  spec's "HDD -> 1-2 workers" guidance and avoids head-seek contention. The warm pass above was
+  fastest at 8 workers, but warm throughput is not the target for a spinning disk.

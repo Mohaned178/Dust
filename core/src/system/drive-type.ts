@@ -2,14 +2,25 @@ import { execFile, execFileSync } from 'node:child_process';
 import { normalize, parse } from 'node:path';
 import { promisify } from 'node:util';
 
-const LIST_VOLUMES_SCRIPT = `$volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, FileSystemLabel, DriveType); ConvertTo-Json -InputObject $volumes -Compress`;
+const LIST_VOLUMES_SCRIPT = `$parts = @(Get-Partition | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, DiskNumber);
+$disks = @{}; foreach ($disk in Get-PhysicalDisk) { $disks[[string]$disk.DeviceId] = $disk.MediaType }
+$volumes = @(Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object {
+  $root = "$($_.DriveLetter):\\";
+  $part = $parts | Where-Object { $_.root -eq $root } | Select-Object -First 1;
+  $media = if ($part) { $disks[[string]$part.DiskNumber] } else { $null };
+  [pscustomobject]@{ root = $root; FileSystemLabel = $_.FileSystemLabel; DriveType = $_.DriveType; MediaType = $media }
+});
+ConvertTo-Json -InputObject $volumes -Compress`;
 
 export type DriveType = 'fixed' | 'removable' | 'network' | 'cdrom' | 'ram' | 'unknown';
+
+export type MediaType = 'ssd' | 'hdd' | 'unknown';
 
 export interface VolumeInfo {
   root: string;
   label: string | null;
   driveType: DriveType;
+  mediaType: MediaType;
 }
 
 export function mapDriveType(raw: unknown): DriveType {
@@ -26,6 +37,18 @@ export function mapDriveType(raw: unknown): DriveType {
       return 'cdrom';
     case 'ram':
       return 'ram';
+    default:
+      return 'unknown';
+  }
+}
+
+export function mapMediaType(raw: unknown): MediaType {
+  if (typeof raw !== 'string') return 'unknown';
+  switch (raw.trim().toLowerCase()) {
+    case 'ssd':
+      return 'ssd';
+    case 'hdd':
+      return 'hdd';
     default:
       return 'unknown';
   }
@@ -49,7 +72,12 @@ export function parseVolumesJson(raw: string): VolumeInfo[] {
       typeof record.FileSystemLabel === 'string' && record.FileSystemLabel.length > 0
         ? record.FileSystemLabel
         : null;
-    volumes.push({ root: `${root.slice(0, 1).toUpperCase()}:\\`, label, driveType: mapDriveType(record.DriveType) });
+    volumes.push({
+      root: `${root.slice(0, 1).toUpperCase()}:\\`,
+      label,
+      driveType: mapDriveType(record.DriveType),
+      mediaType: mapMediaType(record.MediaType),
+    });
   }
   return volumes;
 }

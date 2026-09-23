@@ -21,8 +21,8 @@ function snapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 }
 
 const volumes: VolumeInfo[] = [
-  { root: 'C:\\', label: 'System', driveType: 'fixed' },
-  { root: 'E:\\', label: null, driveType: 'removable' },
+  { root: 'C:\\', label: 'System', driveType: 'fixed', mediaType: 'unknown' },
+  { root: 'E:\\', label: null, driveType: 'removable', mediaType: 'unknown' },
 ];
 
 const usage = [

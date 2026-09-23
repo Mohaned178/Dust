@@ -12,6 +12,7 @@ import {
   createNodeFsProbe,
   defaultRecycleBinEnumeration,
   defaultRuleEnv,
+  defaultWorkersForVolume,
   deleteUnprotectedPath,
   getVolumeUsage,
   listVolumesAsync,
@@ -177,6 +178,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   function yieldToEventLoop(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function poolForVolume(volume: VolumeInfo): SessionOptions['pool'] {
+    if (deps.pool !== undefined) return deps.pool;
+    if (!deps.workerPath) return false;
+    return { workerPath: deps.workerPath, workers: defaultWorkersForVolume(volume.mediaType) };
   }
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
@@ -680,7 +687,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       );
       session = createSession({
         root: volume,
-        pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        pool: poolForVolume(target),
         tree: liveTree,
         onFolder: onLiveFolder,
         onMarker: (marker) => liveMarkers.push(marker),
@@ -779,7 +786,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     try {
       session = createSession({
         root: volume,
-        pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        pool: poolForVolume(target),
         tree: liveTree,
         onFolder: onLiveFolder,
         onProgress: (update) => {

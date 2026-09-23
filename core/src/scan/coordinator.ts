@@ -64,6 +64,7 @@ export class ScanCoordinator {
   // directory - a small fraction of the accumulator it replaces.
   private readonly finalizedPaths = new Set<string>();
   private readonly queue: Task[] = [];
+  private queueHead = 0;
   private readonly idle: number[] = [];
   private readonly inflight = new Map<number, Task>();
   private readonly transports = new Map<number, WorkerTransport>();
@@ -176,24 +177,35 @@ export class ScanCoordinator {
     this.tryFinalize(open.path);
   }
 
+  private takeNext(): Task | undefined {
+    const task = this.queue[this.queueHead];
+    if (task === undefined) return undefined;
+    this.queueHead += 1;
+    if (this.queueHead > 64 && this.queueHead * 2 > this.queue.length) {
+      this.queue.splice(0, this.queueHead);
+      this.queueHead = 0;
+    }
+    return task;
+  }
+
   private assign(workerId: number): void {
-    const task = this.queue.shift();
+    const task = this.takeNext();
     if (task) {
       this.inflight.set(workerId, task);
       this.send(workerId, { type: 'task', path: task.path, isRoot: task.isRoot });
       return;
     }
     if (!this.idle.includes(workerId)) this.idle.push(workerId);
-    if (this.queue.length === 0 && this.inflight.size === 0) {
+    if (this.queueHead >= this.queue.length && this.inflight.size === 0) {
       this.stopAll();
     }
   }
 
   private enqueue(task: Task): void {
     this.queue.push(task);
-    while (this.queue.length > 0 && this.idle.length > 0) {
+    while (this.queueHead < this.queue.length && this.idle.length > 0) {
       const workerId = this.idle.shift()!;
-      const next = this.queue.shift()!;
+      const next = this.takeNext()!;
       this.inflight.set(workerId, next);
       this.send(workerId, { type: 'task', path: next.path, isRoot: next.isRoot });
     }
@@ -357,7 +369,14 @@ export class ScanCoordinator {
 
     if (restarts < 1) {
       this.restarts.set(workerId, restarts + 1);
-      if (task) this.queue.unshift(task);
+      if (task) {
+        if (this.queueHead > 0) {
+          this.queueHead -= 1;
+          this.queue[this.queueHead] = task;
+        } else {
+          this.queue.unshift(task);
+        }
+      }
       this.spawn(workerId);
       return;
     }
@@ -371,7 +390,7 @@ export class ScanCoordinator {
       this.tryFinalize(task.path);
     }
 
-    if (this.transports.size === 0 || (this.queue.length === 0 && this.inflight.size === 0)) {
+    if (this.transports.size === 0 || (this.queueHead >= this.queue.length && this.inflight.size === 0)) {
       if (!this.aborted && !this.rootRecord) this.forceFinalize(this.options.root);
       this.stopAll();
     }

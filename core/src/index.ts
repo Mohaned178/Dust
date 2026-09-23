@@ -8,7 +8,7 @@ export type { ExclusionConfig } from './scanner/exclusions';
 export { ScanSession } from './scanner/session';
 export type { PoolOptions, ScanResult, SessionOptions } from './scanner/session';
 export type { PoolLimits } from './scan/protocol';
-export { defaultWorkerCount, DEFAULT_POOL_LIMITS } from './scan/limits';
+export { defaultWorkerCount, defaultWorkersForVolume, DEFAULT_POOL_LIMITS, HDD_WORKERS } from './scan/limits';
 export { scanTree } from './scanner/scanner';
 export type { ScanConfig, ScanStats } from './scanner/scanner';
 export { buildPlan } from './cleaner/plan';

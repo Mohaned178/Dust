@@ -2,7 +2,7 @@ import type { VolumeInfo } from '@dust/core';
 import { describe, expect, it, vi } from 'vitest';
 import { createVolumeCache } from '../src/main/host/volumes';
 
-const volumes: VolumeInfo[] = [{ root: 'C:\\', label: 'System', driveType: 'fixed' }];
+const volumes: VolumeInfo[] = [{ root: 'C:\\', label: 'System', driveType: 'fixed', mediaType: 'unknown' }];
 
 describe('createVolumeCache', () => {
   it('loads once within the TTL', async () => {

@@ -43,8 +43,8 @@ describe('system-drive policy', () => {
 
   function volumes(): VolumeInfo[] {
     return [
-      { root: SYSTEM, label: 'System', driveType: 'fixed' },
-      { root: DATA, label: 'Data', driveType: 'fixed' },
+      { root: SYSTEM, label: 'System', driveType: 'fixed', mediaType: 'unknown' },
+      { root: DATA, label: 'Data', driveType: 'fixed', mediaType: 'unknown' },
     ];
   }
 

@@ -30,20 +30,31 @@ describe('parseVolumesJson', () => {
       ]),
     );
     expect(volumes).toEqual([
-      { root: 'C:\\', label: 'System', driveType: 'fixed' },
-      { root: 'E:\\', label: null, driveType: 'removable' },
+      { root: 'C:\\', label: 'System', driveType: 'fixed', mediaType: 'unknown' },
+      { root: 'E:\\', label: null, driveType: 'removable', mediaType: 'unknown' },
     ]);
   });
 
   it('parses the single-object form', () => {
     expect(parseVolumesJson(JSON.stringify({ root: 'D:\\', FileSystemLabel: null, DriveType: 'Network' }))).toEqual([
-      { root: 'D:\\', label: null, driveType: 'network' },
+      { root: 'D:\\', label: null, driveType: 'network', mediaType: 'unknown' },
     ]);
   });
 
   it('returns nothing for garbage or malformed entries', () => {
     expect(parseVolumesJson('{oops')).toEqual([]);
     expect(parseVolumesJson(JSON.stringify([{ root: 'not-a-root' }, null, 'x']))).toEqual([]);
+  });
+
+  it('maps media types to ssd, hdd, or unknown', () => {
+    const volumes = parseVolumesJson(
+      JSON.stringify([
+        { root: 'C:\\', FileSystemLabel: 'System', DriveType: 'Fixed', MediaType: 'SSD' },
+        { root: 'F:\\', FileSystemLabel: 'Data', DriveType: 'Fixed', MediaType: 'HDD' },
+        { root: 'E:\\', FileSystemLabel: '', DriveType: 'Removable', MediaType: 'Unspecified' },
+      ]),
+    );
+    expect(volumes.map((volume) => volume.mediaType)).toEqual(['ssd', 'hdd', 'unknown']);
   });
 });
 
@@ -90,10 +101,10 @@ describe('systemDriveRoot', () => {
 
 describe('createExternalPredicate', () => {
   const volumes = [
-    { root: 'C:\\', label: null, driveType: 'fixed' as const },
-    { root: 'E:\\', label: null, driveType: 'removable' as const },
-    { root: 'N:\\', label: null, driveType: 'network' as const },
-    { root: 'X:\\', label: null, driveType: 'unknown' as const },
+    { root: 'C:\\', label: null, driveType: 'fixed' as const, mediaType: 'unknown' as const },
+    { root: 'E:\\', label: null, driveType: 'removable' as const, mediaType: 'unknown' as const },
+    { root: 'N:\\', label: null, driveType: 'network' as const, mediaType: 'unknown' as const },
+    { root: 'X:\\', label: null, driveType: 'unknown' as const, mediaType: 'unknown' as const },
   ];
   const isExternal = createExternalPredicate(volumes);
 
@@ -124,6 +135,7 @@ describe('listVolumes', () => {
     for (const volume of volumes) {
       expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
       expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
+      expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
     }
   });
 });
@@ -139,6 +151,7 @@ describe('listVolumesAsync', () => {
     for (const volume of volumes) {
       expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
       expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
+      expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
     }
   });
 });
