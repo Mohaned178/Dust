@@ -1,6 +1,7 @@
 import type { Dirent, Stats } from 'node:fs';
 import type { AggregateTree } from '../model/tree';
 import type { Marker } from '../model/types';
+import type { ProjectRecord } from '../projects/types';
 
 export type CategoryId = 'temp' | 'recycle-bin' | 'npm-cache' | 'app-caches' | 'npm-projects';
 
@@ -34,6 +35,7 @@ export interface RuleContext {
   tree: AggregateTree;
   markers: Marker[];
   probe: FsProbe;
+  projects?: ProjectRecord[];
 }
 
 export interface Rule {

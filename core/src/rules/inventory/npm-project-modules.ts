@@ -10,16 +10,18 @@ export function npmProjectModulesRule(options: ProjectOptions = {}): Rule {
     action: { kind: 'delete-path' },
     match(ctx: RuleContext): RuleMatch[] {
       const now = (options.now ?? Date.now)();
-      const analysis = classifyProjects({
-        root: ctx.root,
-        tree: ctx.tree,
-        markers: ctx.markers,
-        probe: ctx.probe,
-        ...options,
-      });
+      const projects =
+        ctx.projects ??
+        classifyProjects({
+          root: ctx.root,
+          tree: ctx.tree,
+          markers: ctx.markers,
+          probe: ctx.probe,
+          ...options,
+        }).projects;
 
       const matches: RuleMatch[] = [];
-      for (const project of analysis.projects) {
+      for (const project of projects) {
         if (!project.offered) continue;
         for (const location of project.nodeModules.paths) {
           matches.push({

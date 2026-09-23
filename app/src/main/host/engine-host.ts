@@ -864,7 +864,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         now,
       }),
     );
-    const ctx: RuleContext = { root: result.root, tree: result.tree, markers: result.markers, probe };
+    const ctx: RuleContext = {
+      root: result.root,
+      tree: result.tree,
+      markers: result.markers,
+      probe,
+      projects: analysis.projects,
+    };
     const matches = await instrumentAsync('finalize.collectRuleMatches', () => collectRuleMatches(rules, ctx));
     const ruleCategories = instrument('finalize.categories', () => aggregateCategories(matches));
     const categories = instrument('finalize.categories', () => summarizeCategories(ruleCategories));
