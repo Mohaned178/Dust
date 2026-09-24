@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { IPC } from '../shared/ipc';
 import type { CleanExecuteRequest, CleanPreviewRequest, ScanEvent } from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
@@ -16,19 +17,47 @@ export interface ShellActions {
   relaunchElevated(): Promise<void>;
 }
 
+const timingEnabled = process.env.DUST_TIMING === '1';
+let timingLogPath: string | null = null;
+
+export function setTimingLogPath(path: string): void {
+  timingLogPath = path;
+}
+
+function timed<T>(name: string, fn: () => T): T {
+  if (!timingEnabled) return fn();
+  const startedAt = performance.now();
+  try {
+    return fn();
+  } finally {
+    const line = `[dust:timing] ${name} ${(performance.now() - startedAt).toFixed(1)}ms\n`;
+    if (timingLogPath !== null) {
+      try {
+        appendFileSync(timingLogPath, line);
+      } catch {
+        /* timing must never break the app */
+      }
+    } else {
+      console.log(line.trimEnd());
+    }
+  }
+}
+
 export function registerIpcHandlers(
   registrar: IpcRegistrar,
   host: EngineHost,
   sender: EventSender,
   shell: ShellActions,
 ): () => void {
-  registrar.handle(IPC.dashboardGet, () => host.getDashboard());
+  registrar.handle(IPC.dashboardGet, () => timed('dashboardGet', () => host.getDashboard()));
   registrar.handle(IPC.scanStart, (_event, volume) => host.startAnalyze(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.scanCancel, () => host.cancelScan());
-  registrar.handle(IPC.resultsGet, (_event, root) => host.getResults(typeof root === 'string' ? root : ''));
+  registrar.handle(IPC.resultsGet, (_event, root) =>
+    timed('resultsGet', () => host.getResults(typeof root === 'string' ? root : '')),
+  );
   registrar.handle(IPC.browseStart, (_event, volume) => host.startBrowse(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.browseResultsGet, (_event, root) =>
-    host.getBrowseResults(typeof root === 'string' ? root : ''),
+    timed('browseResultsGet', () => host.getBrowseResults(typeof root === 'string' ? root : '')),
   );
   registrar.handle(IPC.browseDelete, (_event, path) => host.deleteBrowsePath(typeof path === 'string' ? path : ''));
   registrar.handle(IPC.revealPath, (_event, path) => shell.revealPath(typeof path === 'string' ? path : ''));
@@ -39,7 +68,9 @@ export function registerIpcHandlers(
       : host.previewClean(parsed);
   });
   registrar.handle(IPC.cleanExecute, (_event, request) => host.executeClean(parseCleanExecuteRequest(request)));
-  registrar.handle(IPC.devCleanupGet, (_event, root) => host.getDevCleanup(typeof root === 'string' ? root : ''));
+  registrar.handle(IPC.devCleanupGet, (_event, root) =>
+    timed('devCleanupGet', () => host.getDevCleanup(typeof root === 'string' ? root : '')),
+  );
   registrar.handle(IPC.pinsSet, (_event, path, pinned) =>
     host.setPin(typeof path === 'string' ? path : '', pinned === true),
   );

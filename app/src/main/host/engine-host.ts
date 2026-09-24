@@ -200,6 +200,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   } | null = null;
 
   let recentlyCleaned: RecentlyCleanedProject[] = [];
+  const snapshotResultsCache = new WeakMap<SnapshotData, ResultsState>();
   const pendingPlans = new Map<string, PendingPlan>();
   const cleaner =
     deps.createCleaner?.() ??
@@ -236,6 +237,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       snapshot: deps.store.load(),
       scan: lock.current(),
       systemRoot,
+      live:
+        lastResults !== null
+          ? {
+              root: lastResults.root,
+              finishedAt: lastResults.finishedAt,
+              reclaimableBytes: lastResults.categories.reduce((sum, row) => sum + row.bytes, 0),
+            }
+          : null,
     });
   }
 
@@ -950,7 +959,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     const loaded = deps.store.load();
     if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, requestedRoot)) {
-      return {
+      const cached = snapshotResultsCache.get(loaded.snapshot);
+      if (cached !== undefined) return cached;
+      const state: ResultsState = {
         source: 'snapshot',
         root: loaded.snapshot.root,
         finishedAt: loaded.snapshot.finishedAt,
@@ -960,6 +971,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         categories: summarizeCategories(loaded.snapshot.categories),
         rows: buildRowsFromSnapshot(loaded.snapshot, guard),
       };
+      snapshotResultsCache.set(loaded.snapshot, state);
+      return state;
     }
 
     return {

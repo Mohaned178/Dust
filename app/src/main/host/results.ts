@@ -1,6 +1,6 @@
 import { basename, dirname } from 'node:path';
 import { createDisplayGrader } from '@dust/core';
-import type { AggregateTree, CategoryId, DisplayGradeReason, SnapshotData } from '@dust/core';
+import type { AggregateTree, CategoryId, DisplayGradeReason, SnapshotData, SnapshotFolder } from '@dust/core';
 import { CATEGORY_LABELS, CATEGORY_ORDER, isCategoryId } from '../../shared/categories';
 import type { BrowseRow, CategorySummaryRow, ResultAction, ResultMatch, ResultRow } from '../../shared/ipc';
 
@@ -133,7 +133,8 @@ export function buildRowsFromTree(
 }
 
 export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv): ResultRow[] {
-  const foldersByPath = new Set(snapshot.folders.map((folder) => pathKey(folder.path)));
+  const folderByKey = new Map<string, SnapshotFolder>();
+  for (const folder of snapshot.folders) folderByKey.set(pathKey(folder.path), folder);
   const actions = new Map<string, ResultAction>();
   for (const match of snapshot.matches) {
     if (!isCategoryId(match.category)) continue;
@@ -145,16 +146,46 @@ export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv):
     });
   }
 
+  const rootKey = pathKey(snapshot.root);
+  const parentCache = new Map<string, string | null>();
+  const nearestParent = (path: string): string | null => {
+    const key = pathKey(path);
+    const memo = parentCache.get(key);
+    if (memo !== undefined) return memo;
+    let current = dirname(path);
+    let result: string | null = null;
+    while (current.length > 0) {
+      const currentKey = pathKey(current);
+      const folder = folderByKey.get(currentKey);
+      if (folder !== undefined) {
+        result = folder.path;
+        break;
+      }
+      const cachedAncestor = parentCache.get(currentKey);
+      if (cachedAncestor !== undefined) {
+        result = cachedAncestor;
+        break;
+      }
+      if (currentKey === rootKey) break;
+      const next = dirname(current);
+      if (next === current) break;
+      current = next;
+    }
+    parentCache.set(key, result);
+    return result;
+  };
+
   return snapshot.folders.map((folder) => {
-    const isRoot = sameRoot(folder.path, snapshot.root);
+    const key = pathKey(folder.path);
+    const isRoot = key === rootKey;
     return toResultRow(
       { ...folder, linkCount: 0 },
       {
         root: snapshot.root,
         complete: folder.complete,
         childCount: folder.childCount,
-        action: actions.get(pathKey(folder.path)) ?? null,
-        parent: isRoot ? null : nearestIncludedParent(folder.path, snapshot.root, foldersByPath),
+        action: actions.get(key) ?? null,
+        parent: isRoot ? null : nearestParent(folder.path),
         env,
       },
     );
@@ -186,18 +217,6 @@ export function summarizeCategories(
     (category) =>
       byCategory.get(category) ?? { category, label: CATEGORY_LABELS[category], bytes: 0, items: 0, ruleIds: [] },
   );
-}
-
-function nearestIncludedParent(path: string, root: string, folders: Set<string>): string | null {
-  let current = dirname(path);
-  while (current.length > 0) {
-    if (folders.has(pathKey(current))) return current;
-    if (sameRoot(current, root)) return null;
-    const next = dirname(current);
-    if (next === current) return null;
-    current = next;
-  }
-  return null;
 }
 
 export function pathKey(path: string): string {

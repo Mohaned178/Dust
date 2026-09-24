@@ -1,4 +1,4 @@
-import { SnapshotStore } from '@dust/core';
+import { SnapshotStore, getVolumeUsage, listVolumes } from '@dust/core';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildElevationCommand } from './elevation';
 import type { IpcRegistrar } from './ipc';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, setTimingLogPath } from './ipc';
 import type { EngineHost } from './host/engine-host';
 import { createEngineHost } from './host/engine-host';
 import { reportSamples } from './host/instrument';
@@ -37,6 +37,38 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
     await window.loadURL(devServer);
   } else {
     await window.loadFile(join(__dirname, '..', 'renderer', 'index.html'));
+  }
+}
+
+async function runAutoNav(window: BrowserWindow): Promise<void> {
+  const click = (match: string): Promise<boolean> =>
+    window.webContents.executeJavaScript(
+      `(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(
+        match,
+      )})); if (b) { b.click(); return true; } return false; })()`,
+    );
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+  const clickAndWait = async (match: string, ready: string): Promise<void> => {
+    const startedAt = Date.now();
+    const clicked = await click(match);
+    let readyAt = -1;
+    for (let i = 0; i < 200; i += 1) {
+      if (await window.webContents.executeJavaScript(ready)) {
+        readyAt = Date.now();
+        break;
+      }
+      await wait(25);
+    }
+    console.log(
+      `[dust:timing] click "${match}" clicked=${clicked} ready=${readyAt < 0 ? 'timeout' : `${readyAt - startedAt}ms`}`,
+    );
+  };
+  await wait(3000);
+  for (let i = 0; i < 3; i += 1) {
+    await clickAndWait('View results', '!!document.querySelector(\'section[aria-label="Reclaimable summary"]\')');
+    await wait(1500);
+    await clickAndWait('Back to dashboard', '!!document.querySelector("main.dust-dashboard h1")');
+    await wait(1500);
   }
 }
 
@@ -140,6 +172,9 @@ void app.whenReady().then(async () => {
     app.setPath('userData', join(tmpdir(), 'dust-bench-userdata'));
   }
   const store = new SnapshotStore(createStorePaths(app.getPath('userData')));
+  if (process.env.DUST_TIMING === '1') {
+    setTimingLogPath(join(app.getPath('userData'), 'perf.log'));
+  }
   const host = createEngineHost({ store, workerPath: resolveWorkerPath(__dirname) });
   const window = createMainWindow(benchRoot === undefined);
 
@@ -176,7 +211,14 @@ void app.whenReady().then(async () => {
 
   window.once('ready-to-show', () => window.show());
   app.on('before-quit', () => host.dispose());
+  try {
+    const volumes = listVolumes();
+    getVolumeUsage(volumes.map((volume) => volume.root));
+  } catch {
+    /* volume warm-up is best effort */
+  }
   await loadRenderer(window);
+  if (process.env.DUST_AUTO === '1') await runAutoNav(window);
   if (benchRoot) await runBench(host, window, benchRoot);
 }).catch((error: unknown) => {
   console.error('Dust failed to start', error);

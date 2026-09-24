@@ -297,6 +297,7 @@ export interface DashboardVolumeCard {
   lastAnalyzedAt: number | null;
   lastCleanedAt: number | null;
   reclaimableBytes: number | null;
+  sessionOnly?: boolean;
 }
 
 export interface DashboardSnapshotInfo {

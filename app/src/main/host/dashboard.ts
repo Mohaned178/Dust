@@ -2,34 +2,62 @@ import { RULES_VERSION, volumeRootOf } from '@dust/core';
 import type { SnapshotLoadResult, VolumeInfo, VolumeUsage } from '@dust/core';
 import type { DashboardSnapshotInfo, DashboardState, DashboardVolumeCard, ScanState } from '../../shared/ipc';
 
+export interface DashboardLiveResult {
+  root: string;
+  finishedAt: number;
+  reclaimableBytes: number;
+}
+
 export interface DashboardInput {
   volumes: VolumeInfo[];
   usage: VolumeUsage[];
   snapshot: SnapshotLoadResult;
   scan: ScanState | null;
   systemRoot: string;
+  live?: DashboardLiveResult | null;
 }
 
 export function buildDashboardState(input: DashboardInput): DashboardState {
   const snapshot = input.snapshot.kind === 'ok' ? input.snapshot.snapshot : null;
   const snapshotVolume = snapshot ? volumeRootOf(snapshot.root) : null;
+  const live = input.live ?? null;
+  const liveVolume = live ? volumeRootOf(live.root) : null;
   const systemVolume = input.systemRoot.toLowerCase();
   const usageByVolume = new Map(input.usage.map((entry) => [entry.volume.toLowerCase(), entry]));
 
   const volumes: DashboardVolumeCard[] = input.volumes.map((volume) => {
     const usage = usageByVolume.get(volume.root.toLowerCase());
-    const analyzed = snapshotVolume !== null && snapshotVolume.toLowerCase() === volume.root.toLowerCase();
+    const root = volume.root.toLowerCase();
+    const liveMatch = liveVolume !== null && liveVolume.toLowerCase() === root;
+    const snapshotMatch =
+      !liveMatch && snapshotVolume !== null && snapshotVolume.toLowerCase() === root;
+
+    let lastAnalyzedAt: number | null = null;
+    let lastCleanedAt: number | null = null;
+    let reclaimableBytes: number | null = null;
+    let sessionOnly = false;
+    if (liveMatch && live !== null) {
+      lastAnalyzedAt = live.finishedAt;
+      reclaimableBytes = live.reclaimableBytes;
+      sessionOnly = true;
+    } else if (snapshotMatch && snapshot !== null) {
+      lastAnalyzedAt = snapshot.finishedAt;
+      lastCleanedAt = snapshot.cleanedAt;
+      reclaimableBytes = sumBytes(snapshot.categories);
+    }
+
     return {
       root: volume.root,
       label: volume.label,
       driveType: volume.driveType,
-      role: volume.root.toLowerCase() === systemVolume ? 'system' : 'browse',
+      role: root === systemVolume ? 'system' : 'browse',
       external: volume.driveType === 'removable' || volume.driveType === 'network',
       totalBytes: usage?.totalBytes ?? null,
       freeBytes: usage?.freeBytes ?? null,
-      lastAnalyzedAt: analyzed && snapshot ? snapshot.finishedAt : null,
-      lastCleanedAt: analyzed && snapshot ? snapshot.cleanedAt : null,
-      reclaimableBytes: analyzed && snapshot ? sumBytes(snapshot.categories) : null,
+      lastAnalyzedAt,
+      lastCleanedAt,
+      reclaimableBytes,
+      sessionOnly,
     };
   });
 
