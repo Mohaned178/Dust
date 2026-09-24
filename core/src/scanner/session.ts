@@ -22,6 +22,7 @@ export interface PoolOptions {
 
 export interface SessionOptions {
   root: string;
+  tree?: AggregateTree;
   enumerator?: Enumerator;
   exclusions?: ExclusionConfig;
   pool?: false | PoolOptions;
@@ -57,7 +58,7 @@ export class ScanSession {
 
   async start(): Promise<ScanResult> {
     const startedAt = Date.now();
-    const tree = new AggregateTree();
+    const tree = this.options.tree ?? new AggregateTree();
     const isExcluded = createExclusionPredicate(this.options.exclusions);
     const root = normalizeRoot(this.options.root);
     const clusterSize = this.options.clusterSize ?? volumeClusterSize(root);

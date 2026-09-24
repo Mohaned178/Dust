@@ -39,7 +39,7 @@ class FakeTransport implements WorkerTransport {
 
 const ROOT = 'F:\\synthetic';
 
-function open(path: string, isRoot: boolean, childDirs: string[] = []): DirOpen {
+function open(path: string, isRoot: boolean, childDirs: string[] = [], overrides: Partial<DirOpen> = {}): DirOpen {
   return {
     path,
     isRoot,
@@ -51,6 +51,7 @@ function open(path: string, isRoot: boolean, childDirs: string[] = []): DirOpen 
     newestMtimeMs: 0,
     partial: false,
     childDirs,
+    ...overrides,
   };
 }
 
@@ -163,6 +164,98 @@ describe('ScanCoordinator failure handling', () => {
     expect(result.aborted).toBe(true);
     expect(result.rootRecord.path).toBe(ROOT);
     expect(result.rootRecord.partial).toBe(true);
+  }, 5_000);
+
+  it('does not double-count a finalized directory re-delivered after a restart', async () => {
+    const h = makeHarness(1);
+    const run = h.coordinator.run();
+    const first = h.transports[0]!;
+    first.emit({ type: 'ready' });
+    // Leaf 'a' finalizes and is released well before the crash.
+    first.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        markers: [],
+        submits: [],
+        progress: null,
+      },
+    });
+    first.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')], { directBytes: 1 })],
+        markers: [],
+        submits: [join(ROOT, 'b')],
+        progress: null,
+      },
+    });
+    first.exit(1);
+
+    const replacement = h.transports[1]!;
+    replacement.emit({ type: 'ready' });
+    // The replacement re-walks the crashed task and re-delivers the finalized leaf.
+    replacement.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        markers: [],
+        submits: [],
+        progress: null,
+      },
+    });
+    replacement.emit({ type: 'ready' });
+    replacement.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(join(ROOT, 'b'), false, [], { directBytes: 3, directAllocatedBytes: 4096, directFileCount: 1 })],
+        markers: [],
+        submits: [],
+        progress: null,
+      },
+    });
+
+    const result = await run;
+    expect(result.rootRecord.bytes).toBe(11);
+    expect(result.rootRecord.partial).toBe(false);
+    expect(h.folders.filter((record) => record.path === join(ROOT, 'a'))).toHaveLength(1);
+  }, 5_000);
+
+  it('does not resurrect a finalized directory when a task crashes twice', async () => {
+    const h = makeHarness(1);
+    const run = h.coordinator.run();
+    const first = h.transports[0]!;
+    first.emit({ type: 'ready' });
+    first.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')], { directBytes: 1 })],
+        markers: [],
+        submits: [join(ROOT, 'a'), join(ROOT, 'b')],
+        progress: null,
+      },
+    });
+    first.emit({ type: 'ready' });
+    // Leaf 'a' finalizes and is released, then the worker dies before ready.
+    first.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        markers: [],
+        submits: [],
+        progress: null,
+      },
+    });
+    first.exit(1);
+
+    const replacement = h.transports[1]!;
+    replacement.emit({ type: 'ready' });
+    replacement.exit(1);
+
+    const result = await run;
+    // 'b' was never opened, so only the root's own byte and the finalized leaf count.
+    expect(result.rootRecord.bytes).toBe(8);
+    expect(h.folders.filter((record) => record.path === join(ROOT, 'a'))).toHaveLength(1);
   }, 5_000);
 
   it('resolves with a partial root record when the root task crashes twice with no dir-open', async () => {

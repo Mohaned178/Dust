@@ -40,7 +40,7 @@ describe('registerIpcHandlers', () => {
       store,
       pool: false,
       systemRoot: 'T:\\',
-      listVolumes: () => [{ root: 'T:\\', label: 'Test', driveType: 'fixed' }],
+      listVolumes: () => [{ root: 'T:\\', label: 'Test', driveType: 'fixed', mediaType: 'unknown' }],
       getVolumeUsage: () => [{ volume: 'T:\\', label: 'Test', totalBytes: 1000, freeBytes: 400 }],
       createRules: () => [],
       createSession: () => session,

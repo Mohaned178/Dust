@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { SnapshotCorruptError, parseSnapshot } from './schema';
 import type { SnapshotData } from './schema';
@@ -63,6 +64,19 @@ export class SnapshotStore {
       const tmp = `${this.paths.snapshotPath}.tmp`;
       writeFileSync(tmp, JSON.stringify(snapshot));
       renameSync(tmp, this.paths.snapshotPath);
+      this.cache = null;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+  }
+
+  async saveAsync(snapshot: SnapshotData): Promise<SaveResult> {
+    try {
+      await mkdir(dirname(this.paths.snapshotPath), { recursive: true });
+      const tmp = `${this.paths.snapshotPath}.tmp`;
+      await writeFile(tmp, JSON.stringify(snapshot));
+      await rename(tmp, this.paths.snapshotPath);
       this.cache = null;
       return { ok: true };
     } catch (error) {

@@ -69,6 +69,7 @@ export function ScanView({
   const failed = current?.type === 'failed' ? current : null;
   const progress = current?.type === 'progress' ? current.progress : lastProgress;
   const finalizing = current?.type === 'finalizing';
+  const finalizeStep = current?.type === 'finalize-progress' ? current.step : null;
   const active = done === null && failed === null;
 
   const trayCategory = browse ? null : categoryFilter;
@@ -194,7 +195,7 @@ export function ScanView({
                 type="button"
                 aria-label="Cancel scan"
                 autoFocus
-                disabled={finalizing}
+                disabled={finalizing || finalizeStep !== null}
                 onClick={() => void cancel()}
                 className={OUTLINE_BUTTON}
               >
@@ -209,7 +210,11 @@ export function ScanView({
               <div className="min-h-[5.25rem]">
                 <PathLog lines={pathLines} />
               </div>
-              {finalizing && <p className="mt-4 text-sm text-ink-muted">Analyzing results…</p>}
+              {(finalizing || finalizeStep !== null) && (
+                <p className="mt-4 text-sm text-ink-muted">
+                  Analyzing results…{finalizeStep !== null ? ` (${finalizeStep})` : ''}
+                </p>
+              )}
             </section>
 
             <div className="mt-5">

@@ -213,6 +213,7 @@ describe('ScanCoordinator', () => {
     w1!.emit(batch([open(join(ROOT, 'b'), false, { directBytes: 1 })]));
     const result = await run;
     expect(result.rootRecord.bytes).toBe(2);
+    expect(coordinator.pendingAccumulators()).toBe(0);
   });
 
   it('forwards markers and aggregates progress', async () => {

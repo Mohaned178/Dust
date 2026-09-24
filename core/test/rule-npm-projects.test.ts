@@ -5,6 +5,7 @@ import { AggregateTree } from '../src/model/tree';
 import { createNodeFsProbe } from '../src/rules/probe';
 import type { RuleContext } from '../src/rules/types';
 import type { FolderRecord, Marker } from '../src/model/types';
+import type { ProjectRecord } from '../src/projects/types';
 import { Fixture } from './fixtures';
 
 const NOW = 1_800_000_000_000;
@@ -113,5 +114,38 @@ describe('npmProjectModulesRule', () => {
     expect(greenMatch.evidence).toContain('Dead');
     expect(greenMatch.evidence).toContain('npm ci');
     expect(greenMatch.evidence).toContain('200d');
+  });
+
+  it('uses precomputed project records without reclassifying', async () => {
+    const rule = npmProjectModulesRule();
+    const projects: ProjectRecord[] = [
+      {
+        path: 'C:\\proj',
+        name: 'proj',
+        kind: 'project',
+        packageManager: 'npm',
+        pinned: false,
+        workspaceCount: 0,
+        nodeModules: { paths: [{ path: 'C:\\proj\\node_modules', bytes: 10 }], bytes: 10 },
+        activity: { ms: null, source: 'unknown' },
+        recency: 'dead',
+        restorability: { grade: 'green', reasons: [], restoreCommand: 'npm ci' },
+        offered: true,
+        evidence: [],
+      },
+    ];
+    const ctx: RuleContext = {
+      root: 'C:\\',
+      tree: new AggregateTree(),
+      markers: [],
+      probe: createNodeFsProbe(),
+      projects,
+    };
+
+    const matches = await rule.match(ctx);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.path).toBe('C:\\proj\\node_modules');
+    expect(matches[0]?.grade).toBe('safe');
   });
 });

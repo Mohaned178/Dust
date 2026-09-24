@@ -46,7 +46,8 @@ export function scanTask(taskPath: string, isRoot: boolean, ctx: WorkerScanConte
     });
 
     budget -= result.entryCount;
-    if (budget <= 0 && result.childDirs.length > 0) {
+    const shouldSplit = root ? result.childDirs.length > 1 : budget <= 0 && result.childDirs.length > 0;
+    if (shouldSplit) {
       ctx.submitTasks(result.childDirs);
       return;
     }

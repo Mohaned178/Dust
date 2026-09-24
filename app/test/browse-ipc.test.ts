@@ -72,7 +72,7 @@ describe('browse IPC', () => {
         windowsDir: join(tree.root, 'windows'),
         programData: join(tree.root, 'program-data'),
       },
-      listVolumes: () => [{ root: volumeRoot(), label: 'Data', driveType: 'fixed' }],
+      listVolumes: () => [{ root: volumeRoot(), label: 'Data', driveType: 'fixed', mediaType: 'unknown' }],
       getVolumeUsage: () => [],
       createRules: () => [],
       createSession: (options) => (holder.session = new FakeSession(options)),

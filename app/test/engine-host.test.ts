@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
 import type { ScanEvent } from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
@@ -60,7 +60,7 @@ describe('createEngineHost', () => {
   });
 
   function volumeList(): VolumeInfo[] {
-    return [{ root: volumeRootOf(tree.root)!, label: 'Fixtures', driveType: 'fixed' }];
+    return [{ root: volumeRootOf(tree.root)!, label: 'Fixtures', driveType: 'fixed', mediaType: 'unknown' }];
   }
 
   it('runs a real scan end to end and persists the snapshot', async () => {
@@ -93,7 +93,9 @@ describe('createEngineHost', () => {
     expect(loaded.snapshot.projects.map((project) => project.name)).toContain('proj');
     expect(loaded.snapshot.folders.some((folder) => folder.path === join(tree.root, 'temp'))).toBe(true);
 
-    const card = host.getDashboard().volumes.find((volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase());
+    const card = (await host.getDashboard()).volumes.find(
+      (volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase(),
+    );
     expect(card?.lastAnalyzedAt).not.toBeNull();
     expect(card?.reclaimableBytes).toBe(10);
   });
@@ -126,10 +128,57 @@ describe('createEngineHost', () => {
     expect(results.source).toBe('live');
     expect(results.rows.length).toBeGreaterThan(0);
 
-    const card = host.getDashboard().volumes.find((volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase());
+    const card = (await host.getDashboard()).volumes.find(
+      (volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase(),
+    );
     expect(card?.lastAnalyzedAt).not.toBeNull();
     expect(card?.reclaimableBytes).toBe(10);
     expect(card?.sessionOnly).toBe(true);
+  });
+
+  it('resolves volumes once per session', async () => {
+    const listVolumes = vi.fn(volumeList);
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    await host.getDashboard();
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    expect(listVolumes).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the scan-start volume list when the TTL expires mid-scan', async () => {
+    let clock = 0;
+    const listVolumes = vi.fn(volumeList);
+    const fake = new FakeSession({ root: tree.root });
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: () => fake,
+    });
+
+    await host.getDashboard();
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    clock += 30_001;
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    expect(listVolumes).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a second analyze while the first is running', async () => {
@@ -147,13 +196,13 @@ describe('createEngineHost', () => {
     expect(first.ok).toBe(true);
     const second = await host.startAnalyze(tree.root);
     expect(second).toEqual({ ok: false, reason: 'busy', running: 'analyze' });
-    expect(host.getDashboard().scan).toMatchObject({ kind: 'analyze', root: volumeList()[0]!.root });
+    expect((await host.getDashboard()).scan).toMatchObject({ kind: 'analyze', root: volumeList()[0]!.root });
 
     const cancelled = host.cancelScan();
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
     await nextEvent(host, 'finished');
     expect(await cancelled).toBe(true);
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('cancels a running scan and persists a cancelled snapshot', async () => {
@@ -194,11 +243,11 @@ describe('createEngineHost', () => {
     await host.startAnalyze(tree.root);
     const cancelled = host.cancelScan();
     expect(fake.cancelled).toBe(true);
-    expect(host.getDashboard().scan).not.toBeNull();
+    expect((await host.getDashboard()).scan).not.toBeNull();
 
     fake.finish(emptyScanResult(tree.root, 'cancelled'));
     expect(await cancelled).toBe(true);
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
     expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: true });
 
     const retried = host.cancelScan();
@@ -223,7 +272,7 @@ describe('createEngineHost', () => {
     const event = await failed;
 
     expect(event).toMatchObject({ type: 'failed', message: 'worker exploded' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('passes pins and an external-drive predicate into rule creation', async () => {
@@ -234,7 +283,7 @@ describe('createEngineHost', () => {
     const host = createEngineHost({
       store,
       pool: false,
-      listVolumes: () => [...volumeList(), { root: externalRoot, label: 'USB', driveType: 'removable' }],
+      listVolumes: () => [...volumeList(), { root: externalRoot, label: 'USB', driveType: 'removable', mediaType: 'unknown' }],
       getVolumeUsage: () => [],
       createRules: (_env, projects) => {
         captured.push(projects);
@@ -268,7 +317,7 @@ describe('createEngineHost', () => {
       reason: 'invalid-volume',
       message: 'unknown volume: Z:\\',
     });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('reports a start failure and releases the lock', async () => {
@@ -284,7 +333,7 @@ describe('createEngineHost', () => {
     });
 
     expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no worker' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('releases the lock when rule creation throws', async () => {
@@ -299,7 +348,7 @@ describe('createEngineHost', () => {
     });
 
     expect(await host.startAnalyze(tree.root)).toEqual({ ok: false, reason: 'start-failed', message: 'no rules' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
     expect(await host.startAnalyze(tree.root)).toMatchObject({ ok: false, reason: 'start-failed' });
   });
 
@@ -327,6 +376,7 @@ describe('createEngineHost', () => {
     expect(live.source).toBe('live');
     expect(live.depthLimited).toBe(false);
     expect(live.rows.some((row) => row.path === join(tree.root, 'temp'))).toBe(true);
+    expect(live.rows.find((row) => row.path === join(tree.root, 'temp'))?.action?.ruleId).toBe('fixture-temp');
     expect(live.categories.find((row) => row.category === 'temp')?.bytes).toBe(10);
 
     expect(host.getResults('Z:\\').source).toBe('empty');
@@ -422,7 +472,17 @@ describe('createEngineHost', () => {
     const event = await finished;
 
     expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true });
-    expect(seen).toEqual(['started', 'finalizing', 'categories', 'matches', 'finished']);
+    expect(seen).toEqual([
+      'started',
+      'finalizing',
+      'finalize-progress',
+      'finalize-progress',
+      'finalize-progress',
+      'finalize-progress',
+      'categories',
+      'matches',
+      'finished',
+    ]);
     expect(seen).not.toContain('failed');
   });
 
@@ -840,5 +900,351 @@ describe('createEngineHost', () => {
     expect(acknowledged.ok).toBe(true);
     if (!acknowledged.ok) return;
     expect(acknowledged.report.items[0]?.status).toBe('already-gone');
+  });
+
+  it('keeps the recycle-bin rule off live ticks and runs it at finalize', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    let recycleCalls = 0;
+    const recycleRule: Rule = {
+      id: 'recycle-bin',
+      category: 'recycle-bin',
+      title: 'Recycle Bin',
+      action: { kind: 'empty-recycle-bin' },
+      match: () => {
+        recycleCalls += 1;
+        return [];
+      },
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [recycleRule],
+      createSession: (options) => (fake = new FakeSession(options)),
+      categoryIntervalMs: 1,
+    });
+
+    await host.startAnalyze(tree.root);
+    clock = 100;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'a'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(recycleCalls).toBe(0);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+    expect(recycleCalls).toBe(1);
+  });
+
+  it('runs live category ticks on the slower default interval', async () => {
+    let fake!: FakeSession;
+    let clock = 0;
+    const events: ScanEvent[] = [];
+    const rule: Rule = {
+      id: 'fixture-temp',
+      category: 'temp',
+      title: 'Fixture temp',
+      action: { kind: 'delete-path' },
+      match: () => [],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      now: () => clock,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [rule],
+      createSession: (options) => (fake = new FakeSession(options)),
+    });
+    host.onEvent((event) => events.push(event));
+
+    await host.startAnalyze(tree.root);
+    clock = 5_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'a'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(1);
+
+    clock = 9_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'b'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(1);
+
+    clock = 10_000;
+    fake.options.onFolder?.({
+      path: join(tree.root, 'c'),
+      bytes: 10,
+      allocatedBytes: 4096,
+      fileCount: 1,
+      folderCount: 0,
+      linkCount: 0,
+      newestMtimeMs: 1,
+      errorCount: 0,
+      partial: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event.type === 'categories')).toHaveLength(2);
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+  });
+
+  it('emits finalize progress steps and caps folder batches', async () => {
+    let fake!: FakeSession;
+    const events: ScanEvent[] = [];
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: (options) => (fake = new FakeSession(options)),
+      folderIntervalMs: 60_000,
+    });
+    host.onEvent((event) => events.push(event));
+
+    await host.startAnalyze(tree.root);
+    for (let index = 0; index < 4500; index += 1) {
+      fake.options.onFolder?.({
+        path: join(tree.root, `d${index}`),
+        bytes: 1,
+        allocatedBytes: 1,
+        fileCount: 0,
+        folderCount: 0,
+        linkCount: 0,
+        newestMtimeMs: 0,
+        errorCount: 0,
+        partial: false,
+      });
+    }
+
+    const folderEvents = events.filter((event) => event.type === 'folders');
+    expect(folderEvents.length).toBeGreaterThanOrEqual(3);
+    for (const event of folderEvents) {
+      if (event.type === 'folders') expect(event.folders.length).toBeLessThanOrEqual(2000);
+    }
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    const steps = events
+      .filter((event): event is Extract<ScanEvent, { type: 'finalize-progress' }> => event.type === 'finalize-progress')
+      .map((event) => event.step);
+    expect(steps).toEqual(['projects', 'rules', 'rows', 'snapshot']);
+  });
+
+  it('streams quick-clean progress and cancels the targeted measurement', async () => {
+    let fake!: FakeSession;
+    const events: ScanEvent[] = [];
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [tempRule(tree.root)],
+      createSession: (options) => (fake = new FakeSession(options)),
+    });
+    host.onEvent((event) => events.push(event));
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fake.options.onProgress?.({
+      filesScanned: 5,
+      bytesSeen: 10,
+      currentPath: join(tree.root, 'temp'),
+      dirsCompleted: 1,
+      errors: 0,
+    });
+    expect(events.some((event) => event.type === 'quick-clean-progress')).toBe(true);
+
+    const cancelled = host.cancelScan();
+    fake.finish(emptyScanResult(tree.root, 'cancelled'));
+    expect(await cancelled).toBe(true);
+
+    const preview = await pending;
+    expect(preview).toMatchObject({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
+
+  it('cancels a quick clean while rule discovery is still running', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const discovered = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let sessions = 0;
+    const gatedRule: Rule = {
+      id: 'fixture-gated',
+      category: 'temp',
+      title: 'Fixture gated',
+      action: { kind: 'delete-path' },
+      match: async () => {
+        reached();
+        await gate;
+        return [
+          {
+            path: join(tree.root, 'temp'),
+            bytes: 0,
+            grade: 'safe',
+            recovery: { kind: 'junk', reason: 'fixture junk' },
+            evidence: 'fixture',
+          },
+        ];
+      },
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [gatedRule],
+      createSession: (options) => {
+        sessions += 1;
+        return new FakeSession(options);
+      },
+    });
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await discovered;
+    const cancelled = await host.cancelScan();
+    release();
+
+    expect(cancelled).toBe(true);
+    expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+    expect(sessions).toBe(0);
+  });
+
+  it('stops starting targeted sessions after a quick-clean cancel', async () => {
+    const sessions: FakeSession[] = [];
+    const twoPathRule: Rule = {
+      id: 'fixture-two',
+      category: 'temp',
+      title: 'Fixture two',
+      action: { kind: 'delete-path' },
+      match: () => [
+        {
+          path: join(tree.root, 'temp'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+        {
+          path: join(tree.root, 'temp2'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+      ],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [twoPathRule],
+      createSession: (options) => {
+        const fake = new FakeSession(options);
+        sessions.push(fake);
+        return fake;
+      },
+    });
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await vi.waitFor(() => expect(sessions).toHaveLength(1));
+    const cancelled = host.cancelScan();
+    sessions[0]!.finish(emptyScanResult(join(tree.root, 'temp'), 'cancelled'));
+    expect(await cancelled).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessions).toHaveLength(1);
+    expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
+
+  it('cancels a quick clean when the in-flight session resolves complete', async () => {
+    const sessions: FakeSession[] = [];
+    const twoPathRule: Rule = {
+      id: 'fixture-two',
+      category: 'temp',
+      title: 'Fixture two',
+      action: { kind: 'delete-path' },
+      match: () => [
+        {
+          path: join(tree.root, 'temp'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+        {
+          path: join(tree.root, 'temp2'),
+          bytes: 0,
+          grade: 'safe',
+          recovery: { kind: 'junk', reason: 'fixture junk' },
+          evidence: 'fixture',
+        },
+      ],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [twoPathRule],
+      createSession: (options) => {
+        const fake = new FakeSession(options);
+        sessions.push(fake);
+        return fake;
+      },
+    });
+
+    const pending = host.previewClean({ scope: 'quick' });
+    await vi.waitFor(() => expect(sessions).toHaveLength(1));
+    const cancelled = host.cancelScan();
+    sessions[0]!.finish(emptyScanResult(join(tree.root, 'temp'), 'complete'));
+    expect(await cancelled).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessions).toHaveLength(1);
+    expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
   });
 });

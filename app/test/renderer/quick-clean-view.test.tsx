@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { ScanEvent } from '../../src/shared/ipc';
 import { QuickCleanView } from '../../renderer/src/pages/QuickCleanView';
 import { makeApi, makeCleanReport } from './fakes';
 
@@ -40,5 +41,37 @@ describe('QuickCleanView', () => {
     render(<QuickCleanView api={api} onDone={vi.fn()} onViewResults={vi.fn()} />);
 
     expect(await screen.findByText('A scan is already running. Cancel it first.')).toBeInTheDocument();
+  });
+
+  it('shows targeted scan progress and cancels', async () => {
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const cancelScan = vi.fn(async () => {});
+    const api = makeApi({
+      cancelScan,
+      previewClean: () => new Promise(() => {}),
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<QuickCleanView api={api} onDone={vi.fn()} onViewResults={vi.fn()} />);
+
+    act(() => {
+      handlers[0]?.({
+        type: 'quick-clean-progress',
+        progress: {
+          filesScanned: 1234,
+          bytesSeen: 2048,
+          currentPath: 'C:\\Temp',
+          dirsCompleted: 3,
+          errors: 0,
+          elapsedMs: 1000,
+        },
+      });
+    });
+
+    expect(await screen.findByText(/1,234 files scanned/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(cancelScan).toHaveBeenCalledTimes(1);
   });
 });

@@ -473,4 +473,16 @@ describe('ScanView', () => {
     expect(screen.queryByText('Loading results…')).toBeNull();
     expect(getResults).not.toHaveBeenCalled();
   });
+
+  it('shows the finalize step while results are built', () => {
+    const event: ScanEvent = { type: 'finalize-progress', runId: 'run-1', step: 'rows' };
+    render(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
+    expect(screen.getByText('Analyzing results… (rows)')).toBeInTheDocument();
+  });
+
+  it('disables cancel while a finalize step is in progress', () => {
+    const event: ScanEvent = { type: 'finalize-progress', runId: 'run-1', step: 'snapshot' };
+    render(<ScanView api={makeApi()} root="C:\\" runId="run-1" event={event} onBack={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeDisabled();
+  });
 });

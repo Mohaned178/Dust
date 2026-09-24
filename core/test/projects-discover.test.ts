@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { discoverProjects } from '../src/projects/discover';
+import { createUnitLookup, discoverProjects } from '../src/projects/discover';
+import type { DiscoveredUnit } from '../src/projects/discover';
 import { AggregateTree } from '../src/model/tree';
 import { createNodeFsProbe } from '../src/rules/probe';
 import type { FolderRecord, Marker } from '../src/model/types';
@@ -110,5 +111,44 @@ describe('discoverProjects', () => {
       units: [],
       orphans: [],
     });
+  });
+});
+
+function unit(root: string, monorepo = false): DiscoveredUnit {
+  return {
+    root,
+    name: root,
+    manifest: { name: null, workspaces: false, packageManagerField: null, valid: true },
+    monorepo,
+    workspaceCount: 0,
+    nodeModules: [],
+    lockfiles: [],
+    pnp: false,
+    patches: false,
+  };
+}
+
+describe('createUnitLookup', () => {
+  it('finds the nearest unit by walking ancestors', () => {
+    const lookup = createUnitLookup();
+    const outer = unit('C:\\repo');
+    const inner = unit('C:\\repo\\packages\\app');
+    lookup.add(outer);
+    lookup.add(inner);
+
+    expect(lookup.nearest('C:\\repo\\packages\\app\\src')?.root).toBe(inner.root);
+    expect(lookup.nearest('C:\\repo\\other')?.root).toBe(outer.root);
+    expect(lookup.nearest('D:\\elsewhere')).toBeNull();
+  });
+
+  it('matches case-insensitively and only returns monorepo parents', () => {
+    const lookup = createUnitLookup();
+    const plain = unit('C:\\repo');
+    const mono = unit('C:\\repo\\mono', true);
+    lookup.add(plain);
+    lookup.add(mono);
+
+    expect(lookup.monorepoParent('c:\\REPO\\MONO\\packages\\a')?.root).toBe(mono.root);
+    expect(lookup.monorepoParent('C:\\repo\\plain-child')).toBeNull();
   });
 });

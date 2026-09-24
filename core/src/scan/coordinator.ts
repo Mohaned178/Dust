@@ -53,14 +53,18 @@ interface Accumulator {
 }
 
 export class ScanCoordinator {
-  // Accumulators are retained for the whole scan by design: finalization needs
-  // the full child rollup, so there is no release until a path is finalized.
-  // At 1M-directory scale this is unmeasured — the spec §8 real-disk spike
-  // (Defender enabled) must record peak RSS with `--root` mode before Plans 3-9
-  // build on this. Revisit with a finalized-paths release strategy only if the
-  // spike shows a problem.
+  // Accumulators hold each directory's rollup until it finalizes; a finalized
+  // entry is released immediately after it has been accounted for, so peak
+  // memory tracks in-flight directories rather than every directory scanned.
   private readonly accumulators = new Map<string, Accumulator>();
+  // Tombstones of finalized, released directories. A crashed worker's task is
+  // re-dispatched and can re-deliver a DirOpen for a directory that was already
+  // accounted for; without this marker the recreation would double-roll the
+  // record into its parent. The set retains one path reference per released
+  // directory - a small fraction of the accumulator it replaces.
+  private readonly finalizedPaths = new Set<string>();
   private readonly queue: Task[] = [];
+  private queueHead = 0;
   private readonly idle: number[] = [];
   private readonly inflight = new Map<number, Task>();
   private readonly transports = new Map<number, WorkerTransport>();
@@ -88,6 +92,10 @@ export class ScanCoordinator {
         this.forceFinalize(this.options.root);
       }
     });
+  }
+
+  pendingAccumulators(): number {
+    return this.accumulators.size;
   }
 
   cancel(): void {
@@ -152,6 +160,7 @@ export class ScanCoordinator {
   }
 
   private onDirOpen(open: DirOpen): void {
+    if (this.finalizedPaths.has(open.path)) return;
     const accumulator = this.ensure(open.path);
     if (!accumulator.opened) {
       accumulator.opened = true;
@@ -168,24 +177,35 @@ export class ScanCoordinator {
     this.tryFinalize(open.path);
   }
 
+  private takeNext(): Task | undefined {
+    const task = this.queue[this.queueHead];
+    if (task === undefined) return undefined;
+    this.queueHead += 1;
+    if (this.queueHead > 64 && this.queueHead * 2 > this.queue.length) {
+      this.queue.splice(0, this.queueHead);
+      this.queueHead = 0;
+    }
+    return task;
+  }
+
   private assign(workerId: number): void {
-    const task = this.queue.shift();
+    const task = this.takeNext();
     if (task) {
       this.inflight.set(workerId, task);
       this.send(workerId, { type: 'task', path: task.path, isRoot: task.isRoot });
       return;
     }
     if (!this.idle.includes(workerId)) this.idle.push(workerId);
-    if (this.queue.length === 0 && this.inflight.size === 0) {
+    if (this.queueHead >= this.queue.length && this.inflight.size === 0) {
       this.stopAll();
     }
   }
 
   private enqueue(task: Task): void {
     this.queue.push(task);
-    while (this.queue.length > 0 && this.idle.length > 0) {
+    while (this.queueHead < this.queue.length && this.idle.length > 0) {
       const workerId = this.idle.shift()!;
-      const next = this.queue.shift()!;
+      const next = this.takeNext()!;
       this.inflight.set(workerId, next);
       this.send(workerId, { type: 'task', path: next.path, isRoot: next.isRoot });
     }
@@ -206,6 +226,7 @@ export class ScanCoordinator {
       if (accumulator.isRoot) {
         this.rootRecord = record;
         this.finish();
+        this.release(accumulator);
         return;
       }
 
@@ -220,6 +241,7 @@ export class ScanCoordinator {
       parent.sumErrors += record.errorCount;
       parent.sumNewest = Math.max(parent.sumNewest, record.newestMtimeMs);
       if (record.partial) parent.childPartial = true;
+      this.release(accumulator);
       current = parent.path;
     }
   }
@@ -236,6 +258,11 @@ export class ScanCoordinator {
       errorCount: accumulator.errorCount + accumulator.sumErrors,
       partial: accumulator.partial || accumulator.childPartial,
     };
+  }
+
+  private release(accumulator: Accumulator): void {
+    this.finalizedPaths.add(accumulator.path);
+    this.accumulators.delete(accumulator.path);
   }
 
   private ensure(path: string): Accumulator {
@@ -342,12 +369,19 @@ export class ScanCoordinator {
 
     if (restarts < 1) {
       this.restarts.set(workerId, restarts + 1);
-      if (task) this.queue.unshift(task);
+      if (task) {
+        if (this.queueHead > 0) {
+          this.queueHead -= 1;
+          this.queue[this.queueHead] = task;
+        } else {
+          this.queue.unshift(task);
+        }
+      }
       this.spawn(workerId);
       return;
     }
 
-    if (task) {
+    if (task && !this.finalizedPaths.has(task.path)) {
       const accumulator = this.ensure(task.path);
       if (!accumulator.opened) accumulator.opened = true;
       if (task.isRoot) accumulator.isRoot = true;
@@ -356,7 +390,7 @@ export class ScanCoordinator {
       this.tryFinalize(task.path);
     }
 
-    if (this.transports.size === 0 || (this.queue.length === 0 && this.inflight.size === 0)) {
+    if (this.transports.size === 0 || (this.queueHead >= this.queue.length && this.inflight.size === 0)) {
       if (!this.aborted && !this.rootRecord) this.forceFinalize(this.options.root);
       this.stopAll();
     }

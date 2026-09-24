@@ -12,9 +12,10 @@ import {
   createNodeFsProbe,
   defaultRecycleBinEnumeration,
   defaultRuleEnv,
+  defaultWorkersForVolume,
   deleteUnprotectedPath,
   getVolumeUsage,
-  listVolumes,
+  listVolumesAsync,
   pruneSnapshotAfterCleanup,
   systemDriveRoot,
   volumeRootOf,
@@ -66,9 +67,10 @@ import { buildDashboardState } from './dashboard';
 import { instrument, instrumentAsync } from './instrument';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
+import { createVolumeCache } from './volumes';
 import {
+  applyMatchesToRows,
   buildRowsFromSnapshot,
-  buildRowsFromTree,
   sameRoot,
   summarizeCategories,
   toBrowseRow,
@@ -89,6 +91,8 @@ import {
 import { groupDevProjects, projectNameOf, toDevProjects } from './dev-cleanup';
 import { measureDirectories } from './targeted';
 
+const MAX_FOLDER_BATCH = 2000;
+
 export interface ScanSessionLike {
   start(): Promise<ScanResult>;
   cancel(): void;
@@ -104,6 +108,7 @@ export interface EngineHostDeps {
   progressIntervalMs?: number;
   folderIntervalMs?: number;
   categoryIntervalMs?: number;
+  volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   getVolumeUsage?: (volumes: string[]) => VolumeUsage[];
   createSession?: (options: SessionOptions) => ScanSessionLike;
@@ -117,7 +122,7 @@ export interface EngineHostDeps {
 }
 
 export interface EngineHost {
-  getDashboard(): DashboardState;
+  getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
   startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
@@ -157,7 +162,8 @@ interface PendingPlan {
 
 export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const now = deps.now ?? Date.now;
-  const listVolumesFn = deps.listVolumes ?? listVolumes;
+  const volumeSource = deps.listVolumes ?? listVolumesAsync;
+  const volumes = createVolumeCache(() => Promise.resolve(volumeSource()), deps.volumesTtlMs ?? 30_000, now);
   const getVolumeUsageFn = deps.getVolumeUsage ?? getVolumeUsage;
   const env = deps.env ?? defaultRuleEnv();
   const systemRoot = deps.systemRoot ?? systemDriveRoot(env) ?? 'C:\\';
@@ -170,7 +176,19 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const lock = new ScanLock();
   const guard = guardEnv(env);
 
+  function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function poolForVolume(volume: VolumeInfo): SessionOptions['pool'] {
+    if (deps.pool !== undefined) return deps.pool;
+    if (!deps.workerPath) return false;
+    return { workerPath: deps.workerPath, workers: defaultWorkersForVolume(volume.mediaType) };
+  }
+
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
+  let quickPreviewActive = false;
+  let quickCancelRequested = false;
 
   let lastResults: {
     root: string;
@@ -228,11 +246,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
   }
 
-  function getDashboard(): DashboardState {
-    const volumes = listVolumesFn();
-    const usage = getVolumeUsageFn(volumes.map((volume) => volume.root));
+  async function getDashboard(): Promise<DashboardState> {
+    const volumeList = await volumes.get();
+    const usage = getVolumeUsageFn(volumeList.map((volume) => volume.root));
     return buildDashboardState({
-      volumes,
+      volumes: volumeList,
       usage,
       snapshot: deps.store.load(),
       scan: lock.current(),
@@ -255,7 +273,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       root: lastRun.root,
       scanAgeMs: Math.max(now() - lastRun.finishedAt, 0),
       rules: lastRun.rules,
-      ctx: { root: lastRun.root, tree: lastRun.tree, markers: lastRun.markers, probe: lastRun.probe },
+      ctx: {
+        root: lastRun.root,
+        tree: lastRun.tree,
+        markers: lastRun.markers,
+        probe: lastRun.probe,
+        projects: lastRun.projects,
+      },
     };
   }
 
@@ -278,9 +302,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function targetedSource(root: string): Promise<PlanSource> {
     const probe = createNodeFsProbe();
+    const volumeList = await volumes.get();
+    if (quickCancelRequested) throw new Error('Quick clean cancelled');
     const rules = createRules(
       env,
-      { pins: deps.store.getPins(), isExternal: createExternalPredicate(listVolumesFn()), now },
+      { pins: deps.store.getPins(), isExternal: createExternalPredicate(volumeList), now },
       { recycleBin: { enumerate: () => defaultRecycleBinEnumeration() } },
     );
     const actions = new Map(rules.map((rule) => [rule.id, rule.action.kind]));
@@ -290,11 +316,56 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       markers: [],
       probe,
     });
-    const tree = measureDirectories(
-      discovery
-        .filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin')
-        .map((match) => match.path),
+    if (quickCancelRequested) throw new Error('Quick clean cancelled');
+
+    const quickRunId = randomUUID();
+    const startedAt = now();
+    let cancelled = false;
+
+    const tree = await measureDirectories(
+      discovery.filter((match) => actions.get(match.ruleId) !== 'empty-recycle-bin').map((match) => match.path),
+      async (path) => {
+        if (cancelled || quickCancelRequested) {
+          cancelled = true;
+          return null;
+        }
+        const session = createSession({
+          root: path,
+          pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+          onProgress: (update) => {
+            emit({
+              type: 'quick-clean-progress',
+              progress: {
+                filesScanned: update.filesScanned,
+                bytesSeen: update.bytesSeen,
+                currentPath: update.currentPath,
+                dirsCompleted: update.dirsCompleted,
+                errors: update.errors,
+                elapsedMs: Math.max(now() - startedAt, 0),
+              },
+            });
+          },
+        });
+        let settle!: () => void;
+        const settled = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        active = { runId: quickRunId, session, settled };
+        try {
+          const result = await session.start();
+          if (result.status === 'cancelled' || quickCancelRequested) {
+            cancelled = true;
+            return null;
+          }
+          return result.tree.get(result.root) ?? null;
+        } finally {
+          active = null;
+          settle();
+        }
+      },
     );
+
+    if (cancelled || quickCancelRequested) throw new Error('Quick clean cancelled');
     return { source: 'targeted', root, scanAgeMs: null, rules, ctx: { root, tree, markers: [], probe } };
   }
 
@@ -329,8 +400,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
     const acquired = lock.acquire('quick-clean', lockRoot, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
+    const quick = scope === 'quick';
+    if (quick) {
+      quickPreviewActive = true;
+      quickCancelRequested = false;
+    }
     try {
       const base = scope === 'quick' ? await resolveQuickSource() : await resolveRootSource(request.root);
+      if (quick && quickCancelRequested) throw new Error('Quick clean cancelled');
       if (base === null) {
         return {
           ok: false,
@@ -340,6 +417,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       }
       const selection = scope === 'quick' ? [] : request.paths;
       const plan = await cleaner.preview(scopeRules(base.rules, scope, selection), base.ctx);
+      if (quick && quickCancelRequested) throw new Error('Quick clean cancelled');
       if (plan.items.length === 0) {
         return { ok: false, reason: 'empty-selection', message: 'Nothing to clean here' };
       }
@@ -353,6 +431,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     } catch (error) {
       return { ok: false, reason: 'failed', message: messageOf(error) };
     } finally {
+      if (quick) quickPreviewActive = false;
       lock.release();
     }
   }
@@ -493,12 +572,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
+    const volumeList =
+      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
-        : instrument('start.listVolumes', () =>
-            listVolumesFn().find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase()),
-          );
+        : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
     const targetRoot = target.root;
     if (!onSystemDrive(targetRoot)) {
@@ -519,10 +598,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     });
 
     const folderIntervalMs = deps.folderIntervalMs ?? 100;
-    const categoryIntervalMs = deps.categoryIntervalMs ?? 2000;
+    const categoryIntervalMs = deps.categoryIntervalMs ?? 5000;
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
+    const liveRows: ResultRow[] = [];
     const folderBuffer: ResultRow[] = [];
     let lastFolderFlush = 0;
     let lastCategoryRun = 0;
@@ -542,7 +622,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       if (stamp - lastCategoryRun < categoryIntervalMs) return;
       lastCategoryRun = stamp;
       categoryRunning = true;
-      const liveRules = rules.filter((rule) => rule.category !== 'npm-projects');
+      const liveRules = rules.filter((rule) => rule.category !== 'npm-projects' && rule.id !== 'recycle-bin');
       void collectRuleMatches(liveRules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
         .then((matches) => {
           if (liveEnded) return;
@@ -559,18 +639,21 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       instrument('tree.live.addFolder', () => {
         liveTree.addFolder(record);
       });
-      folderBuffer.push(
-        instrument('row.build.live', () =>
-          toResultRow(record, {
-            root: targetRoot,
-            complete: true,
-            childCount: liveTree.children(record.path).length,
-            env: guard,
-          }),
-        ),
+      const row = instrument('row.build.live', () =>
+        toResultRow(record, {
+          root: targetRoot,
+          complete: true,
+          childCount: liveTree.children(record.path).length,
+          env: guard,
+        }),
       );
+      liveRows.push(row);
+      folderBuffer.push(row);
       const stamp = now();
-      if (stamp - lastFolderFlush >= folderIntervalMs) {
+      if (folderBuffer.length >= MAX_FOLDER_BATCH) {
+        lastFolderFlush = stamp;
+        flushFolders();
+      } else if (stamp - lastFolderFlush >= folderIntervalMs) {
         lastFolderFlush = stamp;
         flushFolders();
       }
@@ -582,14 +665,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       if (result !== null) {
         const rootNode = result.tree.get(result.root);
         if (rootNode) {
-          folderBuffer.push(
-            toResultRow(rootNode, {
-              root: result.root,
-              complete: rootNode.complete,
-              childCount: result.tree.children(result.root).length,
-              env: guard,
-            }),
-          );
+          const row = toResultRow(rootNode, {
+            root: result.root,
+            complete: rootNode.complete,
+            childCount: result.tree.children(result.root).length,
+            env: guard,
+          });
+          liveRows.push(row);
+          folderBuffer.push(row);
         }
       }
       flushFolders();
@@ -602,7 +685,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         env,
         {
           pins: deps.store.getPins(),
-          isExternal: instrument('start.listVolumes', () => createExternalPredicate(listVolumesFn())),
+          isExternal: createExternalPredicate(volumeList),
           now,
         },
         {
@@ -613,7 +696,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       );
       session = createSession({
         root: volume,
-        pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        pool: poolForVolume(target),
+        tree: liveTree,
         onFolder: onLiveFolder,
         onMarker: (marker) => liveMarkers.push(marker),
         onProgress: (update) => {
@@ -650,19 +734,19 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, finishLive });
+    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, liveRows, finishLive, volumeList });
 
     return { ok: true, runId };
   }
 
   async function startBrowse(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
+    const volumeList =
+      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
-        : instrument('start.listVolumes', () =>
-            listVolumesFn().find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase()),
-          );
+        : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
     const targetRoot = target.root;
 
@@ -711,7 +795,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     try {
       session = createSession({
         root: volume,
-        pool: deps.pool ?? (deps.workerPath ? { workerPath: deps.workerPath } : false),
+        pool: poolForVolume(target),
+        tree: liveTree,
         onFolder: onLiveFolder,
         onProgress: (update) => {
           progress.push({
@@ -790,14 +875,24 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     settle: () => void;
     rules: Rule[];
     probe: RuleContext['probe'];
+    liveRows: ResultRow[];
     finishLive: (result: ScanResult | null) => void;
+    volumeList: VolumeInfo[];
   }): Promise<void> {
     try {
       const result = await input.session.start();
       input.finishLive(result);
       input.progress.flush();
       emit({ type: 'finalizing', runId: input.runId });
-      const summary = await finalize(result, input.startedAt, input.rules, input.probe);
+      const summary = await finalize(
+        result,
+        input.startedAt,
+        input.rules,
+        input.probe,
+        input.liveRows,
+        input.runId,
+        input.volumeList,
+      );
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({
         type: 'matches',
@@ -844,6 +939,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     startedAt: number,
     rules: Rule[],
     probe: RuleContext['probe'],
+    liveRows: ResultRow[],
+    runId: string,
+    volumeList: VolumeInfo[],
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -852,9 +950,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     categories: CategorySummaryRow[];
     matches: ResultMatch[];
   }> {
+    emit({ type: 'finalize-progress', runId, step: 'projects' });
     const existing = instrument('finalize.store.load', () => deps.store.load());
     const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
-    const external = instrument('finalize.listVolumes', () => createExternalPredicate(listVolumesFn()));
+    const external = createExternalPredicate(volumeList);
     const pins = deps.store.getPins();
 
     const analysis = instrument('finalize.classifyProjects', () =>
@@ -868,8 +967,20 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         now,
       }),
     );
-    const ctx: RuleContext = { root: result.root, tree: result.tree, markers: result.markers, probe };
+    await yieldToEventLoop();
+
+    emit({ type: 'finalize-progress', runId, step: 'rules' });
+    const ctx: RuleContext = {
+      root: result.root,
+      tree: result.tree,
+      markers: result.markers,
+      probe,
+      projects: analysis.projects,
+    };
     const matches = await instrumentAsync('finalize.collectRuleMatches', () => collectRuleMatches(rules, ctx));
+    await yieldToEventLoop();
+
+    emit({ type: 'finalize-progress', runId, step: 'rows' });
     const ruleCategories = instrument('finalize.categories', () => aggregateCategories(matches));
     const categories = instrument('finalize.categories', () => summarizeCategories(ruleCategories));
     const finishedAt = now();
@@ -879,7 +990,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       status: result.status,
       finishedAt,
       categories,
-      rows: instrument('row.build.final', () => buildRowsFromTree(result.tree, result.root, matches, guard)),
+      rows: instrument('row.applyMatches', () => applyMatchesToRows(liveRows, matches)),
     };
 
     lastRun = {
@@ -892,9 +1003,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       ruleCategories,
       finishedAt,
     };
+    await yieldToEventLoop();
 
+    emit({ type: 'finalize-progress', runId, step: 'snapshot' });
     const usage = instrument('finalize.volumes', () =>
-      getVolumeUsageFn(listVolumesFn().map((volume) => volume.root)),
+      getVolumeUsageFn(volumeList.map((volume) => volume.root)),
     );
     const snapshot = instrument('finalize.buildSnapshot', () =>
       buildSnapshot({
@@ -923,7 +1036,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         priorCleanedAt,
       }),
     );
-    const save = instrument('finalize.store.save', () => deps.store.save(snapshot));
+    const save = await instrumentAsync('finalize.store.save', () => deps.store.saveAsync(snapshot));
 
     return {
       finishedAt,
@@ -937,10 +1050,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function cancelScan(): Promise<boolean> {
     const run = active;
-    if (!run) return false;
-    run.session.cancel();
-    await run.settled;
-    return true;
+    if (run) {
+      if (quickPreviewActive) quickCancelRequested = true;
+      run.session.cancel();
+      await run.settled;
+      return true;
+    }
+    if (quickPreviewActive) {
+      quickCancelRequested = true;
+      return true;
+    }
+    return false;
   }
 
   function getResults(requestedRoot: string): ResultsState {

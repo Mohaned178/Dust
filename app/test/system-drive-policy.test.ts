@@ -43,8 +43,8 @@ describe('system-drive policy', () => {
 
   function volumes(): VolumeInfo[] {
     return [
-      { root: SYSTEM, label: 'System', driveType: 'fixed' },
-      { root: DATA, label: 'Data', driveType: 'fixed' },
+      { root: SYSTEM, label: 'System', driveType: 'fixed', mediaType: 'unknown' },
+      { root: DATA, label: 'Data', driveType: 'fixed', mediaType: 'unknown' },
     ];
   }
 
@@ -65,7 +65,7 @@ describe('system-drive policy', () => {
     const host = makeHost({ createSession: () => new FakeSession({ root: DATA }) });
 
     expect(await host.startAnalyze(DATA)).toMatchObject({ ok: false, reason: 'not-system-drive' });
-    expect(host.getDashboard().scan).toBeNull();
+    expect((await host.getDashboard()).scan).toBeNull();
   });
 
   it('allows Analyze for the system volume', async () => {

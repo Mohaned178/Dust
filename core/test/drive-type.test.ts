@@ -1,7 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  LIST_VOLUMES_SCRIPT,
   createExternalPredicate,
   listVolumes,
+  listVolumesAsync,
   mapDriveType,
   parseVolumesJson,
   systemDriveRoot,
@@ -29,20 +32,31 @@ describe('parseVolumesJson', () => {
       ]),
     );
     expect(volumes).toEqual([
-      { root: 'C:\\', label: 'System', driveType: 'fixed' },
-      { root: 'E:\\', label: null, driveType: 'removable' },
+      { root: 'C:\\', label: 'System', driveType: 'fixed', mediaType: 'unknown' },
+      { root: 'E:\\', label: null, driveType: 'removable', mediaType: 'unknown' },
     ]);
   });
 
   it('parses the single-object form', () => {
     expect(parseVolumesJson(JSON.stringify({ root: 'D:\\', FileSystemLabel: null, DriveType: 'Network' }))).toEqual([
-      { root: 'D:\\', label: null, driveType: 'network' },
+      { root: 'D:\\', label: null, driveType: 'network', mediaType: 'unknown' },
     ]);
   });
 
   it('returns nothing for garbage or malformed entries', () => {
     expect(parseVolumesJson('{oops')).toEqual([]);
     expect(parseVolumesJson(JSON.stringify([{ root: 'not-a-root' }, null, 'x']))).toEqual([]);
+  });
+
+  it('maps media types to ssd, hdd, or unknown', () => {
+    const volumes = parseVolumesJson(
+      JSON.stringify([
+        { root: 'C:\\', FileSystemLabel: 'System', DriveType: 'Fixed', MediaType: 'SSD' },
+        { root: 'F:\\', FileSystemLabel: 'Data', DriveType: 'Fixed', MediaType: 'HDD' },
+        { root: 'E:\\', FileSystemLabel: '', DriveType: 'Removable', MediaType: 'Unspecified' },
+      ]),
+    );
+    expect(volumes.map((volume) => volume.mediaType)).toEqual(['ssd', 'hdd', 'unknown']);
   });
 });
 
@@ -89,10 +103,10 @@ describe('systemDriveRoot', () => {
 
 describe('createExternalPredicate', () => {
   const volumes = [
-    { root: 'C:\\', label: null, driveType: 'fixed' as const },
-    { root: 'E:\\', label: null, driveType: 'removable' as const },
-    { root: 'N:\\', label: null, driveType: 'network' as const },
-    { root: 'X:\\', label: null, driveType: 'unknown' as const },
+    { root: 'C:\\', label: null, driveType: 'fixed' as const, mediaType: 'unknown' as const },
+    { root: 'E:\\', label: null, driveType: 'removable' as const, mediaType: 'unknown' as const },
+    { root: 'N:\\', label: null, driveType: 'network' as const, mediaType: 'unknown' as const },
+    { root: 'X:\\', label: null, driveType: 'unknown' as const, mediaType: 'unknown' as const },
   ];
   const isExternal = createExternalPredicate(volumes);
 
@@ -123,6 +137,44 @@ describe('listVolumes', () => {
     for (const volume of volumes) {
       expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
       expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
+      expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
+    }
+  });
+
+  it('keeps volume discovery working when the storage cmdlets fail', (ctx) => {
+    if (process.platform !== 'win32') {
+      ctx.skip();
+      return;
+    }
+    const shadowed = [
+      "function Get-Partition { [CmdletBinding()] param() throw 'Get-Partition unavailable' }",
+      "function Get-PhysicalDisk { [CmdletBinding()] param() throw 'Get-PhysicalDisk unavailable' }",
+      LIST_VOLUMES_SCRIPT,
+    ].join('\n');
+    const raw = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', shadowed], {
+      encoding: 'utf8',
+      timeout: 15_000,
+    });
+    const volumes = parseVolumesJson(raw);
+    expect(volumes.length).toBeGreaterThan(0);
+    for (const volume of volumes) {
+      expect(volume.mediaType).toBe('unknown');
+    }
+  });
+});
+
+describe('listVolumesAsync', () => {
+  it('lists real volumes with a matching shape on Windows', async (ctx) => {
+    if (process.platform !== 'win32') {
+      ctx.skip();
+      return;
+    }
+    const volumes = await listVolumesAsync();
+    expect(volumes.length).toBeGreaterThan(0);
+    for (const volume of volumes) {
+      expect(volume.root).toMatch(/^[A-Za-z]:\\$/);
+      expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
+      expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
     }
   });
 });

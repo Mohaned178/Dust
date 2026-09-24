@@ -1,4 +1,4 @@
-import { basename, dirname, join, sep } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { canonicalizePath } from '../cleaner/guard';
 import type { AggregateTree } from '../model/tree';
 import type { Marker } from '../model/types';
@@ -30,6 +30,44 @@ export interface DiscoverInput {
   probe: FsProbe;
 }
 
+export interface UnitLookup {
+  add(unit: DiscoveredUnit): void;
+  nearest(dir: string): DiscoveredUnit | null;
+  monorepoParent(dir: string): DiscoveredUnit | null;
+}
+
+export function createUnitLookup(): UnitLookup {
+  const byRoot = new Map<string, DiscoveredUnit>();
+  const find = (dir: string, predicate: (unit: DiscoveredUnit) => boolean): DiscoveredUnit | null => {
+    for (const key of ancestorKeys(dir)) {
+      const unit = byRoot.get(key);
+      if (unit && predicate(unit)) return unit;
+    }
+    return null;
+  };
+  return {
+    add(unit) {
+      byRoot.set(canonicalizePath(unit.root).toLowerCase(), unit);
+    },
+    nearest(dir) {
+      return find(dir, () => true);
+    },
+    monorepoParent(dir) {
+      return find(dir, (unit) => unit.monorepo);
+    },
+  };
+}
+
+export function* ancestorKeys(dir: string): Generator<string> {
+  let key = canonicalizePath(dir).toLowerCase();
+  for (;;) {
+    yield key;
+    const parent = dirname(key);
+    if (parent === key) return;
+    key = parent;
+  }
+}
+
 export function discoverProjects(input: DiscoverInput): { units: DiscoveredUnit[]; orphans: DiscoveredOrphan[] } {
   const manifestMarkers = input.markers
     .filter((marker) => marker.kind === 'package-json')
@@ -37,9 +75,10 @@ export function discoverProjects(input: DiscoverInput): { units: DiscoveredUnit[
   const nodeModulesMarkers = input.markers.filter((marker) => marker.kind === 'node-modules');
 
   const units: DiscoveredUnit[] = [];
+  const lookup = createUnitLookup();
   for (const marker of manifestMarkers) {
     const dir = dirname(marker.path);
-    const parent = units.find((unit) => unit.monorepo && isUnder(dir, unit.root));
+    const parent = lookup.monorepoParent(dir);
     if (parent) {
       parent.workspaceCount += 1;
       continue;
@@ -50,7 +89,7 @@ export function discoverProjects(input: DiscoverInput): { units: DiscoveredUnit[
       packageManagerField: null,
       valid: false,
     };
-    units.push({
+    const unit = {
       root: dir,
       name: manifest.name ?? basename(dir),
       manifest,
@@ -60,12 +99,14 @@ export function discoverProjects(input: DiscoverInput): { units: DiscoveredUnit[
       lockfiles: detectLockfiles(dir, input.probe),
       pnp: hasPnp(dir, input.probe),
       patches: input.probe.exists(join(dir, 'patches')),
-    });
+    };
+    units.push(unit);
+    lookup.add(unit);
   }
 
   const orphans: DiscoveredOrphan[] = [];
   for (const marker of nodeModulesMarkers) {
-    const owner = nearestUnit(units, dirname(marker.path));
+    const owner = lookup.nearest(dirname(marker.path));
     const bytes = input.tree.get(marker.path)?.bytes ?? 0;
     if (owner) {
       owner.nodeModules.push({ path: marker.path, bytes });
@@ -75,19 +116,4 @@ export function discoverProjects(input: DiscoverInput): { units: DiscoveredUnit[
   }
 
   return { units, orphans };
-}
-
-function nearestUnit(units: DiscoveredUnit[], targetDir: string): DiscoveredUnit | null {
-  let best: DiscoveredUnit | null = null;
-  for (const unit of units) {
-    if (!isUnder(targetDir, unit.root) && canonicalizePath(targetDir) !== canonicalizePath(unit.root)) continue;
-    if (!best || unit.root.length > best.root.length) best = unit;
-  }
-  return best;
-}
-
-function isUnder(candidate: string, parent: string): boolean {
-  const child = canonicalizePath(candidate).toLowerCase();
-  const root = canonicalizePath(parent).toLowerCase();
-  return child.startsWith(root + sep.toLowerCase());
 }

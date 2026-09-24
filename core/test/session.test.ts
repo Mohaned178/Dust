@@ -1,5 +1,6 @@
 import { join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { AggregateTree } from '../src/model/tree';
 import type { Enumerator } from '../src/scanner/enumerator';
 import { ScanSession } from '../src/scanner/session';
 import { Fixture } from './fixtures';
@@ -73,5 +74,15 @@ describe('ScanSession', () => {
       onProgress: (u) => updates.push(u.currentPath),
     }).start();
     expect(updates.length).toBeGreaterThan(0);
+  });
+
+  it('fills a caller-provided tree and returns it', async () => {
+    fixture.file('a.txt', 'aa');
+    const tree = new AggregateTree();
+
+    const result = await new ScanSession({ root: fixture.root, pool: false, tree }).start();
+
+    expect(result.tree).toBe(tree);
+    expect(tree.get(fixture.root)?.bytes).toBe(2);
   });
 });

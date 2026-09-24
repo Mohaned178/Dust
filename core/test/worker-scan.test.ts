@@ -67,24 +67,24 @@ const tree: Record<string, Tree> = {
 
 describe('scanTask', () => {
   it('opens every directory and never submits when the budget lasts', () => {
-    const sink = run(tree, 1000);
-    expect(sink.opens.map((o) => o.path)).toEqual([
-      root,
-      join(root, 'a'),
-      join(root, 'a', 'c'),
-      join(root, 'b'),
-    ]);
-    expect(sink.submits).toEqual([]);
-    expect(sink.progress).toBe(6);
-    const rootOpen = sink.opens[0]!;
+    const rootSink = run(tree, 1000);
+    expect(rootSink.opens.map((o) => o.path)).toEqual([root]);
+    expect(rootSink.submits).toEqual([join(root, 'a'), join(root, 'b')]);
+    const rootOpen = rootSink.opens[0]!;
     expect(rootOpen.isRoot).toBe(true);
     expect(rootOpen.childDirs).toEqual([join(root, 'a'), join(root, 'b')]);
+
+    const sink = run(tree, 1000, join(root, 'a'), false);
+    expect(sink.opens.map((o) => o.path)).toEqual([join(root, 'a'), join(root, 'a', 'c')]);
+    expect(sink.submits).toEqual([]);
+    expect(sink.progress).toBe(3);
+    expect(sink.opens[0]!.isRoot).toBe(false);
     expect(sink.opens.find((o) => o.path === join(root, 'a', 'c'))!.directAllocatedBytes).toBe(8192);
   });
 
   it('splits a directory whose children exceed the remaining budget', () => {
-    const sink = run(tree, 3);
-    expect(sink.opens.map((o) => o.path)).toEqual([root, join(root, 'a'), join(root, 'b')]);
+    const sink = run(tree, 1, join(root, 'a'), false);
+    expect(sink.opens.map((o) => o.path)).toEqual([join(root, 'a')]);
     expect(sink.submits).toEqual([join(root, 'a', 'c')]);
     const a = sink.opens.find((o) => o.path === join(root, 'a'))!;
     expect(a.childDirs).toEqual([join(root, 'a', 'c')]);
@@ -106,5 +106,17 @@ describe('scanTask', () => {
     const sink = run(tree, 1000, root, true, () => true);
     expect(sink.opens).toEqual([]);
     expect(sink.submits).toEqual([]);
+  });
+
+  it('submits the root children immediately', () => {
+    const sink = run(
+      {
+        'F:\\synthetic': { dirs: ['a', 'b'] },
+        'F:\\synthetic\\a': {},
+        'F:\\synthetic\\b': {},
+      },
+      20_000,
+    );
+    expect(sink.submits).toEqual([join(root, 'a'), join(root, 'b')]);
   });
 });

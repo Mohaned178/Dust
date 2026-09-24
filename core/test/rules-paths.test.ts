@@ -43,4 +43,23 @@ describe('expandProfileWildcard', () => {
     const probe = createNodeFsProbe();
     expect(expandProfileWildcard(fixture.root, 'Missing/*/Cache', probe)).toEqual([]);
   });
+
+  it('memoizes wildcard expansion per probe', () => {
+    const calls: string[] = [];
+    const probe = {
+      exists: () => true,
+      stat: () => null,
+      listDirectory: (path: string) => {
+        calls.push(path);
+        return [{ name: 'Default', isDirectory: () => true, isSymbolicLink: () => false }] as never;
+      },
+      readFile: () => null,
+    };
+
+    const first = expandProfileWildcard('C:\\Base', '*\\Cache', probe);
+    const second = expandProfileWildcard('C:\\Base', '*\\Cache', probe);
+
+    expect(first).toEqual(second);
+    expect(calls).toHaveLength(1);
+  });
 });
