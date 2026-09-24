@@ -9,3 +9,5 @@ coverage/
 *.log
 .worktrees/
 app/.bench-*.json
+.opencode/
+.impeccable/
