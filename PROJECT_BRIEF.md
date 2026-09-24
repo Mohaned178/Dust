@@ -95,9 +95,9 @@ Key architectural facts:
 
 ## Current state
 
-Plans 1–9 complete. UI works but needs redesign. Performance needs improvement. Deep Uninstall is planned next.
+Plans 1–10 complete: the engine, snapshots, app shell, results surface, cleanup flows, and the scan-performance pass are merged to `master`, and the renderer is rebuilt on the light-first design system. Deep Uninstall is planned next.
 
-Repository note: `master` currently carries Plan 1 (core scan engine) only. The completed Plan 2–9 work lives on `plan-*` branches checked out under `.worktrees/`; `plan-9-cleaner-flows` is the tip containing all of it. Run `git worktree list` and inspect branches before assuming what is merged.
+Repository note: everything is merged to `master`; historical `plan-*` and `redesign/light-workbench` branches remain on the remote only.
 
 ## Where to find the details
 
