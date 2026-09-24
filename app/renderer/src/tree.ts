@@ -73,6 +73,7 @@ export function flattenVisible(
   expanded: ReadonlySet<string>,
   sort: SortState,
   filter: ReadonlySet<string> | null,
+  matches: ReadonlySet<string> | null = null,
 ): FlatRow[] {
   const root = store.nodes.get(pathKey(store.root));
   if (!root) return [];
@@ -81,13 +82,31 @@ export function flattenVisible(
   const visit = (node: RowNode, depth: number): void => {
     for (const child of sortedChildren(store, node, sort)) {
       const key = pathKey(child.path);
-      if (filter !== null && !filter.has(key)) continue;
+      if (filter !== null && !filter.has(key) && !underExpandedMatch(store, child, matches, expanded)) continue;
       out.push({ row: child, depth, hasChildren: child.children.length > 0 });
-      if (filter !== null || expanded.has(key)) visit(child, depth + 1);
+      if (expanded.has(key)) visit(child, depth + 1);
     }
   };
   visit(root, 0);
   return out;
+}
+
+function underExpandedMatch(
+  store: RowStore,
+  node: RowNode,
+  matches: ReadonlySet<string> | null,
+  expanded: ReadonlySet<string>,
+): boolean {
+  if (matches === null || matches.size === 0) return false;
+  let parent = node.parent;
+  while (parent !== null && !sameRoot(parent, store.root)) {
+    const key = pathKey(parent);
+    if (matches.has(key)) return expanded.has(key);
+    const parentNode = store.nodes.get(key);
+    if (parentNode === undefined) return false;
+    parent = parentNode.parent;
+  }
+  return false;
 }
 
 export function filterPaths(store: RowStore, category: CategoryId | null): Set<string> | null {
@@ -103,6 +122,29 @@ export function filterPaths(store: RowStore, category: CategoryId | null): Set<s
     }
   }
   return included;
+}
+
+export function matchedPaths(store: RowStore, category: CategoryId | null): Set<string> {
+  const out = new Set<string>();
+  if (category === null) return out;
+  for (const node of store.nodes.values()) {
+    if (node.action?.category === category) out.add(pathKey(node.path));
+  }
+  return out;
+}
+
+export function ancestorKeys(store: RowStore, keys: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const key of keys) {
+    let parent: string | null | undefined = store.nodes.get(key)?.parent;
+    while (parent !== null && parent !== undefined && !sameRoot(parent, store.root)) {
+      const parentKey = pathKey(parent);
+      if (out.has(parentKey)) break;
+      out.add(parentKey);
+      parent = store.nodes.get(parentKey)?.parent;
+    }
+  }
+  return out;
 }
 
 export function isRowVisible(parent: string | null, root: string, expanded: ReadonlySet<string>): boolean {

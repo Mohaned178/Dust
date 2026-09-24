@@ -1,5 +1,14 @@
-import type { CleanReport } from '../../../src/shared/ipc';
-import { formatBytes } from '../format';
+import type { CleanItemResult, CleanReport } from '../../../src/shared/ipc';
+import { CATEGORY_LABELS } from '../../../src/shared/categories';
+import { formatBytes, formatCount } from '../format';
+import { groupResultsByCategory } from '../clean';
+import { CleanLedger } from './CleanLedger';
+import type { CleanLedgerRow } from './CleanLedger';
+import { CopyButton } from './CopyButton';
+import { CheckIcon, InfoIcon } from './icons';
+
+const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const PRIMARY = `inline-flex w-full items-center justify-center rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-strong ${FOCUS}`;
 
 export interface CleanSummaryProps {
   report: CleanReport;
@@ -7,76 +16,108 @@ export interface CleanSummaryProps {
   doneLabel?: string;
 }
 
-export function CleanSummary({ report, onDone, doneLabel = 'View updated disk' }: CleanSummaryProps) {
-  const issues = report.items.filter((item) => item.status !== 'done');
-  const commands = report.items.filter((item) => item.restoreCommand !== null);
+export function CleanSummary({ report, onDone, doneLabel = 'View Updated Disk' }: CleanSummaryProps) {
+  const rows: CleanLedgerRow[] = groupResultsByCategory(report.items).map(([category, items]) => ({
+    id: category,
+    label: CATEGORY_LABELS[category],
+    bytes: items.reduce((sum, item) => sum + item.deletedBytes, 0),
+    note: items.length === 1 ? '1 item' : `${items.length} items`,
+    detail: (
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <ResultItem key={`${item.ruleId}:${item.path}`} item={item} />
+        ))}
+      </ul>
+    ),
+  }));
+
+  const caveats: string[] = [];
+  if (report.skippedLocked > 0) {
+    caveats.push(
+      report.skippedLocked === 1
+        ? 'Partially cleaned: 1 file in use was skipped.'
+        : `Partially cleaned: ${formatCount(report.skippedLocked)} files in use were skipped.`,
+    );
+  }
+  if (report.itemErrors > 0) {
+    caveats.push(
+      report.itemErrors === 1
+        ? '1 item could not be cleaned — see the item list below.'
+        : `${formatCount(report.itemErrors)} items could not be cleaned — see the item list below.`,
+    );
+  }
 
   return (
-    <section aria-label="Cleanup summary" className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
-      <h2 className="text-lg font-medium text-neutral-100">Cleanup complete</h2>
-      <p className="mt-2 text-sm text-neutral-300">
-        Freed <span className="font-medium text-emerald-300">{formatBytes(report.deletedBytes)}</span> -{' '}
-        {formatBytes(report.remainingReclaimableBytes)} still reclaimable.
-      </p>
-      {report.skippedLocked > 0 && (
-        <p className="mt-1 text-sm text-amber-300">
-          Partially cleaned: {report.skippedLocked} file(s) in use were skipped.
+    <>
+      <div role="status" aria-live="polite" aria-atomic="true">
+        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <CheckIcon className="h-5 w-5" />
+        </span>
+        <p className="mt-3 text-center font-mono text-[2.5rem] font-semibold leading-none tracking-tight text-ink">
+          {formatBytes(report.deletedBytes)}
+        </p>
+        <p className="mt-2 text-center text-sm text-ink-muted">freed</p>
+      </div>
+
+      <div className="mt-6 h-px w-full bg-hairline" aria-hidden="true" />
+
+      {rows.length > 0 ? (
+        <CleanLedger rows={rows} ariaLabel="What was cleaned, by category" />
+      ) : (
+        <p className="py-6 text-center text-sm text-ink-muted">Nothing was deleted.</p>
+      )}
+
+      {report.remainingReclaimableBytes > 0 && (
+        <p className="mt-3 text-sm text-ink-muted">
+          <span className="font-mono text-ink">{formatBytes(report.remainingReclaimableBytes)}</span> still reclaimable
+          across all categories
         </p>
       )}
-      {report.itemErrors > 0 && (
-        <p className="mt-1 text-sm text-red-300">{report.itemErrors} error(s) - see the item list below.</p>
-      )}
-
-      {issues.length > 0 && (
-        <ul className="mt-4 space-y-1 text-sm">
-          {issues.map((item) => (
-            <li key={`${item.ruleId}:${item.path}`} className="rounded-lg border border-neutral-800 p-2">
-              <p className="break-all text-xs text-neutral-400">{item.path}</p>
-              <p className="mt-1 text-neutral-300">
-                {item.status === 'partial'
-                  ? `partially cleaned: ${item.skippedLocked} file(s) in use`
-                  : item.status === 'already-gone'
-                    ? 'already gone'
-                    : 'could not be cleaned'}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {commands.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs uppercase tracking-wide text-neutral-500">Restore commands</p>
-          <ul className="mt-2 space-y-2 text-sm">
-            {commands.map((item) => (
-              <li key={`${item.ruleId}:${item.path}`} className="rounded-lg border border-neutral-800 p-2">
-                <p className="break-all text-xs text-neutral-400">{item.path}</p>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <code className="text-neutral-200">{item.restoreCommand}</code>
-                  <button
-                    type="button"
-                    aria-label={`Copy command for ${item.path}`}
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(item.restoreCommand ?? '').catch(() => {});
-                    }}
-                    className="shrink-0 rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </li>
+      {caveats.length > 0 && (
+        <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+          <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <div className="min-w-0 space-y-1">
+            {caveats.map((line) => (
+              <p key={line}>{line}</p>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onDone}
-        className="mt-4 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
-      >
-        {doneLabel}
-      </button>
-    </section>
+      <div className="mt-6">
+        <button type="button" onClick={onDone} className={PRIMARY}>
+          {doneLabel}
+        </button>
+      </div>
+    </>
   );
+}
+
+function ResultItem({ item }: { item: CleanItemResult }) {
+  return (
+    <li className="rounded-lg border border-hairline bg-canvas/40 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 break-all font-mono text-xs text-ink-muted">{item.path}</span>
+        <span className="shrink-0 font-mono text-xs tabular-nums text-ink">{formatBytes(item.deletedBytes)}</span>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-muted">{statusText(item)}</p>
+      {item.restoreCommand !== null && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <code className="min-w-0 break-all font-mono text-xs text-ink">{item.restoreCommand}</code>
+          <CopyButton text={item.restoreCommand} label={`Copy command for ${item.path}`} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function statusText(item: CleanItemResult): string {
+  if (item.status === 'partial') {
+    return item.skippedLocked === 1
+      ? 'Partially cleaned: 1 file in use was skipped.'
+      : `Partially cleaned: ${formatCount(item.skippedLocked)} files in use were skipped.`;
+  }
+  if (item.status === 'already-gone') return 'Already gone.';
+  if (item.status === 'failed') return 'Could not be cleaned.';
+  return 'Cleaned.';
 }

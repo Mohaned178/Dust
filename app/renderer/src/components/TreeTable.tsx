@@ -1,21 +1,27 @@
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef } from 'react';
-import type { DisplayGrade } from '@dust/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { CATEGORY_LABELS } from '../../../src/shared/categories';
 import type { BrowseRow, ResultRow } from '../../../src/shared/ipc';
 import type { BrowseFlatRow } from '../browse-tree';
 import type { FlatRow, SortKey, SortState } from '../tree';
 import { pathKey } from '../tree';
 import { formatBytes, formatCount, formatRelativeTime } from '../format';
+import { GradePill, gradeWord } from './GradePill';
+import { ArrowDownIcon, ArrowUpIcon, ChevronRightIcon, FolderIcon } from './icons';
 
 const GRID_ANALYZE =
-  'grid grid-cols-[minmax(0,2.5fr)_90px_90px_130px_120px_minmax(0,1.8fr)_110px_90px] items-center gap-1';
-const GRID_BROWSE = 'grid grid-cols-[minmax(0,2.5fr)_90px_90px_130px_120px_110px_90px] items-center gap-1';
+  'grid grid-cols-[minmax(12rem,2.4fr)_84px_118px_108px_128px_128px_92px] items-center gap-1 min-w-[54rem]';
+const GRID_BROWSE =
+  'grid grid-cols-[minmax(12rem,2.4fr)_84px_150px_116px_170px] items-center gap-1 min-w-[46rem]';
+const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
+
+const RIGHT_ALIGNED = new Set(['size', 'allocated', 'items', 'percent', 'action']);
 
 const SORTABLE_ANALYZE: Record<string, SortKey | null> = {
   name: 'name',
   size: 'size',
-  allocated: 'allocated',
   items: 'items',
   percent: 'percent',
   grade: 'grade',
@@ -26,9 +32,7 @@ const SORTABLE_ANALYZE: Record<string, SortKey | null> = {
 const SORTABLE_BROWSE: Record<string, SortKey | null> = {
   name: 'name',
   size: 'size',
-  allocated: 'allocated',
   items: 'items',
-  percent: 'percent',
   modified: 'modified',
   action: null,
 };
@@ -53,9 +57,10 @@ export interface TreeTableProps {
   onToggle: (path: string) => void;
   onReveal: (path: string) => void;
   onSelect?: (path: string) => void;
-  onClean?: (path: string) => void;
   onDelete?: (path: string) => void;
   selectedPath?: string | null;
+  toolbar?: ReactNode;
+  empty?: ReactNode;
 }
 
 export function TreeTable({
@@ -68,13 +73,41 @@ export function TreeTable({
   onToggle,
   onReveal,
   onSelect,
-  onClean,
   onDelete,
   selectedPath = null,
+  toolbar,
+  empty,
 }: TreeTableProps) {
   const browse = mode === 'browse';
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const data = rows as unknown as TableFlatRow[];
+  const selectedKey = selectedPath !== null ? pathKey(selectedPath) : null;
+  const [scrollState, setScrollState] = useState({ overflowing: false, atEnd: false });
+
+  const updateScrollState = useCallback(() => {
+    const element = scrollRef.current;
+    if (element === null) return;
+    const overflowing = element.scrollWidth - element.clientWidth > 1;
+    const atEnd = element.scrollLeft + element.clientWidth >= element.scrollWidth - 1;
+    setScrollState((current) =>
+      current.overflowing === overflowing && current.atEnd === atEnd
+        ? current
+        : { overflowing, atEnd },
+    );
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (element === null) return;
+    updateScrollState();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateScrollState);
+    observer?.observe(element);
+    element.addEventListener('scroll', updateScrollState, { passive: true });
+    return () => {
+      observer?.disconnect();
+      element.removeEventListener('scroll', updateScrollState);
+    };
+  }, [updateScrollState, data.length]);
 
   const columns = useMemo(() => {
     const name = columnHelper.accessor((item) => item.row.name, {
@@ -84,30 +117,34 @@ export function TreeTable({
         const item = info.row.original;
         const row = item.row;
         const isExpanded = expanded.has(pathKey(row.path));
+        const dim = 'grade' in row && row.grade === 'danger';
         return (
-          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${item.depth * 16}px` }}>
+          <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: `${item.depth * 16}px` }}>
             {item.hasChildren ? (
               <button
                 type="button"
                 aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${row.name}`}
                 aria-expanded={isExpanded}
                 onClick={() => onToggle(row.path)}
-                className="w-5 shrink-0 text-neutral-400"
+                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-muted transition duration-150 ${EASE} hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                  isExpanded ? 'rotate-90' : ''
+                }`}
               >
-                {isExpanded ? '▾' : '▸'}
+                <ChevronRightIcon className="h-3.5 w-3.5" />
               </button>
             ) : (
               <span className="w-5 shrink-0" />
             )}
+            <FolderIcon className="h-4 w-4 shrink-0 text-ink-muted" />
             <span
-              className="min-w-0 truncate text-neutral-100"
+              className={`min-w-0 truncate ${dim ? 'text-ink-muted' : 'text-ink'}`}
               title={row.path}
               onDoubleClick={() => onReveal(row.path)}
             >
               {row.name}
             </span>
-            {!row.complete && <span className="shrink-0 text-xs text-neutral-500">scanning…</span>}
-            {row.partial && <span className="shrink-0 text-xs text-amber-400">partial</span>}
+            {!row.complete && <span className="shrink-0 text-xs text-ink-muted">scanning…</span>}
+            {row.partial && <span className="shrink-0 text-xs text-ink-muted">partial</span>}
           </div>
         );
       },
@@ -116,20 +153,14 @@ export function TreeTable({
     const size = columnHelper.accessor((item) => item.row.bytes, {
       id: 'size',
       header: 'Size',
-      cell: (info) => <span className="tabular-nums text-neutral-200">{formatBytes(info.getValue())}</span>,
-    });
-
-    const allocated = columnHelper.accessor((item) => item.row.allocatedBytes, {
-      id: 'allocated',
-      header: 'Allocated',
-      cell: (info) => <span className="tabular-nums text-neutral-400">{formatBytes(info.getValue())}</span>,
+      cell: (info) => <span className="font-mono text-ink">{formatBytes(info.getValue())}</span>,
     });
 
     const items = columnHelper.accessor((item) => item.row.fileCount + item.row.folderCount, {
       id: 'items',
       header: 'Files / Folders',
       cell: (info) => (
-        <span className="tabular-nums text-neutral-400">
+        <span className="font-mono text-ink-muted">
           {formatCount(info.row.original.row.fileCount)} / {formatCount(info.row.original.row.folderCount)}
         </span>
       ),
@@ -140,16 +171,16 @@ export function TreeTable({
       header: '%',
       cell: (info) => {
         if (totalBytes <= 0) {
-          return <span className="tabular-nums text-xs text-neutral-400">—</span>;
+          return <span className="font-mono text-xs text-ink-muted">—</span>;
         }
         const value = (info.getValue() / totalBytes) * 100;
         const clamped = Math.min(Math.max(value, 0), 100);
         return (
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-neutral-800">
-              <div className="h-full bg-emerald-500" style={{ width: `${clamped}%` }} />
+          <div className="flex items-center justify-end gap-2">
+            <div className="h-1.5 w-10 shrink-0 overflow-hidden rounded-full bg-track">
+              <div className="h-full rounded-full bg-accent" style={{ width: `${clamped}%` }} />
             </div>
-            <span className="tabular-nums text-xs text-neutral-400">
+            <span className="font-mono text-xs text-ink-muted">
               {value > 0 && value < 0.1 ? '<0.1%' : `${value.toFixed(1)}%`}
             </span>
           </div>
@@ -161,17 +192,18 @@ export function TreeTable({
       id: 'modified',
       header: 'Last modified',
       cell: (info) => (
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-ink-muted">
           {info.getValue() > 0 ? formatRelativeTime(info.getValue()) : '—'}
         </span>
       ),
     });
 
-    const exploreButton = (path: string) => (
+    const exploreButton = (path: string, name: string) => (
       <button
         type="button"
+        aria-label={`Explore ${name}`}
         onClick={() => onReveal(path)}
-        className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
+        className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       >
         Explore
       </button>
@@ -181,9 +213,7 @@ export function TreeTable({
       return [
         name,
         size,
-        allocated,
         items,
-        percent,
         modified,
         columnHelper.display({
           id: 'action',
@@ -191,16 +221,16 @@ export function TreeTable({
           cell: (info) => {
             const row = info.row.original.row;
             return (
-              <div className="flex gap-1">
+              <div className="flex justify-end gap-1">
                 <button
                   type="button"
                   aria-label={`Delete ${row.name}`}
                   onClick={() => onDelete?.(row.path)}
-                  className="rounded-md bg-red-700 px-2 py-1 text-xs font-medium text-white"
+                  className="inline-flex items-center rounded-lg border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                 >
                   Delete
                 </button>
-                {exploreButton(row.path)}
+                {exploreButton(row.path, row.name)}
               </div>
             );
           },
@@ -211,7 +241,6 @@ export function TreeTable({
     return [
       name,
       size,
-      allocated,
       items,
       percent,
       columnHelper.accessor((item) => ('grade' in item.row ? item.row.grade : 'review'), {
@@ -219,18 +248,23 @@ export function TreeTable({
         header: 'Safety',
         cell: (info) => {
           const row = info.row.original.row as ResultRow;
-          const label = row.action ? row.action.grade : row.grade;
-          const detail = row.action ? row.action.evidence : row.gradeReason;
+          const grade = row.action ? row.action.grade : row.grade;
+          const word = gradeWord(grade);
+          const open = selectedKey !== null && selectedKey === pathKey(row.path);
           return (
             <button
               type="button"
               onClick={() => onSelect?.(row.path)}
-              title={detail}
-              aria-label={`Why ${row.name} is graded ${label}`}
-              className="flex min-w-0 items-center gap-2 text-left"
+              aria-expanded={open}
+              aria-label={`Why ${row.name} is graded ${word}`}
+              className="flex min-w-0 items-center gap-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
-              <GradeBadge grade={label} />
-              <span className="min-w-0 truncate text-xs text-neutral-400">{detail}</span>
+              <GradePill grade={grade} />
+              <ChevronRightIcon
+                className={`h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform duration-150 ${EASE} ${
+                  open ? 'rotate-90' : ''
+                }`}
+              />
             </button>
           );
         },
@@ -241,31 +275,22 @@ export function TreeTable({
         header: 'Action',
         cell: (info) => {
           const row = info.row.original.row as ResultRow;
+          const protectedRow = row.grade === 'danger';
           return (
-            <div className="flex gap-1">
-              {row.action !== null && (
-                <button
-                  type="button"
-                  aria-label={`Clean ${row.name}`}
-                  onClick={() => onClean?.(row.path)}
-                  className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white"
-                >
-                  Clean
-                </button>
-              )}
-              {exploreButton(row.path)}
+            <div className="flex justify-end gap-1">
+              {!protectedRow && exploreButton(row.path, row.name)}
             </div>
           );
         },
       }),
     ];
-  }, [browse, expanded, onClean, onDelete, onReveal, onSelect, onToggle, totalBytes]);
+  }, [browse, expanded, onDelete, onReveal, onSelect, onToggle, totalBytes, selectedKey]);
 
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
   const virtualizer = useVirtualizer({
     count: data.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 36,
+    estimateSize: () => 38,
     overscan: 12,
   });
 
@@ -275,71 +300,126 @@ export function TreeTable({
   const virtualItems = virtualizer.getVirtualItems();
 
   return (
-    <div
-      ref={scrollRef}
-      role="table"
-      aria-label="Folder tree"
-      className="h-[560px] overflow-auto rounded-xl border border-neutral-800 bg-neutral-900"
-    >
-      <div role="row" className={`${grid} sticky top-0 z-10 border-b border-neutral-800 bg-neutral-900 px-2`}>
-        {headers.map((header) => {
-          const sortKey = sortable[header.id] ?? null;
-          const active = sortKey !== null && sort.key === sortKey;
-          return (
-            <button
-              key={header.id}
-              type="button"
-              role="columnheader"
-              aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}
-              disabled={sortKey === null}
-              onClick={() => {
-                if (sortKey === null) return;
-                onSortChange({ key: sortKey, desc: active ? !sort.desc : sortKey !== 'name' });
-              }}
-              className="px-1 py-2 text-left text-xs font-medium text-neutral-400 disabled:cursor-default"
-            >
-              {flexRender(header.column.columnDef.header, header.getContext())}
-              {active ? (sort.desc ? ' ▼' : ' ▲') : ''}
-            </button>
-          );
-        })}
+    <div className="relative overflow-hidden rounded-2xl border border-hairline bg-surface">
+      {toolbar !== undefined && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-3 py-2.5">
+          {toolbar}
+        </div>
+      )}
+      <div
+        ref={scrollRef}
+        role="table"
+        aria-label="Folder tree"
+        aria-rowcount={data.length + 1}
+        aria-colcount={headers.length}
+        tabIndex={0}
+        className="h-[560px] overflow-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+      >
+        <div
+          role="row"
+          aria-rowindex={1}
+          className={`${grid} sticky top-0 z-10 border-b border-hairline bg-surface`}
+        >
+          {headers.map((header) => {
+            const sortKey = sortable[header.id] ?? null;
+            const active = sortKey !== null && sort.key === sortKey;
+            const align = RIGHT_ALIGNED.has(header.id) ? 'text-right' : 'text-left';
+            return (
+              <div
+                key={header.id}
+                role="columnheader"
+                aria-sort={
+                  sortKey === null ? undefined : active ? (sort.desc ? 'descending' : 'ascending') : 'none'
+                }
+                className={`whitespace-nowrap px-2 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted ${align}`}
+              >
+                {sortKey === null ? (
+                  <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSortChange({ key: sortKey, desc: active ? !sort.desc : sortKey !== 'name' })}
+                    className={`inline-flex items-center transition-colors duration-150 ${EASE} hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent`}
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {active && (
+                      <span aria-hidden="true" className="ml-1 inline-flex">
+                        {sort.desc ? <ArrowDownIcon className="h-3.5 w-3.5" /> : <ArrowUpIcon className="h-3.5 w-3.5" />}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {data.length === 0 && empty !== undefined ? (
+          <div role="row">
+            <div role="cell">{empty}</div>
+          </div>
+        ) : (
+        <div role="rowgroup" style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+          {virtualItems.map((item) => {
+            const flat = data[item.index];
+            const tableRow = table.getRowModel().rows[item.index];
+            if (!flat || !tableRow) return null;
+            const row = flat.row;
+            const protectedRow = 'grade' in row && row.grade === 'danger';
+            const open = selectedKey !== null && selectedKey === pathKey(row.path);
+            return (
+              <div
+                key={item.key}
+                role="row"
+                aria-rowindex={item.index + 2}
+                data-index={item.index}
+                ref={virtualizer.measureElement}
+                className={`${grid} absolute left-0 top-0 w-full border-b border-hairline text-sm transition-colors duration-150 ${EASE} ${
+                  open ? 'bg-accent-soft/50' : protectedRow ? 'bg-canvas/50' : 'hover:bg-canvas/60'
+                }`}
+                style={{ transform: `translateY(${item.start}px)` }}
+              >
+                {tableRow.getVisibleCells().map((cell) => (
+                  <div
+                    key={cell.id}
+                    role="cell"
+                    className={`min-w-0 truncate px-2 py-2 ${RIGHT_ALIGNED.has(cell.column.id) ? 'text-right' : ''}`}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                ))}
+                {open && !browse && (
+                  <div role="cell" style={{ gridColumn: '1 / -1' }} className="min-w-0">
+                    <GradeDisclosure row={row as ResultRow} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        )}
       </div>
-      <div role="rowgroup" style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
-        {virtualItems.map((item) => {
-          const flat = data[item.index];
-          const tableRow = table.getRowModel().rows[item.index];
-          if (!flat || !tableRow) return null;
-          return (
-            <div
-              key={item.key}
-              role="row"
-              data-index={item.index}
-              ref={virtualizer.measureElement}
-              className={`${grid} absolute left-0 top-0 w-full border-b border-neutral-900 px-2 text-sm ${
-                selectedPath !== null && pathKey(selectedPath) === pathKey(flat.row.path) ? 'bg-neutral-800/60' : ''
-              }`}
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
-              {tableRow.getVisibleCells().map((cell) => (
-                <div key={cell.id} role="cell" className="min-w-0 truncate py-2">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+      {scrollState.overflowing && !scrollState.atEnd && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-3 right-3 top-0 w-12 bg-linear-to-l from-surface via-surface/80 to-transparent"
+        />
+      )}
     </div>
   );
 }
 
-function GradeBadge({ grade }: { grade: DisplayGrade }) {
-  const styles =
-    grade === 'safe'
-      ? 'bg-emerald-500/15 text-emerald-300'
-      : grade === 'review'
-        ? 'bg-amber-500/15 text-amber-300'
-        : 'bg-red-500/15 text-red-300';
-  const label = grade === 'safe' ? 'Green' : grade === 'review' ? 'Yellow' : 'Red';
-  return <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${styles}`}>{label}</span>;
+function GradeDisclosure({ row }: { row: ResultRow }) {
+  const reason = row.action ? row.action.evidence : row.gradeReason;
+  const ruleId = row.action?.ruleId ?? null;
+  const category = row.action?.category ?? null;
+  return (
+    <div className="dust-disclose border-t border-hairline bg-canvas/40 px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Why this grade</p>
+        {category !== null && <p className="text-xs text-ink-muted">Category: {CATEGORY_LABELS[category]}</p>}
+      </div>
+      <p className="mt-1 text-sm text-ink">{reason}</p>
+      {ruleId !== null && <p className="mt-1 font-mono text-xs text-ink-muted">{`Rule: ${ruleId}`}</p>}
+    </div>
+  );
 }

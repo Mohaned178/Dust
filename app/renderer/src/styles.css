@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+@theme static {
+  --color-canvas: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-hover: #fafbfc;
+  --color-ink: #161b22;
+  --color-ink-muted: #59616e;
+  --color-hairline: #e4e7eb;
+  --color-hairline-strong: #cfd6df;
+  --color-accent: #0f6e6e;
+  --color-accent-strong: #0b5858;
+  --color-accent-soft: #e8f3f2;
+  --color-accent-border: #cfe6e3;
+  --color-track: #e7eaef;
+  --color-notice: #eef5f4;
+  --color-notice-border: #d5e7e4;
+  --color-grade-safe: #1d6b45;
+  --color-grade-safe-soft: #e8f4ed;
+  --color-grade-safe-dot: #2f9e63;
+  --color-grade-review: #8a5a12;
+  --color-grade-review-soft: #f7efdc;
+  --color-grade-review-dot: #c98a2e;
+  --color-grade-danger: #a13a3a;
+  --color-grade-danger-soft: #f8ecec;
+  --color-grade-danger-dot: #c2564f;
+  --color-scrollbar: #c9cfd8;
+  --color-scrollbar-hover: #b3bac4;
+  --color-window: #0a0a0b;
+  --color-window-ink: #e5e5e5;
+  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 16px 40px -20px rgba(16, 24, 40, 0.22);
+  --shadow-pop: 0 1px 2px rgba(16, 24, 40, 0.06), 0 24px 60px -24px rgba(16, 24, 40, 0.3);
+}
+
 html,
 body,
 #root {
@@ -7,7 +40,167 @@ body,
 }
 
 body {
-  background-color: #0a0a0b;
-  color: #e5e5e5;
+  background-color: var(--color-window);
+  color: var(--color-window-ink);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.dust-dashboard,
+.dust-dialog {
+  color-scheme: light;
+  caret-color: var(--color-accent);
+}
+
+.dust-dashboard ::selection,
+.dust-dialog ::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, white);
+  color: var(--color-ink);
+}
+
+.dust-dashboard input[type='search']::-webkit-search-cancel-button,
+.dust-dialog input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dust-dashboard ::-webkit-scrollbar,
+.dust-dialog ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.dust-dashboard ::-webkit-scrollbar-thumb,
+.dust-dialog ::-webkit-scrollbar-thumb {
+  background-color: var(--color-scrollbar);
+  border: 3px solid var(--color-canvas);
+  border-radius: 999px;
+}
+
+.dust-dashboard ::-webkit-scrollbar-thumb:hover,
+.dust-dialog ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-scrollbar-hover);
+}
+
+.dust-dashboard ::-webkit-scrollbar-track,
+.dust-dialog ::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+@keyframes dust-bar-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.dust-bar-fill {
+  animation: dust-bar-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dust-path-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dust-path-line {
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dust-path-enter {
+  animation: dust-path-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dust-disclose-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dust-disclose {
+  animation: dust-disclose-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dust-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dust-rise {
+  animation: dust-rise-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dust-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dust-evidence-in {
+  animation: dust-fade-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 70ms both;
+}
+
+@keyframes dust-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dust-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dust-backdrop {
+  animation: dust-backdrop-in 160ms ease-out both;
+}
+
+.dust-panel {
+  animation: dust-panel-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dust-bar-fill,
+  .dust-path-enter,
+  .dust-disclose,
+  .dust-rise,
+  .dust-evidence-in,
+  .dust-backdrop,
+  .dust-panel {
+    animation: none;
+  }
+
+  .dust-path-line {
+    transition: none;
+  }
 }
