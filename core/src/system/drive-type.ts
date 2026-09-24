@@ -51,8 +51,20 @@ export function parseVolumesJson(raw: string): VolumeInfo[] {
   return volumes;
 }
 
+const VOLUME_CACHE_TTL_MS = 5 * 60_000;
+
+let volumeCache: { at: number; volumes: VolumeInfo[] } | null = null;
+
+export function resetVolumeCache(): void {
+  volumeCache = null;
+}
+
 export function listVolumes(): VolumeInfo[] {
   if (process.platform !== 'win32') return [];
+  const now = Date.now();
+  if (volumeCache !== null && now - volumeCache.at < VOLUME_CACHE_TTL_MS) {
+    return volumeCache.volumes.map((volume) => ({ ...volume }));
+  }
   try {
     const raw = execFileSync(
       'powershell.exe',
@@ -64,7 +76,9 @@ export function listVolumes(): VolumeInfo[] {
       ],
       { encoding: 'utf8', timeout: 15_000 },
     );
-    return parseVolumesJson(raw);
+    const volumes = parseVolumesJson(raw);
+    volumeCache = { at: now, volumes };
+    return volumes.map((volume) => ({ ...volume }));
   } catch {
     return [];
   }

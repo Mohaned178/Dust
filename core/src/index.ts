@@ -105,6 +105,12 @@ export type { SaveResult, SnapshotLoadResult, StorePaths, UserPreferences } from
 export { RULES_VERSION } from './rules/version';
 export { getVolumeUsage, listFixedVolumes } from './system/volumes';
 export type { VolumeUsage } from './system/volumes';
-export { createExternalPredicate, listVolumes, systemDriveRoot, volumeRootOf } from './system/drive-type';
+export {
+  createExternalPredicate,
+  listVolumes,
+  resetVolumeCache,
+  systemDriveRoot,
+  volumeRootOf,
+} from './system/drive-type';
 export type { DriveType, VolumeInfo } from './system/drive-type';
 export { DEFAULT_CLUSTER_SIZE, roundUpToCluster, volumeClusterSize } from './system/cluster';

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { SnapshotCorruptError, parseSnapshot } from './schema';
 import type { SnapshotData } from './schema';
@@ -23,24 +23,38 @@ export type SnapshotLoadResult =
   | { kind: 'corrupt'; reason: string };
 
 export class SnapshotStore {
+  private cache: { key: string; result: SnapshotLoadResult } | null = null;
+
   constructor(private readonly paths: StorePaths) {}
 
   load(): SnapshotLoadResult {
+    let key: string;
+    try {
+      const stat = statSync(this.paths.snapshotPath);
+      key = `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      this.cache = null;
+      return { kind: 'missing' };
+    }
+    if (this.cache !== null && this.cache.key === key) return this.cache.result;
+
     let raw: string;
     try {
-      if (!existsSync(this.paths.snapshotPath)) return { kind: 'missing' };
       raw = readFileSync(this.paths.snapshotPath, 'utf8');
     } catch {
       return { kind: 'corrupt', reason: 'read-error' };
     }
+    let result: SnapshotLoadResult;
     try {
-      return { kind: 'ok', snapshot: parseSnapshot(raw) };
+      result = { kind: 'ok', snapshot: parseSnapshot(raw) };
     } catch (error) {
-      if (error instanceof SnapshotCorruptError) {
-        return { kind: 'corrupt', reason: error.reason };
-      }
-      return { kind: 'corrupt', reason: 'unknown' };
+      result =
+        error instanceof SnapshotCorruptError
+          ? { kind: 'corrupt', reason: error.reason }
+          : { kind: 'corrupt', reason: 'unknown' };
     }
+    this.cache = { key, result };
+    return result;
   }
 
   save(snapshot: SnapshotData): SaveResult {
@@ -49,6 +63,7 @@ export class SnapshotStore {
       const tmp = `${this.paths.snapshotPath}.tmp`;
       writeFileSync(tmp, JSON.stringify(snapshot));
       renameSync(tmp, this.paths.snapshotPath);
+      this.cache = null;
       return { ok: true };
     } catch (error) {
       return { ok: false, error: messageOf(error) };

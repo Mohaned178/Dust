@@ -9,8 +9,21 @@ export interface VolumeUsage {
   freeBytes: number | null;
 }
 
+const USAGE_CACHE_TTL_MS = 5 * 60_000;
+
+let usageCache: { at: number; key: string; usage: VolumeUsage[] } | null = null;
+
+export function resetVolumeUsageCache(): void {
+  usageCache = null;
+}
+
 export function getVolumeUsage(volumes: string[]): VolumeUsage[] {
-  return volumes.map((volume) => {
+  const key = volumes.join('\n');
+  const now = Date.now();
+  if (usageCache !== null && usageCache.key === key && now - usageCache.at < USAGE_CACHE_TTL_MS) {
+    return usageCache.usage.map((entry) => ({ ...entry }));
+  }
+  const usage = volumes.map((volume) => {
     try {
       const stats = statfsSync(volume);
       return {
@@ -23,6 +36,8 @@ export function getVolumeUsage(volumes: string[]): VolumeUsage[] {
       return powershellVolumeUsage(volume);
     }
   });
+  usageCache = { at: now, key, usage };
+  return usage.map((entry) => ({ ...entry }));
 }
 
 export function listFixedVolumes(): string[] {
