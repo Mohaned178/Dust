@@ -4,18 +4,17 @@ import { CategoryStrip } from '../../renderer/src/components/CategoryStrip';
 import { makeCategories } from './fakes';
 
 describe('CategoryStrip', () => {
-  it('renders five categories in fixed order with zero rows disabled', () => {
+  it('renders an All chip and one chip per category, with empty chips disabled', () => {
     render(<CategoryStrip categories={makeCategories()} active={null} onSelect={vi.fn()} />);
 
-    const strip = screen.getByRole('region', { name: 'Reclaimable by category' });
+    const strip = screen.getByRole('region', { name: 'Filter by category' });
     expect(strip).toBeInTheDocument();
     for (const label of ['Temp', 'Recycle Bin', 'npm cache', 'App caches', 'npm projects']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.getByText('256 KB')).toBeInTheDocument();
-    expect(screen.getByText('1 item')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Recycle Bin/ })).toBeDisabled();
-    expect(screen.getAllByText(/nothing to clean/)).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('selects and clears the active category', () => {
@@ -27,7 +26,11 @@ describe('CategoryStrip', () => {
 
     rerender(<CategoryStrip categories={makeCategories()} active="temp" onSelect={onSelect} />);
     expect(screen.getByRole('button', { name: /Temp/ })).toHaveAttribute('aria-pressed', 'true');
+
     fireEvent.click(screen.getByRole('button', { name: /Temp/ }));
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
     expect(onSelect).toHaveBeenLastCalledWith(null);
   });
 });

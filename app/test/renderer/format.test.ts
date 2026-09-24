@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatCount, formatDuration, formatRelativeTime } from '../../renderer/src/format';
+import { formatBytes, formatClock, formatCount, formatDuration, formatRelativeTime } from '../../renderer/src/format';
 
 describe('formatBytes', () => {
   it('uses binary units with two significant digits', () => {
@@ -33,6 +33,15 @@ describe('formatDuration', () => {
     expect(formatDuration(65_000)).toBe('1m 05s');
     expect(formatDuration(3_600_000)).toBe('1h 00m');
     expect(formatDuration(7_500_000)).toBe('2h 05m');
+  });
+});
+
+describe('formatClock', () => {
+  it('formats elapsed time as a clock', () => {
+    expect(formatClock(0)).toBe('00:00');
+    expect(formatClock(5000)).toBe('00:05');
+    expect(formatClock(65_000)).toBe('01:05');
+    expect(formatClock(3_725_000)).toBe('1:02:05');
   });
 });
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ancestorKeys,
   compareRows,
   createRowStore,
   filterPaths,
   flattenVisible,
   isRowVisible,
+  matchedPaths,
   mergeMatches,
   pathKey,
   pathName,
@@ -127,5 +129,79 @@ describe('filterPaths', () => {
     expect(included!.has(pathKey('C:\\Users\\x\\AppData\\Local\\Temp'))).toBe(true);
     expect(included!.has(pathKey('C:\\other'))).toBe(false);
     expect(filterPaths(store, null)).toBeNull();
+  });
+});
+
+function deepTempStore(): ReturnType<typeof createRowStore> {
+  const store = createRowStore('C:\\');
+  upsertRows(store, [
+    row('C:\\Users', 'C:\\', { bytes: 100 }),
+    row('C:\\Users\\x', 'C:\\Users', { bytes: 90 }),
+    row('C:\\Users\\x\\AppData', 'C:\\Users\\x', { bytes: 80 }),
+    row('C:\\Users\\x\\AppData\\Local', 'C:\\Users\\x\\AppData', { bytes: 70 }),
+    row('C:\\Users\\x\\AppData\\Local\\Temp', 'C:\\Users\\x\\AppData\\Local', {
+      bytes: 862,
+      action: { ruleId: 'system-temp', category: 'temp', grade: 'safe', evidence: 'fixture' },
+    }),
+    row('C:\\Users\\x\\AppData\\Local\\Temp\\junk.tmp', 'C:\\Users\\x\\AppData\\Local\\Temp', { bytes: 10 }),
+  ]);
+  return store;
+}
+
+describe('filtered flattening', () => {
+  it('collects the ancestor chain of matches, excluding the root', () => {
+    const store = deepTempStore();
+    const ancestors = ancestorKeys(store, matchedPaths(store, 'temp'));
+    expect([...ancestors].sort()).toEqual(
+      [
+        pathKey('C:\\Users'),
+        pathKey('C:\\Users\\x'),
+        pathKey('C:\\Users\\x\\AppData'),
+        pathKey('C:\\Users\\x\\AppData\\Local'),
+      ].sort(),
+    );
+  });
+
+  it('reveals the matched folder only once its ancestors are expanded', () => {
+    const store = deepTempStore();
+    const filter = filterPaths(store, 'temp');
+    const matches = matchedPaths(store, 'temp');
+
+    const collapsed = flattenVisible(store, new Set(), { key: 'size', desc: true }, filter, matches);
+    expect(collapsed.map((entry) => entry.row.path)).toEqual(['C:\\Users']);
+
+    const opened = ancestorKeys(store, matches);
+    const seeded = flattenVisible(store, opened, { key: 'size', desc: true }, filter, matches);
+    expect(seeded.map((entry) => entry.row.path)).toContain('C:\\Users\\x\\AppData\\Local\\Temp');
+  });
+
+  it('shows children of a matched folder only when that folder is expanded', () => {
+    const store = deepTempStore();
+    const filter = filterPaths(store, 'temp');
+    const matches = matchedPaths(store, 'temp');
+    const ancestors = ancestorKeys(store, matches);
+
+    const closed = flattenVisible(store, ancestors, { key: 'size', desc: true }, filter, matches);
+    expect(closed.map((entry) => entry.row.path)).not.toContain('C:\\Users\\x\\AppData\\Local\\Temp\\junk.tmp');
+
+    const open = new Set([...ancestors, pathKey('C:\\Users\\x\\AppData\\Local\\Temp')]);
+    const opened = flattenVisible(store, open, { key: 'size', desc: true }, filter, matches);
+    expect(opened.map((entry) => entry.row.path)).toContain('C:\\Users\\x\\AppData\\Local\\Temp\\junk.tmp');
+  });
+
+  it('toggles a filtered ancestor between expanded and collapsed', () => {
+    const store = deepTempStore();
+    const filter = filterPaths(store, 'temp');
+    const matches = matchedPaths(store, 'temp');
+
+    const expanded = flattenVisible(
+      store,
+      new Set([pathKey('C:\\Users')]),
+      { key: 'size', desc: true },
+      filter,
+      matches,
+    );
+    const collapsed = flattenVisible(store, new Set(), { key: 'size', desc: true }, filter, matches);
+    expect(expanded.length).toBeGreaterThan(collapsed.length);
   });
 });

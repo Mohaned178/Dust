@@ -10,8 +10,22 @@ describe('DevCleanupView', () => {
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
     expect(await screen.findByText('dead-app')).toBeInTheDocument();
+    const legend = screen.getByText(/Bands by last activity/);
+    expect(legend).toHaveTextContent('180+ days');
+    expect(legend).toHaveTextContent('31–180 days');
+    expect(legend).toHaveTextContent('30 days or less');
     fireEvent.click(screen.getByRole('button', { name: 'Select all Dead + green' }));
     expect(screen.getByText('1 selected · 512 KB')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clean Selected (1)' })).toBeInTheDocument();
+  });
+
+  it('keeps the Keep action persistently visible on project rows', async () => {
+    const api = makeApi({ getDevCleanup: async () => makeDevCleanupState() });
+    render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
+
+    const keep = await screen.findByRole('button', { name: 'Keep dead-app' });
+    expect(keep.className).not.toContain('opacity-0');
+    expect(keep.className).toContain('text-ink-muted');
   });
 
   it('reviews and executes the selected projects with restore commands', async () => {
@@ -40,13 +54,15 @@ describe('DevCleanupView', () => {
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Review cleanup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
 
-    expect(await screen.findByRole('region', { name: 'Cleanup plan' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    expect(await screen.findByRole('dialog', { name: 'Dev Cleanup' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
 
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Cleanup complete')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Cleanup complete' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'npm projects, 512 B, 1 item' }));
     expect(screen.getByText('npm ci')).toBeInTheDocument();
   });
 
@@ -103,8 +119,10 @@ describe('DevCleanupView', () => {
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Review cleanup' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
+    await screen.findByRole('dialog', { name: 'Dev Cleanup' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
 
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
@@ -133,11 +151,11 @@ describe('DevCleanupView', () => {
     const status = screen.getByRole('status');
     expect(status).toHaveTextContent('C:\\dev\\dead-app\\node_modules');
     expect(status).toHaveTextContent('done');
-    expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cleaning…' })).toBeDisabled();
 
     await act(async () => {
       resolveExecute({ ok: true, report: makeCleanReport({ scope: 'dev' }) });
     });
-    expect(await screen.findByText('Cleanup complete')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Cleanup complete' })).toBeInTheDocument();
   });
 });

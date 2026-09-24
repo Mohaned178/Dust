@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
@@ -96,6 +96,40 @@ describe('createEngineHost', () => {
     const card = host.getDashboard().volumes.find((volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase());
     expect(card?.lastAnalyzedAt).not.toBeNull();
     expect(card?.reclaimableBytes).toBe(10);
+  });
+
+  it('keeps session-only results reachable on the dashboard when the snapshot cannot be saved', async () => {
+    tree.file('temp/junk.bin', 'abcdefghij');
+    const blocked = join(storeTree.root, 'blocked');
+    writeFileSync(blocked, 'not a directory');
+    const failingStore = new SnapshotStore({
+      snapshotPath: join(blocked, 'snapshot.json'),
+      userPath: join(storeTree.root, 'user.json'),
+    });
+
+    const host = createEngineHost({
+      store: failingStore,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [{ volume: volumeList()[0]!.root, label: 'Fixtures', totalBytes: 1000, freeBytes: 400 }],
+      createRules: () => [tempRule(tree.root)],
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    const event = await finished;
+    expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: false, reclaimableBytes: 10 });
+
+    expect(failingStore.load().kind).toBe('missing');
+    const results = host.getResults(tree.root);
+    expect(results.source).toBe('live');
+    expect(results.rows.length).toBeGreaterThan(0);
+
+    const card = host.getDashboard().volumes.find((volume) => volume.root.toLowerCase() === volumeList()[0]!.root.toLowerCase());
+    expect(card?.lastAnalyzedAt).not.toBeNull();
+    expect(card?.reclaimableBytes).toBe(10);
+    expect(card?.sessionOnly).toBe(true);
   });
 
   it('refuses a second analyze while the first is running', async () => {

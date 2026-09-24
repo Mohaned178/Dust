@@ -54,9 +54,9 @@ describe('BrowseView', () => {
     });
 
     expect(await screen.findByText('Games')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Games' }));
     expect(await screen.findByText('save')).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Safety' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Allocated' })).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'Action' })).toBeInTheDocument();
   });
 
@@ -79,8 +79,8 @@ describe('BrowseView', () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Expand Games' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete save' }));
+    await screen.findByText('save');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete save' }));
     expect(await screen.findByRole('dialog', { name: 'Delete E:\\Games\\save' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
@@ -108,7 +108,8 @@ describe('BrowseView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Games' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
 
-    expect(await screen.findByText(/Delete refused/)).toBeInTheDocument();
+    expect(await screen.findByText(/inside a protected location/)).toBeInTheDocument();
+    expect(screen.queryByText(/inside-protected/)).toBeNull();
     expect(screen.getByText('Games')).toBeInTheDocument();
   });
 });

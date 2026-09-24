@@ -14,18 +14,24 @@ describe('QuickCleanView', () => {
     const onViewResults = vi.fn();
     render(<QuickCleanView api={api} onDone={onDone} onViewResults={onViewResults} />);
 
-    expect(await screen.findByRole('region', { name: 'Cleanup plan' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Quick Clean' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Quick Clean covers Temp, Recycle Bin, npm cache, and App caches — it never includes npm projects.'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Temp, 9.8 KB, Junk by default' }));
     expect(screen.getByText('C:\\Users\\x\\AppData\\Local\\Temp')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Cleanup complete')).toBeInTheDocument();
-    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'View updated disk' }));
+    expect(await screen.findByRole('button', { name: 'View Updated Disk' })).toBeInTheDocument();
+    expect(screen.getAllByText('2.0 KB').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Updated Disk' }));
     expect(onViewResults).toHaveBeenCalledWith('C:\\');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
