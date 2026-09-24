@@ -95,7 +95,6 @@ Explicitly undecided / Phase 2 (do not present as shipped): Deep Uninstall (inst
 - `PROJECT_BRIEF.md` — the project entry point: what Dust is, the problem, MVP scope, architecture, the 13 locked decisions, and design principles.
 - `docs/superpowers/specs/2026-09-17-dust-mvp-design.md` — the full approved MVP design spec (problem/positioning, scope, locked decisions, architecture, safety model, project classification, UX flows, performance contract, edge cases, testing, risks, Phase 2).
 - `docs/superpowers/plans/` — the ordered implementation plans for Plans 1–9.
-- `app/README.md` — dev/build/test commands and the manual MVP smoke checklist.
 
 Absences future work must not fabricate: no testimonials, customers, case studies, press, benchmarks, pricing, licensing, or deployment claims exist. The performance figures (e.g. "1M files under 45 s") are internal goals, not published evidence.
 

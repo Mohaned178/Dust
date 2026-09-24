@@ -113,7 +113,7 @@ Repository note: everything is merged to `master`; historical `plan-*` and `rede
   8. `2026-09-21-results-view.md`
   9. `2026-09-22-cleaner-quick-clean-dev-cleanup.md`
 - **Engine source:** [core/src/](core/src/) — `model/`, `scanner/`, `scan/`, `rules/`, `cleaner/`, `projects/`, `display/`, `snapshot/`, `system/`; tests in [core/test/](core/test/).
-- **Electron app source:** [app/](app/) — `src/main/`, `src/preload/`, `renderer/`; dev commands and the manual MVP smoke checklist are in [app/README.md](app/README.md).
+- **Electron app source:** [app/](app/) — `src/main/`, `src/preload/`, `renderer/`; dev commands are in the [root README](README.md).
 - **Run it:**
   ```bash
   npm install

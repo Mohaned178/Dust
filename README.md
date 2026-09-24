@@ -167,7 +167,6 @@ Environment variables used by development and benchmark tooling — not needed f
 - [app/DESIGN.md](app/DESIGN.md) — the design system: tokens, components, and named rules.
 - [docs/superpowers/specs/2026-09-17-dust-mvp-design.md](docs/superpowers/specs/2026-09-17-dust-mvp-design.md) — the full MVP design spec.
 - [docs/superpowers/plans/](docs/superpowers/plans/) — the ordered implementation plans.
-- [app/README.md](app/README.md) — app-level development notes.
 
 ## Roadmap
 
