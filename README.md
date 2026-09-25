@@ -9,58 +9,20 @@ Every deletion is previewed and explicitly confirmed. Dust never deletes anythin
 > [!NOTE]
 > Dust is an MVP and Windows-only. Docker cleanup, an installed-apps manager, a quarantine buffer, and cross-platform builds are planned but not shipped yet — see [Roadmap](#roadmap).
 
+**Contents:** [Why Dust](#why-dust) · [Quick start](#quick-start) · [Features](#features) · [How safety works](#how-safety-works) · [Documentation](#documentation) · [Reference](#reference) · [Roadmap](#roadmap)
+
 ## Why Dust
 
 - **Friction.** Cleaning a disk takes too many steps — find the folders, check sizes, decide what is safe, delete by hand. Dust cuts it to a few explicit steps: Analyze → see what is reclaimable → confirm a plan → execute.
 - **Fear.** No tool gives a trustworthy answer to "is this safe to delete?" Dust answers per item, with a grade, the evidence behind it, and what comes back if it is removed.
 - **The developer wedge.** npm cleanup — dead `node_modules` plus the npm download cache — is the reason to install Dust. Temp-file cleaning is table stakes around it.
 
-## Features
+## Quick start
 
-### Dashboard
-
-The system drive's reclaimable total is the dominant object, with a used/free capacity bar and evidence below it. Category cards (Temp, Recycle Bin, npm cache, App caches) open Results filtered to that category and reveal their share of the total on hover. A developer-cleanup row hands off to Dev Cleanup. Informational notices — cancelled scan, stale rules, unreadable snapshot — can be dismissed for the session, and the stale-rules notice offers one-click **Rescan**.
-
-Keyboard shortcuts: `A` analyze/re-analyze, `R` view results (once analyzed), `Q` Quick Clean, `D` Dev Cleanup.
-
-### Analyze
-
-A deep, progressive scan of a chosen drive. Files scanned, bytes seen, the current path, elapsed time, and error count update live, and results stream in as folders complete. The scan is cancellable at any moment and keeps its partial results. The finished scan is persisted so the next launch opens instantly.
-
-### Results
-
-One mono reclaimable figure over the evidence. Filter by category chip or search, then work through the size-ordered contributor list: each row unfolds in place to show **why this grade**, its category, the rule id, and its recovery path (with a copyable restore command when the asset is regenerable). Select rows and use the sticky **Preview & clean** bar. The full folder tree lives behind "Browse everything", with protected rows hidden behind a **Show danger** gate.
-
-### Quick Clean
-
-The fast path for the four quick categories, never touching `node_modules`. If no Analyze data exists it runs a targeted scan (with progress and Cancel); otherwise it builds from the freshest results without re-scanning. The plan shows per-category totals and recovery notes behind one acknowledgement; the summary reports freed bytes, what remains reclaimable, and any skipped or failed items. Items under `C:\Windows\Temp` offer **Relaunch as Administrator**.
-
-### Dev Cleanup
-
-npm project discovery from Analyze data, grouped **Dead / Occasional / Active / Orphaned / Pinned**. Bulk-select the safe ones, then confirm against a plan that carries each project's rebuild command. Removed projects are listed with copyable restore commands in a session-only "Recently cleaned" group. A manual Keep pin always wins.
-
-### Browse-only volumes
-
-Non-system volumes are browse-only: the same scanner shows size and structure, without safety grades or cleanup rules. The only action is a guarded permanent delete with a simple confirmation. Browse results are session-only and never touch the system-drive snapshot.
-
-### Settings
-
-Light theme, administrator relaunch, and about. The accent color is a fixed product decision (Pine Teal) and is not configurable.
-
-## How safety works
-
-- **Nothing deletes without a plan.** `Cleaner.preview` mints a single-use, in-memory plan token; `Cleaner.execute(token)` is the only deletion path. Forged or expired tokens are refused.
-- **Action grade vs display grade.** Only whitelisted rule matches can enable cleanup, and their evidence is shown. Every visible row still gets an informational display grade with a "why".
-- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden behind "Show danger", and never actionable. Unknown paths are never actionable either.
-- **Per-category recovery.** Permanent delete only when a rule proves the asset is regenerable (the exact restore command is shown) or worthless. The Recycle Bin is the recovery path only for unverifiable content — not a blanket default, because recycling frees no bytes for GB-scale artifacts.
-- **One acknowledgement.** The plan's confirm stays disabled until the irreversibility acknowledgement is ticked.
-
-## Requirements
+Requirements:
 
 - Windows 10 or 11
 - Node.js `^20.19.0 || >=22.12.0` and npm
-
-## Quick start
 
 ```bash
 npm install
@@ -79,7 +41,59 @@ npm run build:app
 npm start -w app
 ```
 
-## Scripts
+## Features
+
+### Dashboard
+
+The system drive's reclaimable total is the dominant object, with a used/free capacity bar and evidence below it. Category cards (Temp, Recycle Bin, npm cache, App caches) open Results filtered to that category and show their share of the total on hover; a developer-cleanup row hands off to Dev Cleanup. Session-dismissible notices cover a cancelled scan, stale rules (with one-click **Rescan**), and an unreadable snapshot.
+
+- Keyboard: `A` analyze · `R` results (once analyzed) · `Q` Quick Clean · `D` Dev Cleanup
+
+### Analyze
+
+A deep, progressive scan of a chosen drive: files scanned, bytes seen, current path, elapsed time, and error count update live, with results streaming in as folders complete. Cancellable at any moment — partial results are kept — and persisted so the next launch opens instantly.
+
+### Results
+
+One mono reclaimable figure over the evidence. Filter by category chip or search, then work the size-ordered contributor list: each row unfolds to show **why this grade**, its category, the rule id, and its recovery path (with a copyable restore command when the asset is regenerable). Select rows and use the sticky **Preview & clean** bar; the full folder tree lives behind "Browse everything", with protected rows hidden behind a **Show danger** gate.
+
+### Quick Clean
+
+The fast path for the four quick categories, never touching `node_modules`. With no Analyze data it runs a targeted scan (progress and Cancel included); otherwise it builds from the freshest results without re-scanning. Per-category totals and recovery notes sit behind one acknowledgement, and the summary reports freed bytes, what remains reclaimable, and any skipped or failed items. Items under `C:\Windows\Temp` offer **Relaunch as Administrator**.
+
+### Dev Cleanup
+
+npm project discovery from Analyze data, grouped **Dead / Occasional / Active / Orphaned / Pinned**. Bulk-select the safe ones, then confirm against a plan that carries each project's rebuild command. Removed projects keep copyable restore commands in a session-only "Recently cleaned" group. A manual Keep pin always wins.
+
+### Browse-only volumes
+
+Non-system volumes show size and structure without safety grades or cleanup rules. The only action is a guarded permanent delete with a simple confirmation; browse results are session-only and never touch the system-drive snapshot.
+
+### Settings
+
+Light theme, administrator relaunch, and about. The accent color is a fixed product decision (Pine Teal) and is not configurable.
+
+## How safety works
+
+- **Nothing deletes without a plan.** `Cleaner.preview` mints a single-use, in-memory plan token; `Cleaner.execute(token)` is the only deletion path. Forged or expired tokens are refused.
+- **Action grade vs display grade.** Only whitelisted rule matches can enable cleanup, and their evidence is shown. Every visible row still gets an informational display grade with a "why".
+- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden behind "Show danger", and never actionable. Unknown paths are never actionable either.
+- **Per-category recovery.** Permanent delete only when a rule proves the asset is regenerable (the exact restore command is shown) or worthless. The Recycle Bin is the recovery path only for unverifiable content — not a blanket default, because recycling frees no bytes for GB-scale artifacts.
+- **One acknowledgement.** The plan's confirm stays disabled until the irreversibility acknowledgement is ticked.
+
+## Documentation
+
+- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — what Dust is, the locked decisions, and the design principles.
+- [app/PRODUCT.md](app/PRODUCT.md) — users, positioning, brand commitments, and constraints.
+- [app/DESIGN.md](app/DESIGN.md) — the design system: tokens, components, and named rules.
+- [docs/superpowers/specs/2026-09-17-dust-mvp-design.md](docs/superpowers/specs/2026-09-17-dust-mvp-design.md) — the full MVP design spec.
+- [docs/superpowers/plans/](docs/superpowers/plans/) — the ordered implementation plans.
+
+## Reference
+
+Look-up material for day-to-day development.
+
+### Scripts
 
 | Command | What it does |
 | --- | --- |
@@ -92,7 +106,7 @@ npm start -w app
 | `npm run typecheck` | TypeScript checks across both workspaces |
 | `npm run bench -w core` | Scan throughput benchmarks |
 
-## Project structure
+### Project structure
 
 ```
 core/                        Pure-TypeScript engine — no Electron imports, runs under Node
@@ -116,7 +130,7 @@ app/                         Electron app
 docs/superpowers/            Design spec, implementation plans, perf measurements
 ```
 
-## Architecture
+### Architecture
 
 - **Electron main owns the engine.** Scan sessions, the cleaner, and persistence live in the main process. The renderer holds no engine state and never touches the filesystem; it reaches the engine only through the typed `window.dust` bridge.
 - **A worker pool does the walking.** The scanner runs synchronous fs calls across 4–8 `worker_threads` with directory-level work-stealing. Reparse points (symlinks/junctions) are detected and never followed.
@@ -125,7 +139,7 @@ docs/superpowers/            Design spec, implementation plans, perf measurement
 - **The engine is host-agnostic.** `core/` has zero Electron imports and runs under vitest in plain Node, so it can move into a utility process later without changes.
 - **Renderer security.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
 
-## Testing
+### Testing
 
 ```bash
 npm run typecheck
@@ -138,7 +152,7 @@ npm test
 DUST_PERF=1 npm test -w core
 ```
 
-## Development flags
+### Development flags
 
 Environment variables used by development and benchmark tooling — not needed for normal use.
 
@@ -153,20 +167,12 @@ Environment variables used by development and benchmark tooling — not needed f
 | `DUST_AUTO=1` | Runs a scripted navigation pass (UI timing) |
 | `DUST_DEV_SERVER_URL` | Points the main process at an existing Vite server |
 
-## Troubleshooting
+### Troubleshooting
 
 - **The window opens but main-process changes don't appear.** Restart `npm run dev:app`; main bundles are not hot-reloaded.
 - **"Snapshot unreadable" banner.** `%APPDATA%\Dust\snapshot.json` is corrupt. Run Analyze to rebuild it; nothing else is lost.
 - **Some Temp items can't be cleaned.** `C:\Windows\Temp` needs elevation; use **Relaunch as Administrator** in the plan or Settings.
 - **Port 5173 is taken.** Vite runs with `strictPort`, so stop the other process or point the app at a different server with `DUST_DEV_SERVER_URL`.
-
-## Documentation
-
-- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — what Dust is, the locked decisions, and the design principles.
-- [app/PRODUCT.md](app/PRODUCT.md) — users, positioning, brand commitments, and constraints.
-- [app/DESIGN.md](app/DESIGN.md) — the design system: tokens, components, and named rules.
-- [docs/superpowers/specs/2026-09-17-dust-mvp-design.md](docs/superpowers/specs/2026-09-17-dust-mvp-design.md) — the full MVP design spec.
-- [docs/superpowers/plans/](docs/superpowers/plans/) — the ordered implementation plans.
 
 ## Roadmap
 
