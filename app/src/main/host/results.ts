@@ -1,6 +1,13 @@
 import { basename, dirname } from 'node:path';
 import { createDisplayGrader } from '@dust/core';
-import type { AggregateTree, CategoryId, DisplayGradeReason, SnapshotData, SnapshotFolder } from '@dust/core';
+import type {
+  AggregateTree,
+  CacheFinding,
+  CategoryId,
+  DisplayGradeReason,
+  SnapshotData,
+  SnapshotFolder,
+} from '@dust/core';
 import { CATEGORY_LABELS, CATEGORY_ORDER, isCategoryId } from '../../shared/categories';
 import type { BrowseRow, CategorySummaryRow, ResultAction, ResultMatch, ResultRow } from '../../shared/ipc';
 
@@ -27,6 +34,7 @@ export interface RowOptions {
   complete: boolean;
   childCount: number;
   action?: ResultAction | null;
+  finding?: CacheFinding | null;
   parent?: string | null;
   env?: ResultsEnv;
 }
@@ -52,6 +60,7 @@ export function toResultRow(record: RowInput, options: RowOptions): ResultRow {
   const isRoot = sameRoot(record.path, options.root);
   const display = graderFor(options.env)(record.path);
   const parent = options.parent !== undefined ? options.parent : isRoot ? null : dirname(record.path);
+  const finding = options.finding ?? null;
   return {
     path: record.path,
     name: isRoot ? record.path : basename(record.path),
@@ -66,9 +75,10 @@ export function toResultRow(record: RowInput, options: RowOptions): ResultRow {
     partial: record.partial,
     complete: options.complete,
     childCount: options.childCount,
-    grade: display.grade,
-    gradeReason: display.reason,
+    grade: finding?.grade ?? display.grade,
+    gradeReason: finding?.reason ?? display.reason,
     action: options.action ?? null,
+    detected: finding !== null ? true : undefined,
   };
 }
 
@@ -107,6 +117,7 @@ export function buildRowsFromTree(
       category: match.category,
       grade: match.grade,
       evidence: match.evidence,
+      origin: match.origin,
     });
   }
 
@@ -141,11 +152,30 @@ export function applyMatchesToRows(rows: ResultRow[], matches: ResultMatch[]): R
       category: match.category,
       grade: match.grade,
       evidence: match.evidence,
+      origin: match.origin,
     });
   }
   for (const row of rows) {
     const action = actions.get(pathKey(row.path));
     if (action) row.action = action;
+  }
+  return rows;
+}
+
+export function applyFindingsToRows(
+  rows: ResultRow[],
+  findings: ReadonlyArray<CacheFinding>,
+): ResultRow[] {
+  if (findings.length === 0) return rows;
+  const byKey = new Map<string, CacheFinding>();
+  for (const finding of findings) byKey.set(pathKey(finding.path), finding);
+  for (const row of rows) {
+    if (row.action !== null) continue;
+    const finding = byKey.get(pathKey(row.path));
+    if (finding === undefined) continue;
+    row.grade = finding.grade;
+    row.gradeReason = finding.reason;
+    row.detected = true;
   }
   return rows;
 }
@@ -161,7 +191,13 @@ export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv):
       category: match.category,
       grade: match.grade,
       evidence: match.evidence,
+      origin: match.origin,
     });
+  }
+  const findings = new Map<string, CacheFinding>();
+  for (const finding of snapshot.findings ?? []) {
+    const key = pathKey(finding.path);
+    if (!findings.has(key)) findings.set(key, finding);
   }
 
   const rootKey = pathKey(snapshot.root);
@@ -203,6 +239,7 @@ export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv):
         complete: folder.complete,
         childCount: folder.childCount,
         action: actions.get(key) ?? null,
+        finding: findings.get(key) ?? null,
         parent: isRoot ? null : nearestParent(folder.path),
         env,
       },

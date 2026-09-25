@@ -91,7 +91,7 @@ describe('buildSnapshot', () => {
 
     expect(snapshot).toMatchObject({
       schemaVersion: 2,
-      rulesVersion: '1',
+      rulesVersion: '2',
       root: fixture.root,
       status: 'complete',
       cleanedAt: 1500,

@@ -47,7 +47,7 @@ describe('core public API', () => {
     expect(typeof core.listFixedVolumes).toBe('function');
     expect(typeof core.SnapshotCorruptError).toBe('function');
     expect(core.SNAPSHOT_SCHEMA_VERSION).toBe(2);
-    expect(core.RULES_VERSION).toBe('1');
+    expect(core.RULES_VERSION).toBe('2');
     expect(typeof core.parseSnapshot).toBe('function');
   });
 

@@ -11,10 +11,11 @@ function setup(
     sort?: SortState;
     totalBytes?: number;
     selectedPath?: string | null;
+    rows?: ReturnType<typeof makeResultsRows>;
   } = {},
 ) {
   const store = createRowStore('C:\\');
-  upsertRows(store, makeResultsRows());
+  upsertRows(store, overrides.rows ?? makeResultsRows());
   const expanded = overrides.expanded ?? new Set([pathKey('C:\\Users')]);
   const sort = overrides.sort ?? { key: 'size' as const, desc: true };
   const onToggle = vi.fn();
@@ -135,5 +136,26 @@ describe('TreeTable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Explore Temp' }));
     expect(onReveal).toHaveBeenCalledWith('C:\\Temp');
     expect(screen.queryByRole('button', { name: 'Explore Windows' })).toBeNull();
+  });
+
+  it('labels detected rows and keeps them display-only', () => {
+    setup({
+      rows: makeResultsRows().map((row) =>
+        row.path === 'C:\\Temp'
+          ? {
+              ...row,
+              action: null,
+              grade: 'review' as const,
+              gradeReason: 'Leftover cache from Spotify (not installed)',
+              detected: true,
+            }
+          : row,
+      ),
+      selectedPath: 'C:\\Temp',
+    });
+
+    expect(screen.getByText('Detected')).toBeInTheDocument();
+    expect(screen.getByText('Leftover cache from Spotify (not installed)')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clean Temp' })).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import type { Dirent, Stats } from 'node:fs';
 import type { AggregateTree } from '../model/tree';
 import type { Marker } from '../model/types';
 import type { ProjectRecord } from '../projects/types';
+import type { InstalledAppsSnapshot } from '../system/installed-apps';
 
 export type CategoryId = 'temp' | 'recycle-bin' | 'npm-cache' | 'app-caches' | 'npm-projects';
 
@@ -21,6 +22,7 @@ export interface RuleMatch {
   grade: ActionGrade;
   recovery: Recovery;
   evidence: string;
+  origin?: 'detected';
 }
 
 export interface FsProbe {
@@ -36,6 +38,7 @@ export interface RuleContext {
   markers: Marker[];
   probe: FsProbe;
   projects?: ProjectRecord[];
+  installs?: InstalledAppsSnapshot;
 }
 
 export interface Rule {

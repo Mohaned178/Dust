@@ -64,6 +64,7 @@ export function mergeMatches(store: RowStore, matches: ResultMatch[]): void {
       category: match.category,
       grade: match.grade,
       evidence: match.evidence,
+      origin: match.origin,
     };
   }
 }
@@ -218,6 +219,7 @@ function upsertRow(store: RowStore, row: ResultRow): void {
     existing.grade = row.grade;
     existing.gradeReason = row.gradeReason;
     existing.action = row.action;
+    existing.detected = row.detected;
     return;
   }
 

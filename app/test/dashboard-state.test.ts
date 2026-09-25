@@ -5,7 +5,7 @@ import { buildDashboardState } from '../src/main/host/dashboard';
 function snapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
     schemaVersion: 2,
-    rulesVersion: '1',
+    rulesVersion: '2',
     root: 'C:\\Data',
     startedAt: 10,
     finishedAt: 20,

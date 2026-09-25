@@ -38,6 +38,18 @@ export interface SnapshotMatch {
   bytes: number;
   grade: 'safe' | 'review';
   evidence: string;
+  origin?: 'detected';
+}
+
+export type SnapshotFindingKind = 'curated-leftover' | 'app-matched' | 'app-leftover' | 'unrecognized';
+
+export interface SnapshotFinding {
+  path: string;
+  bytes: number;
+  kind: SnapshotFindingKind;
+  grade: 'safe' | 'review';
+  label: string;
+  reason: string;
 }
 
 export interface SnapshotData {
@@ -51,6 +63,7 @@ export interface SnapshotData {
   disks: SnapshotDisk[];
   categories: SnapshotCategory[];
   matches: SnapshotMatch[];
+  findings?: SnapshotFinding[];
   projects: ProjectRecord[];
   folders: SnapshotFolder[];
 }
@@ -98,6 +111,12 @@ export function parseSnapshot(raw: string): SnapshotData {
   if (!Array.isArray(object.matches) || !object.matches.every(isSnapshotMatch)) {
     throw new SnapshotCorruptError('matches');
   }
+  if (
+    object.findings !== undefined &&
+    (!Array.isArray(object.findings) || !object.findings.every(isSnapshotFinding))
+  ) {
+    throw new SnapshotCorruptError('findings');
+  }
   if (!Array.isArray(object.projects) || !object.projects.every(isProjectRecord)) {
     throw new SnapshotCorruptError('projects');
   }
@@ -143,7 +162,23 @@ function isSnapshotMatch(value: unknown): boolean {
     typeof value.category === 'string' &&
     isFiniteNumber(value.bytes) &&
     (value.grade === 'safe' || value.grade === 'review') &&
-    typeof value.evidence === 'string'
+    typeof value.evidence === 'string' &&
+    (value.origin === undefined || value.origin === 'detected')
+  );
+}
+
+function isSnapshotFinding(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.path === 'string' &&
+    isFiniteNumber(value.bytes) &&
+    (value.kind === 'curated-leftover' ||
+      value.kind === 'app-matched' ||
+      value.kind === 'app-leftover' ||
+      value.kind === 'unrecognized') &&
+    (value.grade === 'safe' || value.grade === 'review') &&
+    typeof value.label === 'string' &&
+    typeof value.reason === 'string'
   );
 }
 

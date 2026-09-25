@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   AggregateTree,
   Cleaner,
+  DISCOVERY_RULE_ID,
   PlanTokenError,
   RULES_VERSION,
   ScanSession,
@@ -10,11 +11,14 @@ import {
   createExternalPredicate,
   createInventoryRules,
   createNodeFsProbe,
+  curatedCacheFindings,
   defaultRecycleBinEnumeration,
   defaultRuleEnv,
   defaultWorkersForVolume,
   deleteUnprotectedPath,
+  discoverCaches,
   getVolumeUsage,
+  listInstalledApps,
   listVolumesAsync,
   pruneSnapshotAfterCleanup,
   systemDriveRoot,
@@ -22,9 +26,11 @@ import {
 } from '@dust/core';
 import type {
   BrowseDeleteResult,
+  CacheFinding,
   CleanupPlan,
   CleanupReport as CoreCleanupReport,
   FolderRecord,
+  InstalledAppsSnapshot,
   Marker,
   ProjectOptions,
   ProjectRecord,
@@ -32,10 +38,12 @@ import type {
   Rule,
   RuleContext,
   RuleEnv,
+  RuleMatch,
   ScanResult,
   SessionOptions,
   SnapshotCategory,
   SnapshotData,
+  SnapshotFinding,
   SnapshotMatch,
   VolumeInfo,
   VolumeUsage,
@@ -63,12 +71,14 @@ import type {
   StartAnalyzeResult,
 } from '../../shared/ipc';
 import { aggregateCategories, collectRuleMatches } from './analyze';
+import type { RuleMatchWithRule } from './analyze';
 import { buildDashboardState } from './dashboard';
 import { instrument, instrumentAsync } from './instrument';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
 import { createVolumeCache } from './volumes';
 import {
+  applyFindingsToRows,
   applyMatchesToRows,
   buildRowsFromSnapshot,
   sameRoot,
@@ -119,6 +129,7 @@ export interface EngineHostDeps {
   ) => Rule[];
   createCleaner?: () => Cleaner;
   quickRoot?: () => string;
+  listInstalledApps?: () => Promise<InstalledAppsSnapshot>;
 }
 
 export interface EngineHost {
@@ -167,6 +178,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const getVolumeUsageFn = deps.getVolumeUsage ?? getVolumeUsage;
   const env = deps.env ?? defaultRuleEnv();
   const systemRoot = deps.systemRoot ?? systemDriveRoot(env) ?? 'C:\\';
+  const installsSource = deps.listInstalledApps ?? listInstalledApps;
   const createSession = deps.createSession ?? ((options: SessionOptions) => new ScanSession(options));
   const createRules =
     deps.createRules ??
@@ -196,6 +208,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     finishedAt: number;
     categories: CategorySummaryRow[];
     rows: ResultRow[];
+    findings: CacheFinding[];
   } | null = null;
 
   let lastRun: {
@@ -206,6 +219,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     rules: Rule[];
     projects: ProjectRecord[];
     ruleCategories: SnapshotCategory[];
+    installs?: InstalledAppsSnapshot;
     finishedAt: number;
   } | null = null;
 
@@ -279,6 +293,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         markers: lastRun.markers,
         probe: lastRun.probe,
         projects: lastRun.projects,
+        installs: lastRun.installs,
       },
     };
   }
@@ -570,6 +585,24 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return error instanceof Error ? error.message : String(error);
   }
 
+  function capturedDiscoveryRule(matches: RuleMatchWithRule[]): Rule {
+    return {
+      id: DISCOVERY_RULE_ID,
+      category: 'app-caches',
+      title: 'Detected caches',
+      action: { kind: 'delete-path' },
+      match: () =>
+        matches.map((match) => ({
+          path: match.path,
+          bytes: match.bytes,
+          grade: match.grade,
+          recovery: match.recovery,
+          evidence: match.evidence,
+          origin: match.origin,
+        })),
+    };
+  }
+
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
     const volumeList =
@@ -602,6 +635,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
+    const installsPromise = installsSource().catch(
+      (): InstalledAppsSnapshot => ({ apps: [], trusted: false }),
+    );
+    let installsReady: InstalledAppsSnapshot | undefined;
+    void installsPromise.then((snapshot) => {
+      installsReady = snapshot;
+    });
     const liveRows: ResultRow[] = [];
     const folderBuffer: ResultRow[] = [];
     let lastFolderFlush = 0;
@@ -623,7 +663,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       lastCategoryRun = stamp;
       categoryRunning = true;
       const liveRules = rules.filter((rule) => rule.category !== 'npm-projects' && rule.id !== 'recycle-bin');
-      void collectRuleMatches(liveRules, { root: targetRoot, tree: liveTree, markers: liveMarkers, probe })
+      const liveCtx: RuleContext = { root: targetRoot, tree: liveTree, markers: liveMarkers, probe };
+      if (installsReady !== undefined) liveCtx.installs = installsReady;
+      void collectRuleMatches(liveRules, liveCtx)
         .then((matches) => {
           if (liveEnded) return;
           emit({ type: 'categories', runId, categories: summarizeCategories(aggregateCategories(matches)) });
@@ -734,7 +776,19 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     active = { runId, session, settled };
     emit({ type: 'started', runId, root: target.root, startedAt });
 
-    void runAnalysis({ session, runId, startedAt, progress, settle, rules, probe, liveRows, finishLive, volumeList });
+    void runAnalysis({
+      session,
+      runId,
+      startedAt,
+      progress,
+      settle,
+      rules,
+      probe,
+      liveRows,
+      finishLive,
+      volumeList,
+      installsPromise,
+    });
 
     return { ok: true, runId };
   }
@@ -878,6 +932,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     liveRows: ResultRow[];
     finishLive: (result: ScanResult | null) => void;
     volumeList: VolumeInfo[];
+    installsPromise: Promise<InstalledAppsSnapshot>;
   }): Promise<void> {
     try {
       const result = await input.session.start();
@@ -892,18 +947,20 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         input.liveRows,
         input.runId,
         input.volumeList,
+        input.installsPromise,
       );
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
       emit({
         type: 'matches',
         runId: input.runId,
-        matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence }) => ({
+        matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence, origin }) => ({
           path,
           bytes,
           ruleId,
           category,
           grade,
           evidence,
+          origin,
         })),
       });
       emit({
@@ -942,6 +999,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     liveRows: ResultRow[],
     runId: string,
     volumeList: VolumeInfo[],
+    installsPromise: Promise<InstalledAppsSnapshot>,
   ): Promise<{
     finishedAt: number;
     projects: number;
@@ -970,14 +1028,33 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'rules' });
+    const installs = await installsPromise;
     const ctx: RuleContext = {
       root: result.root,
       tree: result.tree,
       markers: result.markers,
       probe,
       projects: analysis.projects,
+      installs,
     };
-    const matches = await instrumentAsync('finalize.collectRuleMatches', () => collectRuleMatches(rules, ctx));
+    const curatedMatches = await instrumentAsync('finalize.collectRuleMatches', () =>
+      collectRuleMatches(rules, ctx),
+    );
+    await yieldToEventLoop();
+
+    emit({ type: 'finalize-progress', runId, step: 'detection' });
+    const detected = instrument('finalize.discovery', () => discoverCaches(ctx, env));
+    const curatedKeys = new Set(
+      curatedMatches.map((match) => match.path.replace(/[\\/]+$/, '').toLowerCase()),
+    );
+    const discoveryMatches: RuleMatchWithRule[] = detected.matches
+      .filter((match) => !curatedKeys.has(match.path.replace(/[\\/]+$/, '').toLowerCase()))
+      .map((match) => ({ ...match, ruleId: DISCOVERY_RULE_ID, category: 'app-caches' as const }));
+    const matches: RuleMatchWithRule[] = [...curatedMatches, ...discoveryMatches];
+    const findings: CacheFinding[] = [
+      ...curatedCacheFindings(ctx, env),
+      ...detected.findings,
+    ];
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'rows' });
@@ -985,12 +1062,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const categories = instrument('finalize.categories', () => summarizeCategories(ruleCategories));
     const finishedAt = now();
 
+    const rows = instrument('row.applyMatches', () => applyMatchesToRows(liveRows, matches));
+    instrument('row.applyFindings', () => applyFindingsToRows(rows, findings));
+
     lastResults = {
       root: result.root,
       status: result.status,
       finishedAt,
       categories,
-      rows: instrument('row.applyMatches', () => applyMatchesToRows(liveRows, matches)),
+      rows,
+      findings,
     };
 
     lastRun = {
@@ -998,9 +1079,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       tree: result.tree,
       markers: result.markers,
       probe,
-      rules,
+      rules: [...rules, capturedDiscoveryRule(discoveryMatches)],
       projects: analysis.projects,
       ruleCategories,
+      installs,
       finishedAt,
     };
     await yieldToEventLoop();
@@ -1026,6 +1108,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
             bytes: match.bytes,
             grade: match.grade,
             evidence: match.evidence,
+            origin: match.origin,
+          }),
+        ),
+        findings: findings.map(
+          (finding): SnapshotFinding => ({
+            path: finding.path,
+            bytes: finding.bytes,
+            kind: finding.kind,
+            grade: finding.grade,
+            label: finding.label,
+            reason: finding.reason,
           }),
         ),
         disks: usage.map((entry) => ({

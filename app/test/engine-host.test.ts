@@ -100,6 +100,49 @@ describe('createEngineHost', () => {
     expect(card?.reclaimableBytes).toBe(10);
   });
 
+  it('discovers GPU caches, gates curated rules and persists display-only findings', async () => {
+    tree.file('local/NVIDIA/DXCache/blob.bin', 'g'.repeat(64));
+    tree.file('local/Google/Chrome/User Data/Default/Cache/Cache_Data/blob.bin', 'c'.repeat(32));
+    tree.file('local/Spotify/Storage/blob.bin', 's'.repeat(16));
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [{ volume: volumeList()[0]!.root, label: 'Fixtures', totalBytes: 1000, freeBytes: 400 }],
+      createRules: () => [],
+      listInstalledApps: async () => ({ apps: [], trusted: true }),
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    const event = await finished;
+    expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true, reclaimableBytes: 64 });
+
+    const loaded = store.load();
+    expect(loaded.kind).toBe('ok');
+    if (loaded.kind !== 'ok') return;
+    expect(loaded.snapshot.matches.map((match) => match.ruleId)).toEqual(['cache-discovery']);
+    expect(loaded.snapshot.matches[0]).toMatchObject({ grade: 'safe', origin: 'detected' });
+
+    const findings = loaded.snapshot.findings ?? [];
+    expect(findings.map((finding) => finding.path).sort()).toEqual(
+      [
+        join(tree.root, 'local', 'Google', 'Chrome', 'User Data', 'Default', 'Cache', 'Cache_Data'),
+        join(tree.root, 'local', 'Spotify', 'Storage'),
+      ].sort(),
+    );
+    expect(findings.every((finding) => finding.grade === 'review')).toBe(true);
+
+    const results = host.getResults(tree.root);
+    const gpuRow = results.rows.find((row) => row.path.endsWith('DXCache'));
+    expect(gpuRow).toMatchObject({ action: { ruleId: 'cache-discovery', origin: 'detected' } });
+
+    const leftoverRow = results.rows.find((row) => row.path.endsWith('Storage'));
+    expect(leftoverRow).toMatchObject({ detected: true, action: null, grade: 'review' });
+  });
+
   it('keeps session-only results reachable on the dashboard when the snapshot cannot be saved', async () => {
     tree.file('temp/junk.bin', 'abcdefghij');
     const blocked = join(storeTree.root, 'blocked');
@@ -475,6 +518,7 @@ describe('createEngineHost', () => {
     expect(seen).toEqual([
       'started',
       'finalizing',
+      'finalize-progress',
       'finalize-progress',
       'finalize-progress',
       'finalize-progress',
@@ -1064,7 +1108,7 @@ describe('createEngineHost', () => {
     const steps = events
       .filter((event): event is Extract<ScanEvent, { type: 'finalize-progress' }> => event.type === 'finalize-progress')
       .map((event) => event.step);
-    expect(steps).toEqual(['projects', 'rules', 'rows', 'snapshot']);
+    expect(steps).toEqual(['projects', 'rules', 'detection', 'rows', 'snapshot']);
   });
 
   it('streams quick-clean progress and cancels the targeted measurement', async () => {

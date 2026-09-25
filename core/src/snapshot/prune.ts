@@ -3,7 +3,7 @@ import type { CleanupReport } from '../cleaner/cleaner';
 import type { ItemResult } from '../cleaner/executor';
 import type { ProjectRecord } from '../projects/types';
 import { applyCleanupReport } from './build';
-import type { SnapshotData, SnapshotFolder, SnapshotMatch } from './schema';
+import type { SnapshotData, SnapshotFinding, SnapshotFolder, SnapshotMatch } from './schema';
 
 interface Deduction {
   key: string;
@@ -93,6 +93,13 @@ export function pruneSnapshotAfterCleanup(
     matches.push(freed === undefined ? match : { ...match, bytes: Math.max(match.bytes - freed, 0) });
   }
 
+  const findings: SnapshotFinding[] = [];
+  for (const finding of snapshot.findings ?? []) {
+    if (isGone(finding.path)) continue;
+    const freed = partialFreed.get(pathKey(finding.path));
+    findings.push(freed === undefined ? finding : { ...finding, bytes: Math.max(finding.bytes - freed, 0) });
+  }
+
   const projects: ProjectRecord[] = [];
   for (const entry of snapshot.projects) {
     const locations = entry.nodeModules.paths;
@@ -119,7 +126,7 @@ export function pruneSnapshotAfterCleanup(
     items: matches.filter((match) => match.ruleId === entry.ruleId).length,
   }));
 
-  return { ...withCategories, categories, folders, matches, projects };
+  return { ...withCategories, categories, folders, matches, projects, findings };
 }
 
 function isSameOrUnder(key: string, rootKey: string): boolean {

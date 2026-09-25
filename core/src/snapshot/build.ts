@@ -10,6 +10,7 @@ import type {
   SnapshotCategory,
   SnapshotData,
   SnapshotDisk,
+  SnapshotFinding,
   SnapshotFolder,
   SnapshotMatch,
 } from './schema';
@@ -24,6 +25,7 @@ export interface SnapshotInput {
   projects: ProjectRecord[];
   categories: SnapshotCategory[];
   matches?: SnapshotMatch[];
+  findings?: SnapshotFinding[];
   disks: SnapshotDisk[];
   rulesVersion?: string;
   priorCleanedAt?: number | null;
@@ -34,6 +36,7 @@ export interface SnapshotInput {
 export interface FolderMapOptions {
   maxDepth?: number;
   topContributors?: number;
+  includePaths?: string[];
 }
 
 export function buildSnapshot(input: SnapshotInput): SnapshotData {
@@ -49,10 +52,12 @@ export function buildSnapshot(input: SnapshotInput): SnapshotData {
     disks: input.disks,
     categories: input.categories,
     matches: input.matches ?? [],
+    findings: input.findings ?? [],
     projects: input.projects,
     folders: buildFolderMap(input.tree, root, {
       maxDepth: input.maxDepth,
       topContributors: input.topContributors,
+      includePaths: (input.findings ?? []).map((finding) => finding.path),
     }),
   };
 }
@@ -99,6 +104,10 @@ export function buildFolderMap(tree: AggregateTree, root: string, options: Folde
   const included = new Set<string>();
   for (const path of all.keys()) {
     if (depthFrom(normalizedRoot, path) <= maxDepth) included.add(path);
+  }
+  for (const path of options.includePaths ?? []) {
+    const node = tree.get(path);
+    if (node !== undefined) included.add(node.path);
   }
   const byBytes = [...all.values()]
     .filter((node) => !included.has(node.path))

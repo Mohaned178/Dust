@@ -1,33 +1,37 @@
 import { join } from 'node:path';
-import type { Rule, RuleContext, RuleMatch } from '../types';
+import type { Rule } from '../types';
 import type { RuleEnv } from '../paths';
+import { curatedCacheRule } from './cache-specs';
+import type { CuratedCacheSpec } from './cache-specs';
 
 const VARIANTS = ['discord', 'discordptb', 'discordcanary'];
 const SUBDIRS = ['Cache', 'Code Cache', 'GPUCache'];
 
-export function discordCacheRule(env: Pick<RuleEnv, 'appData'>): Rule {
-  return {
-    id: 'cache-discord',
-    category: 'app-caches',
-    title: 'Discord cache',
-    action: { kind: 'delete-path' },
-    match(ctx: RuleContext): RuleMatch[] {
-      if (!env.appData) return [];
-      const matches: RuleMatch[] = [];
-      for (const variant of VARIANTS) {
-        for (const subdir of SUBDIRS) {
-          const path = join(env.appData, variant, subdir);
-          if (!ctx.probe.exists(path)) continue;
-          matches.push({
-            path,
-            bytes: ctx.tree.get(path)?.bytes ?? 0,
-            grade: 'safe',
-            recovery: { kind: 'junk', reason: 'Discord cache is re-downloaded on next use' },
-            evidence: `Discord (${variant}) cache directory`,
-          });
-        }
+export const discordCacheSpec: CuratedCacheSpec = {
+  ruleId: 'cache-discord',
+  title: 'Discord cache',
+  appLabel: 'Discord',
+  appTokens: ['discord', 'discordptb', 'discordcanary'],
+  recoveryReason: 'Discord cache is re-downloaded on next use',
+  evidence: (path) => {
+    const lower = path.toLowerCase();
+    const variant = VARIANTS.find((entry) => lower.includes(`\\${entry}\\`)) ?? 'discord';
+    return `Discord (${variant}) cache directory`;
+  },
+  roots: (env) => (env.appData ? VARIANTS.map((variant) => join(env.appData, variant)) : []),
+  candidates: (env, probe) => {
+    if (!env.appData) return [];
+    const paths: string[] = [];
+    for (const variant of VARIANTS) {
+      for (const subdir of SUBDIRS) {
+        const path = join(env.appData, variant, subdir);
+        if (probe.exists(path)) paths.push(path);
       }
-      return matches;
-    },
-  };
+    }
+    return paths;
+  },
+};
+
+export function discordCacheRule(env: RuleEnv): Rule {
+  return curatedCacheRule(discordCacheSpec, env);
 }

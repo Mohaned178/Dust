@@ -39,6 +39,10 @@ const SORTABLE_BROWSE: Record<string, SortKey | null> = {
 
 type TreeRow = ResultRow | BrowseRow;
 
+function isDetected(row: TreeRow): boolean {
+  return 'action' in row && (row.detected === true || row.action?.origin === 'detected');
+}
+
 interface TableFlatRow {
   row: TreeRow;
   depth: number;
@@ -143,6 +147,11 @@ export function TreeTable({
             >
               {row.name}
             </span>
+            {isDetected(row) && (
+              <span className="shrink-0 rounded-full border border-hairline bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                Detected
+              </span>
+            )}
             {!row.complete && <span className="shrink-0 text-xs text-ink-muted">scanning…</span>}
             {row.partial && <span className="shrink-0 text-xs text-ink-muted">partial</span>}
           </div>

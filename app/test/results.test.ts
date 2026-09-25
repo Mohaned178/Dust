@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 import { AggregateTree } from '@dust/core';
-import type { FolderRecord, SnapshotData } from '@dust/core';
+import type { CacheFinding, FolderRecord, SnapshotData } from '@dust/core';
 import { describe, expect, it } from 'vitest';
 import {
+  applyFindingsToRows,
   applyMatchesToRows,
   buildRowsFromSnapshot,
   buildRowsFromTree,
@@ -150,6 +151,42 @@ describe('buildRowsFromSnapshot', () => {
     expect(byPath.get('C:\\deep\\a\\b')?.action).toMatchObject({ ruleId: 'system-temp', grade: 'safe' });
     expect(byPath.get('C:\\deep\\a\\b')?.grade).toBe('review');
   });
+
+  it('reattaches display-only findings without an action', () => {
+    const snapshot: SnapshotData = {
+      schemaVersion: 2,
+      rulesVersion: '2',
+      root: 'C:\\',
+      startedAt: 1,
+      finishedAt: 2,
+      status: 'complete',
+      cleanedAt: null,
+      disks: [],
+      categories: [],
+      projects: [],
+      matches: [],
+      findings: [
+        {
+          path: 'C:\\leftover',
+          bytes: 5,
+          kind: 'app-leftover',
+          grade: 'review',
+          label: 'Spotify',
+          reason: 'Leftover cache from Spotify (not installed) — review before deleting',
+        },
+      ],
+      folders: [
+        { path: 'C:\\', name: 'C:\\', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
+        { path: 'C:\\leftover', name: 'leftover', bytes: 5, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 0 },
+      ],
+    };
+
+    const rows = buildRowsFromSnapshot(snapshot, ENV);
+    const leftover = rows.find((row) => row.path === 'C:\\leftover');
+
+    expect(leftover).toMatchObject({ grade: 'review', detected: true, action: null });
+    expect(leftover?.gradeReason).toContain('Leftover cache from Spotify');
+  });
 });
 
 describe('applyMatchesToRows', () => {
@@ -172,6 +209,70 @@ describe('applyMatchesToRows', () => {
 
     expect(updated[0]?.action?.ruleId).toBe('system-temp');
     expect(updated[1]?.action).toBeNull();
+  });
+
+  it('carries the detected origin onto the action', () => {
+    const rows = [row('C:\\Temp')];
+    const matches: ResultMatch[] = [
+      {
+        path: 'C:\\Temp',
+        bytes: 10,
+        ruleId: 'cache-discovery',
+        category: 'app-caches',
+        grade: 'safe',
+        evidence: 'GPU shader cache',
+        origin: 'detected',
+      },
+    ];
+
+    applyMatchesToRows(rows, matches);
+
+    expect(rows[0]?.action).toMatchObject({ ruleId: 'cache-discovery', origin: 'detected' });
+  });
+});
+
+describe('applyFindingsToRows', () => {
+  const row = (path: string) => toResultRow(record(path), { root, complete: true, childCount: 0, env: ENV });
+
+  const finding: CacheFinding = {
+    path: 'C:\\Users\\x\\AppData\\Local\\Spotify\\Storage',
+    bytes: 10,
+    kind: 'app-leftover',
+    grade: 'review',
+    label: 'Spotify',
+    reason: 'Leftover cache from Spotify (not installed) — review before deleting',
+  };
+
+  it('marks matching display-only rows without creating an action', () => {
+    const rows = [row(finding.path)];
+    applyFindingsToRows(rows, [finding]);
+
+    expect(rows[0]).toMatchObject({
+      grade: 'review',
+      gradeReason: finding.reason,
+      detected: true,
+      action: null,
+    });
+  });
+
+  it('never overrides an actionable row', () => {
+    const rows = [row(finding.path)];
+    rows[0]!.action = {
+      ruleId: 'system-temp',
+      category: 'temp',
+      grade: 'safe',
+      evidence: 'matched',
+    };
+    applyFindingsToRows(rows, [finding]);
+
+    expect(rows[0]!.action).toEqual({
+      ruleId: 'system-temp',
+      category: 'temp',
+      grade: 'safe',
+      evidence: 'matched',
+    });
+    expect(rows[0]!.detected).toBeUndefined();
+    expect(rows[0]!.gradeReason).not.toBe(finding.reason);
   });
 });
 

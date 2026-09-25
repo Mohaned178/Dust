@@ -159,7 +159,14 @@ export function ContributorList({
                 >
                   <FolderIcon className="h-4 w-4 shrink-0 text-ink-muted" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-ink">{row.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-medium text-ink">{row.name}</span>
+                      {row.action.origin === 'detected' && (
+                        <span className="shrink-0 rounded-full border border-hairline bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                          Detected
+                        </span>
+                      )}
+                    </span>
                     {parent !== null && (
                       <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">{parent}</span>
                     )}

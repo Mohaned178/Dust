@@ -53,7 +53,35 @@ export {
   firefoxCacheRule,
   discordCacheRule,
   slackCacheRule,
+  CURATED_CACHE_SPECS,
 } from './rules/inventory/cache-registry';
+export type { CuratedCacheSpec } from './rules/inventory/cache-registry';
+export {
+  cacheDiscoveryRule,
+  discoverCaches,
+  discoveryRoots,
+  DISCOVERY_MAX_DEPTH,
+  DISCOVERY_RULE_ID,
+} from './rules/inventory/cache-discovery';
+export type { CacheDiscoveryOptions, CacheDiscoveryResult } from './rules/inventory/cache-discovery';
+export { curatedCacheFindings } from './rules/inventory/cache-findings';
+export { appIsInstalled, appIsVerifiedMissing } from './rules/installed-state';
+export type { CacheFinding, CacheFindingKind } from './rules/findings';
+export {
+  INSTALLED_APPS_TTL_MS,
+  appMatchesTokens,
+  listInstalledApps,
+  matchInstalledApp,
+  parseInstalledApps,
+  resetInstalledAppsCache,
+  vendorKey,
+} from './system/installed-apps';
+export type {
+  InstalledApp,
+  InstalledAppMatch,
+  InstalledAppsOptions,
+  InstalledAppsSnapshot,
+} from './system/installed-apps';
 export { defaultRuleEnv, expandProfileWildcard } from './rules/paths';
 export type { RuleEnv } from './rules/paths';
 export { classifyDisplayGrade, createDisplayGrader } from './display/display-grade';
@@ -94,6 +122,8 @@ export type {
   SnapshotCategory,
   SnapshotData,
   SnapshotDisk,
+  SnapshotFinding,
+  SnapshotFindingKind,
   SnapshotFolder,
   SnapshotMatch,
 } from './snapshot/schema';

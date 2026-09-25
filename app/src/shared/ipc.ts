@@ -41,6 +41,7 @@ export interface ResultAction {
   category: CategoryId;
   grade: ActionGrade;
   evidence: string;
+  origin?: 'detected';
 }
 
 export interface ResultMatch extends ResultAction {
@@ -65,6 +66,7 @@ export interface ResultRow {
   grade: DisplayGrade;
   gradeReason: string;
   action: ResultAction | null;
+  detected?: boolean;
 }
 
 export interface BrowseRow {
