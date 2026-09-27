@@ -145,3 +145,56 @@ export {
 } from './system/drive-type';
 export type { DriveType, VolumeInfo } from './system/drive-type';
 export { DEFAULT_CLUSTER_SIZE, roundUpToCluster, volumeClusterSize } from './system/cluster';
+export {
+  entryId,
+  FOLDER_SOURCES,
+  isFolderSource,
+  isRunSource,
+  requiresAdministrator,
+  RUN_SOURCES,
+  STARTUP_SOURCES,
+} from './startup/types';
+export type {
+  FolderSource,
+  RunSource,
+  RunValue,
+  StartupDisabledKind,
+  StartupEntryRecord,
+  StartupEntryState,
+  StartupShortcut,
+  StartupSource,
+  StartupToggleRefusal,
+  StartupToggleResult,
+} from './startup/types';
+export {
+  BACKUP_ENVELOPE_VERSION,
+  encodeBackupEnvelope,
+  parseBackupEnvelope,
+} from './startup/envelope';
+export type { StartupBackupEnvelope } from './startup/envelope';
+export { isProtectedStartupEntry } from './startup/protected';
+export type { ProtectedEntryInput } from './startup/protected';
+export {
+  BACKUP_REGISTRY_KEYS,
+  createPowerShellRegistryStore,
+  parseRegistrySnapshot,
+  RUN_REGISTRY_KEYS,
+} from './startup/registry';
+export type { RegistrySnapshot, RegistryStore } from './startup/registry';
+export { createFsFolderStore, resolveStartupFolderPaths } from './startup/folders';
+export type {
+  FolderSnapshot,
+  FolderStore,
+  FsFolderStoreOptions,
+  ShortcutDetails,
+  ShortcutResolver,
+  StartupFolderPaths,
+} from './startup/folders';
+export {
+  disableStartupEntry,
+  enableStartupEntry,
+  listStartupEntries,
+} from './startup/startup';
+export type { StartupStore } from './startup/startup';
+export { createWindowsStartupStore } from './startup/index';
+export type { WindowsStartupStoreOptions } from './startup/index';
