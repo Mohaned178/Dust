@@ -45,6 +45,8 @@ import type {
   SnapshotData,
   SnapshotFinding,
   SnapshotMatch,
+  SystemInfoLive,
+  SystemInfoStatic,
   VolumeInfo,
   VolumeUsage,
 } from '@dust/core';
@@ -80,6 +82,8 @@ import { instrument, instrumentAsync } from './instrument';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
 import { createVolumeCache } from './volumes';
+import { createSystemInfoService } from './system-info';
+import type { SystemInfoService } from './system-info';
 import {
   applyFindingsToRows,
   applyMatchesToRows,
@@ -135,6 +139,7 @@ export interface EngineHostDeps {
   quickRoot?: () => string;
   listInstalledApps?: () => Promise<InstalledAppsSnapshot>;
   startup?: StartupService;
+  systemInfo?: SystemInfoService;
 }
 
 export interface EngineHost {
@@ -152,6 +157,8 @@ export interface EngineHost {
   getStartup(): Promise<StartupListResult>;
   disableStartup(id: string): Promise<StartupToggleResult>;
   enableStartup(id: string): Promise<StartupToggleResult>;
+  getSystemInfo(force?: boolean): Promise<SystemInfoStatic>;
+  getSystemInfoLive(): SystemInfoLive;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
@@ -249,6 +256,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     disable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
     enable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
   };
+  const systemInfoService = deps.systemInfo ?? createSystemInfoService();
   const cleaner =
     deps.createCleaner?.() ??
     new Cleaner({ guard, now });
@@ -599,6 +607,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   function enableStartup(id: string): Promise<StartupToggleResult> {
     return startupService.enable(id);
+  }
+
+  function getSystemInfo(force = false): Promise<SystemInfoStatic> {
+    return systemInfoService.get(force);
+  }
+
+  function getSystemInfoLive(): SystemInfoLive {
+    return systemInfoService.live();
   }
 
   function messageOf(error: unknown): string {
@@ -1297,6 +1313,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     getStartup,
     disableStartup,
     enableStartup,
+    getSystemInfo,
+    getSystemInfoLive,
     onEvent,
     dispose,
   };

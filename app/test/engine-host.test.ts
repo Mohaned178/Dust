@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
-import type { ProjectOptions, Rule, RuleContext, RuleEnv, VolumeInfo } from '@dust/core';
+import type { ProjectOptions, Rule, RuleContext, RuleEnv, SystemInfoStatic, VolumeInfo } from '@dust/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
 import type { ScanEvent } from '../src/shared/ipc';
@@ -1290,5 +1290,34 @@ describe('createEngineHost', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sessions).toHaveLength(1);
     expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
+
+  it('serves system info through the injected service', async () => {
+    const snapshot: SystemInfoStatic = {
+      capturedAt: 5,
+      hardwareAvailable: true,
+      os: { name: 'Windows 11 Pro', version: null, build: '26200.9457', arch: 'x64' },
+      hostname: 'dev-machine',
+      uptimeMs: 1000,
+      cpu: null,
+      gpus: [],
+      board: null,
+      bios: null,
+    };
+    const systemInfo = {
+      get: vi.fn(async () => snapshot),
+      live: vi.fn(() => ({ cpuPercent: 7, memTotalBytes: 100, memUsedBytes: 40, memAvailableBytes: 60 })),
+      invalidate: vi.fn(),
+    };
+    const host = createEngineHost({ store, systemInfo });
+
+    await expect(host.getSystemInfo(true)).resolves.toEqual(snapshot);
+    expect(systemInfo.get).toHaveBeenCalledWith(true);
+    expect(host.getSystemInfoLive()).toEqual({
+      cpuPercent: 7,
+      memTotalBytes: 100,
+      memUsedBytes: 40,
+      memAvailableBytes: 60,
+    });
   });
 });
