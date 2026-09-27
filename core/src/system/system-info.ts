@@ -192,3 +192,96 @@ export function normalizeOsArch(raw: string): string | null {
   if (key === 'arm') return 'ARM';
   return value;
 }
+
+export interface SystemInfoOsInfo {
+  hostname(): string;
+  uptimeSeconds(): number;
+  version(): string;
+  release(): string;
+  arch(): string;
+  cpus(): Array<{ model: string }>;
+}
+
+const defaultOsInfo: SystemInfoOsInfo = {
+  hostname: () => os.hostname(),
+  uptimeSeconds: () => os.uptime(),
+  version: () => os.version(),
+  release: () => os.release(),
+  arch: () => os.arch(),
+  cpus: () => os.cpus(),
+};
+
+export interface SystemInfoStaticOptions {
+  query?: () => Promise<string>;
+  now?: () => number;
+  osInfo?: SystemInfoOsInfo;
+  platform?: string;
+}
+
+function querySystemInfoJson(): Promise<string> {
+  const powershell =
+    process.platform === 'win32' && process.env.SystemRoot
+      ? `${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
+      : 'powershell.exe';
+  const executable = existsSync(powershell) ? powershell : 'powershell.exe';
+  return new Promise((resolve, reject) => {
+    execFile(
+      executable,
+      ['-NoProfile', '-NonInteractive', '-Command', SYSTEM_INFO_SCRIPT],
+      { encoding: 'utf8', timeout: 20_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(stdout);
+      },
+    );
+  });
+}
+
+export async function getSystemInfoStatic(
+  options: SystemInfoStaticOptions = {},
+): Promise<SystemInfoStatic> {
+  const now = options.now ?? Date.now;
+  const info = options.osInfo ?? defaultOsInfo;
+  const platform = options.platform ?? process.platform;
+
+  let parsed: ParsedSystemInfo | null = null;
+  if (options.query !== undefined || platform === 'win32') {
+    try {
+      parsed = parseSystemInfoJson(await (options.query ?? querySystemInfoJson)());
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const cpus = info.cpus();
+  const firstCpu = cpus[0];
+  const fallbackModel = firstCpu === undefined ? null : cleanString(firstCpu.model);
+  const model = parsed?.cpuModel ?? fallbackModel;
+  const cpu: SystemInfoCpu | null =
+    model === null
+      ? null
+      : {
+          model,
+          physicalCores: parsed?.physicalCores ?? null,
+          logicalThreads: parsed?.logicalThreads ?? (cpus.length > 0 ? cpus.length : null),
+        };
+
+  const build = parsed?.build ?? cleanString(info.release());
+  const arch = mapProcessorArchitecture(parsed?.architecture ?? null) ?? normalizeOsArch(info.arch());
+  const uptimeSeconds = info.uptimeSeconds();
+
+  return {
+    capturedAt: now(),
+    hardwareAvailable: parsed !== null,
+    os: { name: cleanString(info.version()), version: parsed?.displayVersion ?? null, build, arch },
+    hostname: cleanString(info.hostname()),
+    uptimeMs: Number.isFinite(uptimeSeconds) ? Math.max(uptimeSeconds, 0) * 1000 : null,
+    cpu,
+    gpus: parsed?.gpus ?? [],
+    board: parsed?.board ?? null,
+    bios: parsed?.bios ?? null,
+  };
+}

@@ -198,3 +198,22 @@ export {
 export type { StartupStore } from './startup/startup';
 export { createWindowsStartupStore } from './startup/index';
 export type { WindowsStartupStoreOptions } from './startup/index';
+export {
+  SYSTEM_INFO_SCRIPT,
+  getSystemInfoStatic,
+  mapProcessorArchitecture,
+  normalizeOsArch,
+  parseSystemInfoJson,
+} from './system/system-info';
+export type {
+  ParsedSystemInfo,
+  SystemInfoBios,
+  SystemInfoBoard,
+  SystemInfoCpu,
+  SystemInfoGpu,
+  SystemInfoLive,
+  SystemInfoOs,
+  SystemInfoOsInfo,
+  SystemInfoStatic,
+  SystemInfoStaticOptions,
+} from './system/system-info';

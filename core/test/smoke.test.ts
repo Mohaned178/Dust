@@ -57,4 +57,11 @@ describe('core public API', () => {
     expect(typeof core.createExternalPredicate).toBe('function');
     expect(typeof core.volumeClusterSize).toBe('function');
   });
+
+  it('exposes the system info surface', () => {
+    expect(typeof core.getSystemInfoStatic).toBe('function');
+    expect(typeof core.parseSystemInfoJson).toBe('function');
+    expect(typeof core.mapProcessorArchitecture).toBe('function');
+    expect(typeof core.SYSTEM_INFO_SCRIPT).toBe('string');
+  });
 });

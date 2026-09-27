@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   SYSTEM_INFO_SCRIPT,
+  getSystemInfoStatic,
   mapProcessorArchitecture,
   normalizeOsArch,
   parseSystemInfoJson,
 } from '../src/system/system-info';
+import type { SystemInfoOsInfo } from '../src/system/system-info';
 
 const FULL_FIXTURE = JSON.stringify({
   os: { displayVersion: '25H2', currentBuild: '26200', ubr: 9457 },
@@ -119,5 +121,72 @@ describe('SYSTEM_INFO_SCRIPT', () => {
     expect(SYSTEM_INFO_SCRIPT).not.toContain('AdapterRAM');
     expect(SYSTEM_INFO_SCRIPT).not.toContain('SerialNumber');
     expect(SYSTEM_INFO_SCRIPT).not.toContain('ProductName');
+  });
+});
+
+function fakeOsInfo(overrides: Partial<SystemInfoOsInfo> = {}): SystemInfoOsInfo {
+  return {
+    hostname: () => 'dev-machine',
+    uptimeSeconds: () => (2 * 24 + 4) * 3600,
+    version: () => 'Windows 11 Pro',
+    release: () => '10.0.26200',
+    arch: () => 'x64',
+    cpus: () => [{ model: 'AMD Ryzen 5 5500                               ' }, { model: 'AMD Ryzen 5 5500' }],
+    ...overrides,
+  };
+}
+
+describe('getSystemInfoStatic', () => {
+  it('merges the queried batch with Node data', async () => {
+    const snapshot = await getSystemInfoStatic({
+      query: async () => FULL_FIXTURE,
+      now: () => 1234,
+      osInfo: fakeOsInfo(),
+    });
+    expect(snapshot).toEqual({
+      capturedAt: 1234,
+      hardwareAvailable: true,
+      os: { name: 'Windows 11 Pro', version: '25H2', build: '26200.9457', arch: 'x64' },
+      hostname: 'dev-machine',
+      uptimeMs: ((2 * 24 + 4) * 3600) * 1000,
+      cpu: { model: 'AMD Ryzen 5 5500', physicalCores: 6, logicalThreads: 12 },
+      gpus: [{ name: 'NVIDIA GeForce RTX 4060', driverVersion: '32.0.16.1714' }],
+      board: {
+        manufacturer: 'Micro-Star International Co., Ltd.',
+        product: 'B450M-A PRO MAX II (MS-7C52)',
+      },
+      bios: { version: 'A.10', date: '2023-10-26' },
+    });
+  });
+
+  it('falls back to Node values when the query fails', async () => {
+    const snapshot = await getSystemInfoStatic({
+      query: async () => {
+        throw new Error('powershell missing');
+      },
+      now: () => 1,
+      osInfo: fakeOsInfo(),
+    });
+    expect(snapshot.hardwareAvailable).toBe(false);
+    expect(snapshot.os).toEqual({ name: 'Windows 11 Pro', version: null, build: '10.0.26200', arch: 'x64' });
+    expect(snapshot.cpu).toEqual({ model: 'AMD Ryzen 5 5500', physicalCores: null, logicalThreads: 2 });
+    expect(snapshot.gpus).toEqual([]);
+    expect(snapshot.board).toBeNull();
+    expect(snapshot.bios).toBeNull();
+  });
+
+  it('falls back to the Node arch when the batch has no processor architecture', async () => {
+    const snapshot = await getSystemInfoStatic({
+      query: async () => JSON.stringify({ cpu: { Name: 'CPU' } }),
+      osInfo: fakeOsInfo({ arch: () => 'arm64' }),
+    });
+    expect(snapshot.os.arch).toBe('ARM64');
+  });
+
+  it('returns Node data and no hardware when no query is available off Windows', async () => {
+    const snapshot = await getSystemInfoStatic({ osInfo: fakeOsInfo(), platform: 'linux' });
+    expect(snapshot.hardwareAvailable).toBe(false);
+    expect(snapshot.hostname).toBe('dev-machine');
+    expect(snapshot.cpu?.model).toBe('AMD Ryzen 5 5500');
   });
 });
