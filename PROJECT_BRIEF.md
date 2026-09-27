@@ -20,6 +20,7 @@ Dust is a Windows-first desktop disk-cleanup tool for developers. It scans a dri
 - **Category Strip** — reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree.
 - **Dev Cleanup** — npm project discovery from Analyze data: groups Dead / Occasional / Active / Orphaned / Pinned, restorability badges, bulk "Select all Dead + green", confirmation screen with rebuild commands, per-project progress, and a session-only "Recently cleaned" group holding copyable restore commands.
 - **Quick Clean** — targeted scan when no Analyze data exists, otherwise built from the freshest Analyze results without re-scanning: per-category plan with recovery notes, explicit confirmation, execute, and a freed-bytes summary. Never touches `node_modules`. `C:\Windows\Temp` items offer "Relaunch as Administrator".
+- **System Info** — a read-only OS/CPU/GPU/firmware snapshot with live CPU and memory usage, and a copyable plain-text report for bug reports. No elevation, nothing written to disk, no serial numbers or addresses.
 - **Snapshot persistence** — scan results persisted to `userData/snapshot.json`; relaunch shows the Dashboard instantly, a depth-4 folder map backs the Results view, staleness/`rulesVersion` banners prompt a rescan, and `cleanedAt` updates after cleanup.
 - **Scan Lock** — one global lock; Analyze and Quick Clean are mutually exclusive. A conflicting attempt shows "A scan is already running" with [Cancel it] / [Wait].
 

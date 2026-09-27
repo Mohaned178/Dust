@@ -266,7 +266,7 @@ Corners are gently curved and functional: `0.25rem` for checkboxes and skeleton 
 - **Shape:** a full-height Surface White rail with a 1px hairline right border, `15rem` expanded and `3.5rem` collapsed; the width animates on the single ease and the collapsed choice persists in `localStorage`.
 - **Header:** the placeholder `Dust` wordmark beside the collapse toggle (icon button).
 - **Nav item:** an icon + label at `0.5rem` radius in Muted Ink; hover fills the canvas. The active item is the shell's only accent spend — a Pine Teal Soft field with deep-teal text and `aria-current="page"`. Collapsed, the label hides and the item exposes it through `aria-label` and `title`.
-- **Coming-soon group:** a hairline-separated footer of inert text rows (Deep Uninstall, Startup Manager, System Info), each with a "Soon" state tag; never a control, and outside the tab order.
+- **Coming-soon group:** a hairline-separated footer of inert text rows (Deep Uninstall), each with a "Soon" state tag; never a control, and outside the tab order.
 
 ### Dashboard Category Card
 - **Style:** a flat white `0.75rem`-radius card with a hairline border — the category label in the system face above its byte figure in mono. Distinct from the Results category filter chips: these are evidence for the dashboard headline, not a filter's pressed state, and they carry no `aria-pressed`. Each is a button that opens Results filtered to that category. Unknown or unanalyzed values dim to 55% with an em-dash figure, and no grade color or progress semantics ever enters the card.

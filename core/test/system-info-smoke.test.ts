@@ -6,7 +6,7 @@ describe('system info against real Windows', () => {
   it(
     'reads and parses the machine',
     async (ctx) => {
-      if (process.platform !== 'win32') {
+      if (process.platform !== 'win32' || process.env.DUST_SYSTEM_INFO_SMOKE !== '1') {
         ctx.skip();
         return;
       }

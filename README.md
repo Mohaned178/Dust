@@ -71,6 +71,10 @@ One On/Off switch per Windows startup entry, grouped into **Enabled** and **Disa
 
 Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag; protected system entries (Windows Security, GPU/audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
 
+### System Info
+
+A read-only view of the machine: OS name, version, build, and architecture; hostname and uptime; CPU model with physical cores and logical threads; every reported display adapter with its driver version; and motherboard/BIOS when Windows reports them. CPU and memory usage update live while the page is open; everything else is captured once and refreshed on demand. **Copy system info** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
+
 ### Browse-only volumes
 
 Non-system volumes show size and structure without safety grades or cleanup rules. The only action is a guarded permanent delete with a simple confirmation; browse results are session-only and never touch the system-drive snapshot.
@@ -124,7 +128,7 @@ core/                        Pure-TypeScript engine — no Electron imports, run
   src/projects/              npm project discovery and classification
   src/display/               Display grades (safe / review / protected) with reasons
   src/snapshot/              Snapshot schema, build, store, post-cleanup prune
-  src/system/                Volume enumeration, drive types, cluster size
+  src/system/                Volume enumeration, drive types, cluster size, system info
 
 app/                         Electron app
   src/main/                  Window, typed IPC, engine host, scan lock, feature hosts
@@ -168,6 +172,14 @@ DUST_PERF=1 npm test -w core
 6. Toggle a machine-wide entry (HKLM Run or the common Startup folder): the **Administrator required** dialog appears; **Relaunch as Administrator** reopens Dust elevated, performs the toggle, opens Startup Manager, and shows the undo toast.
 7. After an elevated relaunch with a stale or forged id (`--dust-startup-toggle=deadbeefdeadbeef`), no write happens and Startup Manager opens with no toast.
 
+### System Info smoke checklist
+
+1. `npm run dev:app`, open **System Info**: the page shows a captured timestamp, OS/build/architecture, hostname, uptime, CPU model with cores and threads, every reported display adapter with its driver version, and motherboard/BIOS when the machine reports them.
+2. CPU and memory figures update every ~1.5 seconds while the page is open; leaving the page stops the polling.
+3. **Refresh** re-queries the machine and updates the captured timestamp.
+4. **Copy system info** copies the formatted block and shows the "System info copied." toast; the block contains no serial numbers, MAC addresses, or IP addresses.
+5. On a machine or VM with no discrete GPU, the page renders without a Graphics section (or with the adapters Windows reports) and never shows an error; on any machine, no administrator prompt appears.
+
 ### Development flags
 
 Environment variables used by development and benchmark tooling — not needed for normal use.
@@ -175,6 +187,7 @@ Environment variables used by development and benchmark tooling — not needed f
 | Flag | Effect |
 | --- | --- |
 | `DUST_PERF=1` | Enables the gated 200k-file throughput test in `core` |
+| `DUST_SYSTEM_INFO_SMOKE=1` | Runs the real Windows system-info query smoke test in `core` |
 | `DUST_TIMING=1` | Logs IPC timing to `userData/perf.log` |
 | `DUST_INSTRUMENT=1` | Collects host-process timing samples |
 | `DUST_BENCH_ROOT=<path>` | Runs the benchmark harness against a drive and writes `bench-report.json` |
