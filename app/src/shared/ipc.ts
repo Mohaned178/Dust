@@ -1,4 +1,11 @@
-import type { ActionGrade, BrowseDeleteResult, CategoryId, DisplayGrade, DriveType } from '@dust/core';
+import type {
+  ActionGrade,
+  BrowseDeleteResult,
+  CategoryId,
+  DisplayGrade,
+  DriveType,
+  StartupSource,
+} from '@dust/core';
 
 export const IPC = {
   dashboardGet: 'dust:dashboard:get',
@@ -14,10 +21,14 @@ export const IPC = {
   cleanExecute: 'dust:clean:execute',
   devCleanupGet: 'dust:dev-cleanup:get',
   pinsSet: 'dust:pins:set',
+  startupList: 'dust:startup:list',
+  startupDisable: 'dust:startup:disable',
+  startupEnable: 'dust:startup:enable',
+  startupHint: 'dust:startup:hint',
   relaunchElevated: 'dust:app:relaunch-elevated',
 } as const;
 
-export type { BrowseDeleteResult };
+export type { BrowseDeleteResult, StartupSource };
 
 export type ScanKind = 'analyze' | 'quick-clean' | 'browse';
 
@@ -321,6 +332,58 @@ export interface DashboardState {
   snapshot: DashboardSnapshotInfo;
 }
 
+export type StartupDisabledKind = 'dust' | 'windows';
+
+export interface StartupEntry {
+  id: string;
+  name: string;
+  publisher: string | null;
+  command: string;
+  source: StartupSource;
+  state: 'enabled' | 'disabled';
+  disabledKind: StartupDisabledKind | null;
+  protected: boolean;
+  requiresAdmin: boolean;
+  disabledAt: number | null;
+  iconDataUrl: string | null;
+}
+
+export interface StartupListState {
+  entries: StartupEntry[];
+  counts: { total: number; enabled: number; disabled: number };
+  loadedAt: number;
+}
+
+export type StartupListResult =
+  | { ok: true; state: StartupListState }
+  | { ok: false; message: string };
+
+export type StartupToggleRefusal =
+  | 'not-found'
+  | 'protected'
+  | 'needs-admin'
+  | 'conflict'
+  | 'windows-disabled'
+  | 'failed';
+
+export type StartupToggleResult =
+  | { ok: true; state: StartupListState }
+  | { ok: false; reason: StartupToggleRefusal; message: string };
+
+export interface StartupNotice {
+  entryId: string;
+  name: string;
+  to: 'enabled' | 'disabled';
+  disabledKind?: StartupDisabledKind;
+}
+
+export type StartupRelaunchAction = 'enable' | 'disable';
+
+export interface StartupLaunchHint {
+  open: boolean;
+  notice: StartupNotice | null;
+}
+
 export interface DustApi {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
@@ -334,6 +397,10 @@ export interface DustApi {
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
   getDevCleanup(root: string): Promise<DevCleanupState>;
   setPin(path: string, pinned: boolean): Promise<SetPinResult>;
-  relaunchElevated(): Promise<void>;
+  getStartup(): Promise<StartupListResult>;
+  disableStartupEntry(id: string): Promise<StartupToggleResult>;
+  enableStartupEntry(id: string): Promise<StartupToggleResult>;
+  getStartupLaunchHint(): Promise<StartupLaunchHint | null>;
+  relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
   onScanEvent(handler: (event: ScanEvent) => void): () => void;
 }

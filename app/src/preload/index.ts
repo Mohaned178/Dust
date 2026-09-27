@@ -14,6 +14,10 @@ import type {
   ScanEvent,
   SetPinResult,
   StartAnalyzeResult,
+  StartupLaunchHint,
+  StartupListResult,
+  StartupRelaunchAction,
+  StartupToggleResult,
 } from '../shared/ipc';
 
 const api: DustApi = {
@@ -31,7 +35,13 @@ const api: DustApi = {
     ipcRenderer.invoke(IPC.cleanExecute, request) as Promise<CleanExecuteResult>,
   getDevCleanup: (root: string) => ipcRenderer.invoke(IPC.devCleanupGet, root) as Promise<DevCleanupState>,
   setPin: (path: string, pinned: boolean) => ipcRenderer.invoke(IPC.pinsSet, path, pinned) as Promise<SetPinResult>,
-  relaunchElevated: () => ipcRenderer.invoke(IPC.relaunchElevated) as Promise<void>,
+  getStartup: () => ipcRenderer.invoke(IPC.startupList) as Promise<StartupListResult>,
+  disableStartupEntry: (id: string) =>
+    ipcRenderer.invoke(IPC.startupDisable, id) as Promise<StartupToggleResult>,
+  enableStartupEntry: (id: string) => ipcRenderer.invoke(IPC.startupEnable, id) as Promise<StartupToggleResult>,
+  getStartupLaunchHint: () => ipcRenderer.invoke(IPC.startupHint) as Promise<StartupLaunchHint | null>,
+  relaunchElevated: (startupToggleId?: string, action?: StartupRelaunchAction) =>
+    ipcRenderer.invoke(IPC.relaunchElevated, startupToggleId, action) as Promise<void>,
   onScanEvent: (handler: (event: ScanEvent) => void) => {
     const listener = (_event: unknown, payload: ScanEvent) => handler(payload);
     ipcRenderer.on(IPC.scanEvent, listener);

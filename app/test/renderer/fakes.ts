@@ -8,6 +8,8 @@ import type {
   DustApi,
   ResultRow,
   ResultsState,
+  StartupEntry,
+  StartupListState,
 } from '../../src/shared/ipc';
 
 export function makeResultsRows(): ResultRow[] {
@@ -274,6 +276,67 @@ export function makeDashboardState(overrides: Partial<DashboardState> = {}): Das
   };
 }
 
+export function makeStartupEntry(overrides: Partial<StartupEntry> = {}): StartupEntry {
+  return {
+    id: 'a1b2c3d4e5f60718',
+    name: 'Discord',
+    publisher: 'Discord Inc.',
+    command: '"C:\\Apps\\Discord\\Update.exe" --processStart Discord.exe',
+    source: 'hkcu-run',
+    state: 'enabled',
+    disabledKind: null,
+    protected: false,
+    requiresAdmin: false,
+    disabledAt: null,
+    iconDataUrl: null,
+    ...overrides,
+  };
+}
+
+export function makeStartupState(overrides: Partial<StartupListState> = {}): StartupListState {
+  const entries = overrides.entries ?? [
+    makeStartupEntry(),
+    makeStartupEntry({
+      id: 'b2c3d4e5f6071829',
+      name: 'Steam',
+      publisher: 'Valve Corporation',
+      command: '"C:\\Program Files (x86)\\Steam\\steam.exe" -silent',
+    }),
+    makeStartupEntry({
+      id: 'c3d4e5f607182930',
+      name: 'Slack',
+      publisher: 'Salesforce, Inc.',
+      state: 'disabled',
+      disabledKind: 'dust',
+      disabledAt: Date.UTC(2026, 0, 4),
+    }),
+    makeStartupEntry({
+      id: 'd4e5f607182930a1',
+      name: 'OneDrive',
+      publisher: 'Microsoft Corporation',
+      state: 'disabled',
+      disabledKind: 'windows',
+    }),
+    makeStartupEntry({
+      id: 'e5f607182930a1b2',
+      name: 'SecurityHealth',
+      publisher: 'Microsoft Corporation',
+      command: '"C:\\Windows\\System32\\SecurityHealthSystray.exe"',
+      protected: true,
+    }),
+  ];
+  const base: StartupListState = {
+    entries,
+    counts: {
+      total: entries.length,
+      enabled: entries.filter((entry) => entry.state === 'enabled').length,
+      disabled: entries.filter((entry) => entry.state === 'disabled').length,
+    },
+    loadedAt: Date.UTC(2026, 0, 5),
+  };
+  return { ...base, ...overrides };
+}
+
 export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
   return {
     getDashboard: async () => makeDashboardState(),
@@ -294,6 +357,10 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     executeClean: async () => ({ ok: true, report: makeCleanReport() }),
     getDevCleanup: async (root) => makeDevCleanupState({ root }),
     setPin: async () => ({ ok: true, pins: [] }),
+    getStartup: async () => ({ ok: true, state: makeStartupState() }),
+    disableStartupEntry: async () => ({ ok: true, state: makeStartupState() }),
+    enableStartupEntry: async () => ({ ok: true, state: makeStartupState() }),
+    getStartupLaunchHint: async () => null,
     relaunchElevated: async () => {},
     onScanEvent: () => () => {},
     ...overrides,

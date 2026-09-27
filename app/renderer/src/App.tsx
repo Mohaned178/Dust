@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CategoryId } from '@dust/core';
-import type { DustApi, ScanEvent, StartAnalyzeResult } from '../../src/shared/ipc';
+import type { DustApi, ScanEvent, StartAnalyzeResult, StartupNotice } from '../../src/shared/ipc';
 import { bumpRendererCount, recordRendererSample } from './instrument';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
@@ -12,6 +12,7 @@ import { DrivesView } from './pages/DrivesView';
 import { QuickCleanView } from './pages/QuickCleanView';
 import { ResultsView } from './pages/ResultsView';
 import { ScanView } from './pages/ScanView';
+import { StartupView } from './pages/StartupView';
 
 export interface AppProps {
   api: DustApi;
@@ -23,12 +24,15 @@ type View =
   | { name: 'scan'; root: string; runId: string; mode: 'analyze' | 'browse' }
   | { name: 'results'; root: string; category: CategoryId | null }
   | { name: 'browse'; root: string }
+  | { name: 'startup' }
   | { name: 'dev-cleanup'; root: string };
 
 function navFor(view: View): NavKey {
   switch (view.name) {
     case 'dev-cleanup':
       return 'dev-cleanup';
+    case 'startup':
+      return 'startup';
     case 'drives':
     case 'browse':
       return 'drives';
@@ -45,6 +49,8 @@ export function App({ api }: AppProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [systemRoot, setSystemRoot] = useState<string | null>(null);
   const [event, setEvent] = useState<ScanEvent | null>(null);
+  const [startupNotice, setStartupNotice] = useState<StartupNotice | null>(null);
+  const launchHandled = useRef(false);
 
   useEffect(
     () =>
@@ -58,6 +64,19 @@ export function App({ api }: AppProps) {
       }),
     [api],
   );
+
+  useEffect(() => {
+    if (launchHandled.current) return;
+    launchHandled.current = true;
+    api
+      .getStartupLaunchHint()
+      .then((hint) => {
+        if (hint === null || !hint.open) return;
+        setStartupNotice(hint.notice);
+        setView({ name: 'startup' });
+      })
+      .catch(() => {});
+  }, [api]);
 
   const startScan = useCallback(
     async (root: string, mode: 'analyze' | 'browse'): Promise<StartAnalyzeResult> => {
@@ -80,6 +99,7 @@ export function App({ api }: AppProps) {
     (key: NavKey) => {
       if (key === 'dashboard') setView({ name: 'dashboard' });
       else if (key === 'drives') setView({ name: 'drives' });
+      else if (key === 'startup') setView({ name: 'startup' });
       else if (key === 'dev-cleanup' && systemRoot !== null) setView({ name: 'dev-cleanup', root: systemRoot });
     },
     [systemRoot],
@@ -105,6 +125,10 @@ export function App({ api }: AppProps) {
         onBack={back}
         onBrowseComplete={view.mode === 'browse' ? browseDone : undefined}
       />
+    );
+  } else if (view.name === 'startup') {
+    content = (
+      <StartupView api={api} notice={startupNotice} onNoticeShown={() => setStartupNotice(null)} />
     );
   } else if (view.name === 'dev-cleanup') {
     content = (

@@ -65,6 +65,12 @@ The fast path for the four quick categories, never touching `node_modules`. With
 
 npm project discovery from Analyze data, grouped **Dead / Occasional / Active / Orphaned / Pinned**. Bulk-select the safe ones, then confirm against a plan that carries each project's rebuild command. Removed projects keep copyable restore commands in a session-only "Recently cleaned" group. A manual Keep pin always wins.
 
+### Startup Manager
+
+One On/Off switch per Windows startup entry, grouped into **Enabled** and **Disabled** (alphabetical, with live section counts). Toggling off moves the entry to a Dust backup — the `Run-Dust-Disabled` registry key for Run entries, `%APPDATA%\Dust\startup-disabled` for Startup-folder shortcuts — and offers a 5-second **Undo**; toggling on moves it back to its original location. Dust never deletes an entry.
+
+Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag; protected system entries (Windows Security, GPU/audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
+
 ### Browse-only volumes
 
 Non-system volumes show size and structure without safety grades or cleanup rules. The only action is a guarded permanent delete with a simple confirmation; browse results are session-only and never touch the system-drive snapshot.
@@ -151,6 +157,16 @@ npm test
 ```bash
 DUST_PERF=1 npm test -w core
 ```
+
+### Startup Manager smoke checklist
+
+1. `npm run dev:app`, open **Startup Manager** from the sidebar: enabled and disabled entries list alphabetically with the total in the header and live counts on each section.
+2. Toggle off an ordinary entry (for example Discord): the row moves to **Disabled**, a "Discord disabled · Undo" toast appears for 5 seconds, and the entry's value now exists under `...\CurrentVersion\Run-Dust-Disabled` with the original `...\Run` value gone.
+3. Click **Undo** within 5 seconds: the entry returns to **Enabled** and the original registry value is restored.
+4. Toggle off a Startup-folder shortcut: the `.lnk` moves to `%APPDATA%\Dust\startup-disabled` (with a sidecar JSON) instead of being deleted; toggling on moves it back.
+5. Protected rows (Windows Security, GPU drivers) show a lock and a disabled switch with the tooltip "Protected by Dust. This entry cannot be disabled." Windows-disabled rows show the **Windows** tag and cannot be toggled.
+6. Toggle a machine-wide entry (HKLM Run or the common Startup folder): the **Administrator required** dialog appears; **Relaunch as Administrator** reopens Dust elevated, performs the toggle, opens Startup Manager, and shows the undo toast.
+7. After an elevated relaunch with a stale or forged id (`--dust-startup-toggle=deadbeefdeadbeef`), no write happens and Startup Manager opens with no toast.
 
 ### Development flags
 

@@ -1,6 +1,7 @@
 import { SnapshotStore } from '@dust/core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
+import type { EngineHostDeps } from '../src/main/host/engine-host';
 import { registerIpcHandlers, parseCleanPreviewRequest } from '../src/main/ipc';
 import type { IpcRegistrar } from '../src/main/ipc';
 import { IPC } from '../src/shared/ipc';
@@ -29,7 +30,7 @@ describe('registerIpcHandlers', () => {
     for (const tree of trees.splice(0)) tree.cleanup();
   });
 
-  function makeHost(session: FakeSession) {
+  function makeHost(session: FakeSession, overrides: Partial<EngineHostDeps> = {}) {
     const tree = new TempTree();
     trees.push(tree);
     const store = new SnapshotStore({
@@ -44,6 +45,7 @@ describe('registerIpcHandlers', () => {
       getVolumeUsage: () => [{ volume: 'T:\\', label: 'Test', totalBytes: 1000, freeBytes: 400 }],
       createRules: () => [],
       createSession: () => session,
+      ...overrides,
     });
     return { host };
   }
@@ -147,6 +149,55 @@ describe('registerIpcHandlers', () => {
       ok: true,
       pins: ['T:\\dev\\app'],
     });
+
+    unsubscribe();
+    host.dispose();
+  });
+
+  it('routes startup list, disable, enable and the launch hint through the host', async () => {
+    const startup = {
+      list: vi.fn(async () => ({
+        ok: true as const,
+        state: {
+          entries: [],
+          counts: { total: 0, enabled: 0, disabled: 0 },
+          loadedAt: 1,
+        },
+      })),
+      disable: vi.fn(async () => ({
+        ok: false as const,
+        reason: 'protected' as const,
+        message: 'Protected by Dust. This entry cannot be disabled.',
+      })),
+      enable: vi.fn(async () => ({
+        ok: false as const,
+        reason: 'not-found' as const,
+        message: 'This startup entry no longer exists.',
+      })),
+    };
+    const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { startup });
+    const registrar = new FakeRegistrar();
+    const hint = { open: true, notice: { entryId: 'a1b2c3d4e5f60718', name: 'Discord', to: 'disabled' as const } };
+    const unsubscribe = registerIpcHandlers(
+      registrar,
+      host,
+      { send: () => {} },
+      { revealPath: async () => {}, relaunchElevated: async () => {} },
+      () => hint,
+    );
+
+    expect(await registrar.invoke(IPC.startupList)).toMatchObject({ ok: true });
+    expect(await registrar.invoke(IPC.startupDisable, 'a1b2c3d4e5f60718')).toEqual({
+      ok: false,
+      reason: 'protected',
+      message: 'Protected by Dust. This entry cannot be disabled.',
+    });
+    expect(await registrar.invoke(IPC.startupEnable, 'a1b2c3d4e5f60718')).toEqual({
+      ok: false,
+      reason: 'not-found',
+      message: 'This startup entry no longer exists.',
+    });
+    expect(await registrar.invoke(IPC.startupHint)).toEqual(hint);
 
     unsubscribe();
     host.dispose();

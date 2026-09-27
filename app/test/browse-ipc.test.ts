@@ -59,11 +59,12 @@ describe('browse IPC', () => {
     return volumeRootOf(tree.root)!;
   }
 
-  function makeHost(holder: { session?: FakeSession }) {
+  function makeHost(holder: { session?: FakeSession }, options: { dustInstallPath?: string } = {}) {
     return createEngineHost({
       store,
       pool: false,
       systemRoot: 'Z:\\',
+      dustInstallPath: options.dustInstallPath,
       env: {
         temp: join(tree.root, 'temp'),
         localAppData: join(tree.root, 'local'),
@@ -140,6 +141,25 @@ describe('browse IPC', () => {
     const deleted = (await registrar.invoke(IPC.browseDelete, join(tree.root, 'windows', 'Temp'))) as BrowseDeleteResult;
     expect(deleted).toMatchObject({ status: 'refused', refusal: 'inside-protected' });
     expect(existsSync(join(tree.root, 'windows', 'Temp'))).toBe(true);
+
+    unsubscribe();
+    host.dispose();
+  });
+
+  it("refuses a delete inside Dust's own install path", async () => {
+    const installPath = join(tree.root, 'dust-app');
+    tree.dir('dust-app');
+    const holder: { session?: FakeSession } = {};
+    const host = makeHost(holder, { dustInstallPath: installPath });
+    const { registrar, unsubscribe } = makeRegistrar(host);
+
+    await registrar.invoke(IPC.browseStart, volumeRoot());
+    holder.session!.finish(emptyScanResult(volumeRoot(), 'complete'));
+    await nextEvent(host, 'browse-finished');
+
+    const deleted = (await registrar.invoke(IPC.browseDelete, installPath)) as BrowseDeleteResult;
+    expect(deleted).toMatchObject({ status: 'refused', refusal: 'protected-root' });
+    expect(existsSync(installPath)).toBe(true);
 
     unsubscribe();
     host.dispose();

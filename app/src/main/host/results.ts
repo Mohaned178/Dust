@@ -15,6 +15,7 @@ export interface ResultsEnv {
   systemRoot?: string;
   programData?: string;
   userProfile?: string;
+  dustInstallPath?: string;
 }
 
 export interface RowInput {

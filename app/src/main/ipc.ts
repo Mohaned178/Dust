@@ -1,6 +1,12 @@
 import { appendFileSync } from 'node:fs';
 import { IPC } from '../shared/ipc';
-import type { CleanExecuteRequest, CleanPreviewRequest, ScanEvent } from '../shared/ipc';
+import type {
+  CleanExecuteRequest,
+  CleanPreviewRequest,
+  ScanEvent,
+  StartupLaunchHint,
+  StartupRelaunchAction,
+} from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
 import { instrument } from './host/instrument';
 
@@ -14,7 +20,7 @@ export interface EventSender {
 
 export interface ShellActions {
   revealPath(path: string): Promise<void>;
-  relaunchElevated(): Promise<void>;
+  relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
 }
 
 const timingEnabled = process.env.DUST_TIMING === '1';
@@ -48,6 +54,7 @@ export function registerIpcHandlers(
   host: EngineHost,
   sender: EventSender,
   shell: ShellActions,
+  getStartupLaunchHint: () => StartupLaunchHint | null = () => null,
 ): () => void {
   registrar.handle(IPC.dashboardGet, () => timed('dashboardGet', () => host.getDashboard()));
   registrar.handle(IPC.scanStart, (_event, volume) => host.startAnalyze(typeof volume === 'string' ? volume : ''));
@@ -74,7 +81,18 @@ export function registerIpcHandlers(
   registrar.handle(IPC.pinsSet, (_event, path, pinned) =>
     host.setPin(typeof path === 'string' ? path : '', pinned === true),
   );
-  registrar.handle(IPC.relaunchElevated, () => shell.relaunchElevated());
+  registrar.handle(IPC.startupList, () => timed('startupList', () => host.getStartup()));
+  registrar.handle(IPC.startupDisable, (_event, id) =>
+    host.disableStartup(typeof id === 'string' ? id : ''),
+  );
+  registrar.handle(IPC.startupEnable, (_event, id) => host.enableStartup(typeof id === 'string' ? id : ''));
+  registrar.handle(IPC.startupHint, () => getStartupLaunchHint());
+  registrar.handle(IPC.relaunchElevated, (_event, id, action) =>
+    shell.relaunchElevated(
+      typeof id === 'string' ? id : undefined,
+      action === 'enable' ? 'enable' : 'disable',
+    ),
+  );
   return host.onEvent((event: ScanEvent) => {
     instrument('ipc.send', () => sender.send(IPC.scanEvent, event));
   });

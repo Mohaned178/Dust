@@ -146,3 +146,32 @@ export function PanelLeftIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function PowerIcon(props: IconProps) {
+  return (
+    <svg {...withDefaults(24, 24, props)}>
+      <path d="M12 3v9" />
+      <path d="M6.5 6.5a8 8 0 1 0 11 0" />
+    </svg>
+  );
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <svg {...withDefaults(24, 24, props)}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+    </svg>
+  );
+}
+
+export function AppWindowIcon(props: IconProps) {
+  return (
+    <svg {...withDefaults(24, 24, props)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 9h17" />
+      <path d="M7 6.75h.01" />
+      <path d="M10 6.75h.01" />
+    </svg>
+  );
+}

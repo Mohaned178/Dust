@@ -1,16 +1,24 @@
-import { SnapshotStore, getVolumeUsage, listVolumes } from '@dust/core';
+import { SnapshotStore, createWindowsStartupStore, getVolumeUsage, listVolumes } from '@dust/core';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { buildElevationCommand } from './elevation';
 import type { IpcRegistrar } from './ipc';
 import { registerIpcHandlers, setTimingLogPath } from './ipc';
 import type { EngineHost } from './host/engine-host';
 import { createEngineHost } from './host/engine-host';
 import { reportSamples } from './host/instrument';
+import { createFilePublisherLoader, createStartupService } from './host/startup';
 import { createStorePaths, resolveWorkerPath } from './paths';
+import {
+  applyPendingStartupToggle,
+  parsePendingStartupToggle,
+  PENDING_ENABLE_PREFIX,
+  PENDING_TOGGLE_PREFIX,
+} from './startup-launch';
+import type { StartupLaunchHint, StartupRelaunchAction } from '../shared/ipc';
 
 function createMainWindow(backgroundThrottling: boolean): BrowserWindow {
   return new BrowserWindow({
@@ -175,8 +183,46 @@ void app.whenReady().then(async () => {
   if (process.env.DUST_TIMING === '1') {
     setTimingLogPath(join(app.getPath('userData'), 'perf.log'));
   }
-  const host = createEngineHost({ store, workerPath: resolveWorkerPath(__dirname) });
+  const startup = createStartupService({
+    store: createWindowsStartupStore({
+      env: process.env,
+      windowsDir: process.env.SystemRoot,
+      resolveShortcut: async (shortcutPath) => {
+        try {
+          const details = shell.readShortcutLink(shortcutPath);
+          return { target: details.target, args: details.args ?? '' };
+        } catch {
+          return null;
+        }
+      },
+    }),
+    loadPublisher: createFilePublisherLoader(),
+    loadIcon: async (executablePath) => {
+      try {
+        const icon = await app.getFileIcon(executablePath, { size: 'small' });
+        return icon.isEmpty() ? null : icon.toDataURL();
+      } catch {
+        return null;
+      }
+    },
+  });
+  const dustInstallPath = app.isPackaged ? dirname(process.execPath) : dirname(app.getAppPath());
+  const host = createEngineHost({
+    store,
+    workerPath: resolveWorkerPath(__dirname),
+    startup,
+    dustInstallPath,
+  });
   const window = createMainWindow(benchRoot === undefined);
+
+  const pendingToggle = parsePendingStartupToggle(process.argv);
+  let startupLaunchHint: StartupLaunchHint | null = pendingToggle.requested
+    ? { open: true, notice: null }
+    : null;
+  if (pendingToggle.requested && pendingToggle.id !== null) {
+    const notice = await applyPendingStartupToggle(host, pendingToggle.id, pendingToggle.action);
+    if (notice !== null) startupLaunchHint = { open: true, notice };
+  }
 
   const registrar: IpcRegistrar = {
     handle: (channel, listener) => {
@@ -195,9 +241,13 @@ void app.whenReady().then(async () => {
       revealPath: async (path) => {
         shell.showItemInFolder(path);
       },
-      relaunchElevated: async () => {
+      relaunchElevated: async (startupToggleId?: string, action: StartupRelaunchAction = 'disable') => {
         if (process.platform !== 'win32') return;
         const args = app.isPackaged ? [] : [app.getAppPath()];
+        if (typeof startupToggleId === 'string' && /^[a-f0-9]{16}$/.test(startupToggleId)) {
+          const prefix = action === 'enable' ? PENDING_ENABLE_PREFIX : PENDING_TOGGLE_PREFIX;
+          args.push(`${prefix}${startupToggleId}`);
+        }
         const child = spawn(
           'powershell.exe',
           ['-NoProfile', '-Command', buildElevationCommand(process.execPath, args)],
@@ -207,6 +257,7 @@ void app.whenReady().then(async () => {
         app.quit();
       },
     },
+    () => startupLaunchHint,
   );
 
   window.once('ready-to-show', () => window.show());

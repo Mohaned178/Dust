@@ -69,7 +69,10 @@ import type {
   ScanEvent,
   SetPinResult,
   StartAnalyzeResult,
+  StartupListResult,
+  StartupToggleResult,
 } from '../../shared/ipc';
+import type { StartupService } from './startup';
 import { aggregateCategories, collectRuleMatches } from './analyze';
 import type { RuleMatchWithRule } from './analyze';
 import { buildDashboardState } from './dashboard';
@@ -114,6 +117,7 @@ export interface EngineHostDeps {
   pool?: SessionOptions['pool'];
   env?: RuleEnv;
   systemRoot?: string;
+  dustInstallPath?: string;
   now?: () => number;
   progressIntervalMs?: number;
   folderIntervalMs?: number;
@@ -130,6 +134,7 @@ export interface EngineHostDeps {
   createCleaner?: () => Cleaner;
   quickRoot?: () => string;
   listInstalledApps?: () => Promise<InstalledAppsSnapshot>;
+  startup?: StartupService;
 }
 
 export interface EngineHost {
@@ -144,15 +149,19 @@ export interface EngineHost {
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
   getDevCleanup(root: string): DevCleanupState;
   setPin(path: string, pinned: boolean): SetPinResult;
+  getStartup(): Promise<StartupListResult>;
+  disableStartup(id: string): Promise<StartupToggleResult>;
+  enableStartup(id: string): Promise<StartupToggleResult>;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
 
-function guardEnv(env: RuleEnv): ResultsEnv {
+function guardEnv(env: RuleEnv, dustInstallPath?: string): ResultsEnv {
   return {
     systemRoot: env.windowsDir || undefined,
     programData: env.programData || undefined,
     userProfile: env.userProfile || undefined,
+    dustInstallPath,
   };
 }
 
@@ -186,7 +195,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       createInventoryRules(ruleEnv, { projects, recycleBin: options.recycleBin }));
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
-  const guard = guardEnv(env);
+  const guard = guardEnv(env, deps.dustInstallPath);
 
   function yieldToEventLoop(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
@@ -234,16 +243,15 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   let recentlyCleaned: RecentlyCleanedProject[] = [];
   const snapshotResultsCache = new WeakMap<SnapshotData, ResultsState>();
   const pendingPlans = new Map<string, PendingPlan>();
+  const unavailableStartupMessage = 'Startup Manager is only available on Windows.';
+  const startupService: StartupService = deps.startup ?? {
+    list: async () => ({ ok: false, message: unavailableStartupMessage }),
+    disable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
+    enable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
+  };
   const cleaner =
     deps.createCleaner?.() ??
-    new Cleaner({
-      guard: {
-        systemRoot: env.windowsDir || undefined,
-        programData: env.programData || undefined,
-        userProfile: env.userProfile || undefined,
-      },
-      now,
-    });
+    new Cleaner({ guard, now });
 
   function onSystemDrive(path: string): boolean {
     const volume = volumeRootOf(path);
@@ -579,6 +587,18 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const next = pinned ? [...remaining, path] : remaining;
     const saved = deps.store.setPins(next);
     return saved.ok ? { ok: true, pins: next } : { ok: false, message: saved.error ?? 'could not save pins' };
+  }
+
+  function getStartup(): Promise<StartupListResult> {
+    return startupService.list();
+  }
+
+  function disableStartup(id: string): Promise<StartupToggleResult> {
+    return startupService.disable(id);
+  }
+
+  function enableStartup(id: string): Promise<StartupToggleResult> {
+    return startupService.enable(id);
   }
 
   function messageOf(error: unknown): string {
@@ -1245,7 +1265,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       return browseRefusal(path, 'not-browsed');
     }
 
-    const result = deleteUnprotectedPath(path, { guard: guardEnv(env) });
+    const result = deleteUnprotectedPath(path, { guard });
     applyBrowseDelete(lastBrowse.rows, result);
     return result;
   }
@@ -1274,6 +1294,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     executeClean,
     getDevCleanup,
     setPin,
+    getStartup,
+    disableStartup,
+    enableStartup,
     onEvent,
     dispose,
   };

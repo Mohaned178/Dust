@@ -67,6 +67,9 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dev Cleanup' }));
     expect(onNavigate).toHaveBeenCalledWith('dev-cleanup');
 
+    fireEvent.click(screen.getByRole('button', { name: 'Startup Manager' }));
+    expect(onNavigate).toHaveBeenCalledWith('startup');
+
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
@@ -115,17 +118,16 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Coming soon')).toBeInTheDocument();
     expect(screen.getByText('Deep Uninstall')).toBeInTheDocument();
-    expect(screen.getByText('Startup Manager')).toBeInTheDocument();
     expect(screen.getByText('System Info')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Deep Uninstall' })).toBeNull();
-    expect(screen.getAllByText('Soon')).toHaveLength(3);
+    expect(screen.getAllByText('Soon')).toHaveLength(2);
   });
 
   it('meets contrast on the coming-soon group and keeps it out of the tab order', () => {
     renderSidebar();
 
     expect(screen.getByText('Coming soon')).toHaveClass('text-ink-muted');
-    for (const label of ['Deep Uninstall', 'Startup Manager', 'System Info']) {
+    for (const label of ['Deep Uninstall', 'System Info']) {
       expect(screen.getByText(label)).toHaveClass('text-ink-muted');
     }
     for (const tag of screen.getAllByText('Soon')) {
@@ -145,6 +147,7 @@ describe('Sidebar', () => {
       'Collapse sidebar',
       'Dashboard',
       'Dev Cleanup',
+      'Startup Manager',
       'Drives',
       'Settings',
     ]);
