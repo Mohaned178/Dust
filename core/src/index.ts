@@ -200,12 +200,17 @@ export { createWindowsStartupStore } from './startup/index';
 export type { WindowsStartupStoreOptions } from './startup/index';
 export {
   SYSTEM_INFO_SCRIPT,
+  createCpuUsageSampler,
   getSystemInfoStatic,
   mapProcessorArchitecture,
   normalizeOsArch,
   parseSystemInfoJson,
+  readCpuTimes,
+  readMemoryInfo,
 } from './system/system-info';
 export type {
+  CpuTimesSample,
+  MemoryInfo,
   ParsedSystemInfo,
   SystemInfoBios,
   SystemInfoBoard,

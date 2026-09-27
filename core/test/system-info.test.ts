@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   SYSTEM_INFO_SCRIPT,
+  createCpuUsageSampler,
   getSystemInfoStatic,
   mapProcessorArchitecture,
   normalizeOsArch,
   parseSystemInfoJson,
+  readMemoryInfo,
 } from '../src/system/system-info';
-import type { SystemInfoOsInfo } from '../src/system/system-info';
+import type { CpuTimesSample, SystemInfoOsInfo } from '../src/system/system-info';
 
 const FULL_FIXTURE = JSON.stringify({
   os: { displayVersion: '25H2', currentBuild: '26200', ubr: 9457 },
@@ -188,5 +190,50 @@ describe('getSystemInfoStatic', () => {
     expect(snapshot.hardwareAvailable).toBe(false);
     expect(snapshot.hostname).toBe('dev-machine');
     expect(snapshot.cpu?.model).toBe('AMD Ryzen 5 5500');
+  });
+});
+
+describe('createCpuUsageSampler', () => {
+  it('returns null on the first sample and a rounded percent on the next', () => {
+    const samples: CpuTimesSample[] = [
+      { idle: 100, total: 200 },
+      { idle: 170, total: 300 },
+    ];
+    const sample = createCpuUsageSampler(() => samples.shift() as CpuTimesSample);
+    expect(sample()).toBeNull();
+    expect(sample()).toBe(30);
+  });
+
+  it('returns null when no time elapsed or counters go backwards', () => {
+    const samples: CpuTimesSample[] = [
+      { idle: 100, total: 200 },
+      { idle: 100, total: 200 },
+      { idle: 90, total: 200 },
+      { idle: 100, total: 300 },
+    ];
+    const sample = createCpuUsageSampler(() => samples.shift() as CpuTimesSample);
+    expect(sample()).toBeNull();
+    expect(sample()).toBeNull();
+    expect(sample()).toBeNull();
+    expect(sample()).toBe(90);
+  });
+
+  it('clamps a fully busy delta to 100', () => {
+    const samples: CpuTimesSample[] = [
+      { idle: 0, total: 1000 },
+      { idle: 0, total: 2000 },
+    ];
+    const sample = createCpuUsageSampler(() => samples.shift() as CpuTimesSample);
+    expect(sample()).toBeNull();
+    expect(sample()).toBe(100);
+  });
+});
+
+describe('readMemoryInfo', () => {
+  it('reports consistent totals from Node', () => {
+    const info = readMemoryInfo();
+    expect(info.totalBytes).toBeGreaterThan(0);
+    expect(info.availableBytes).toBeGreaterThan(0);
+    expect(info.usedBytes).toBe(info.totalBytes - info.availableBytes);
   });
 });

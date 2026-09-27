@@ -285,3 +285,47 @@ export async function getSystemInfoStatic(
     bios: parsed?.bios ?? null,
   };
 }
+
+export interface CpuTimesSample {
+  idle: number;
+  total: number;
+}
+
+export function readCpuTimes(): CpuTimesSample {
+  let idle = 0;
+  let total = 0;
+  for (const cpu of os.cpus()) {
+    idle += cpu.times.idle;
+    total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
+  }
+  return { idle, total };
+}
+
+export function createCpuUsageSampler(
+  readTimes: () => CpuTimesSample = readCpuTimes,
+): () => number | null {
+  let previous: CpuTimesSample | null = null;
+  return () => {
+    const current = readTimes();
+    const prior = previous;
+    previous = current;
+    if (prior === null) return null;
+    const idleDelta = current.idle - prior.idle;
+    const totalDelta = current.total - prior.total;
+    if (totalDelta <= 0 || idleDelta < 0) return null;
+    const usage = (1 - idleDelta / totalDelta) * 100;
+    return Math.min(Math.max(Math.round(usage), 0), 100);
+  };
+}
+
+export interface MemoryInfo {
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+}
+
+export function readMemoryInfo(): MemoryInfo {
+  const totalBytes = os.totalmem();
+  const availableBytes = os.freemem();
+  return { totalBytes, availableBytes, usedBytes: Math.max(totalBytes - availableBytes, 0) };
+}
