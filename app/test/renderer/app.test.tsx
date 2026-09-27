@@ -188,4 +188,13 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Dev Cleanup' })).toBeInTheDocument();
     expect(await screen.findByText('dead-app')).toBeInTheDocument();
   });
+
+  it('opens System Info from the sidebar', async () => {
+    const api = makeApi();
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'System Info' }));
+    expect(await screen.findByRole('heading', { name: 'System Info' })).toBeInTheDocument();
+    expect(await screen.findByText('Windows 11 Pro 25H2')).toBeInTheDocument();
+  });
 });

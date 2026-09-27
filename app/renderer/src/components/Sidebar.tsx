@@ -4,12 +4,13 @@ import {
   DashboardIcon,
   GearIcon,
   HardDriveIcon,
+  InfoIcon,
   PackageIcon,
   PanelLeftIcon,
   PowerIcon,
 } from './icons';
 
-export type NavKey = 'dashboard' | 'dev-cleanup' | 'startup' | 'drives';
+export type NavKey = 'dashboard' | 'dev-cleanup' | 'startup' | 'drives' | 'system-info';
 
 export interface SidebarProps {
   active: NavKey;
@@ -21,7 +22,7 @@ export interface SidebarProps {
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const COLLAPSE_KEY = 'dust.sidebar.collapsed';
 
-const COMING_SOON = ['Deep Uninstall', 'System Info'];
+const COMING_SOON = ['Deep Uninstall'];
 
 function readCollapsed(): boolean {
   try {
@@ -131,6 +132,13 @@ export function Sidebar({ active, devCleanupDisabled, onNavigate, onOpenSettings
           collapsed={collapsed}
           active={active === 'drives'}
           onClick={() => onNavigate('drives')}
+        />
+        <NavButton
+          icon={InfoIcon}
+          label="System Info"
+          collapsed={collapsed}
+          active={active === 'system-info'}
+          onClick={() => onNavigate('system-info')}
         />
         <NavButton icon={GearIcon} label="Settings" collapsed={collapsed} onClick={onOpenSettings} />
       </nav>

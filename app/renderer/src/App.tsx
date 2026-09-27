@@ -13,6 +13,7 @@ import { QuickCleanView } from './pages/QuickCleanView';
 import { ResultsView } from './pages/ResultsView';
 import { ScanView } from './pages/ScanView';
 import { StartupView } from './pages/StartupView';
+import { SystemInfoView } from './pages/SystemInfoView';
 
 export interface AppProps {
   api: DustApi;
@@ -25,6 +26,7 @@ type View =
   | { name: 'results'; root: string; category: CategoryId | null }
   | { name: 'browse'; root: string }
   | { name: 'startup' }
+  | { name: 'system-info' }
   | { name: 'dev-cleanup'; root: string };
 
 function navFor(view: View): NavKey {
@@ -33,6 +35,8 @@ function navFor(view: View): NavKey {
       return 'dev-cleanup';
     case 'startup':
       return 'startup';
+    case 'system-info':
+      return 'system-info';
     case 'drives':
     case 'browse':
       return 'drives';
@@ -100,6 +104,7 @@ export function App({ api }: AppProps) {
       if (key === 'dashboard') setView({ name: 'dashboard' });
       else if (key === 'drives') setView({ name: 'drives' });
       else if (key === 'startup') setView({ name: 'startup' });
+      else if (key === 'system-info') setView({ name: 'system-info' });
       else if (key === 'dev-cleanup' && systemRoot !== null) setView({ name: 'dev-cleanup', root: systemRoot });
     },
     [systemRoot],
@@ -130,6 +135,8 @@ export function App({ api }: AppProps) {
     content = (
       <StartupView api={api} notice={startupNotice} onNoticeShown={() => setStartupNotice(null)} />
     );
+  } else if (view.name === 'system-info') {
+    content = <SystemInfoView api={api} />;
   } else if (view.name === 'dev-cleanup') {
     content = (
       <DevCleanupView api={api} root={view.root} onBack={back} onViewResults={viewResults} />
