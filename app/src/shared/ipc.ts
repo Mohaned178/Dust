@@ -5,6 +5,8 @@ import type {
   DisplayGrade,
   DriveType,
   StartupSource,
+  SystemInfoLive,
+  SystemInfoStatic,
 } from '@dust/core';
 
 export const IPC = {
@@ -25,10 +27,12 @@ export const IPC = {
   startupDisable: 'dust:startup:disable',
   startupEnable: 'dust:startup:enable',
   startupHint: 'dust:startup:hint',
+  systemInfoGet: 'dust:system-info:get',
+  systemInfoLive: 'dust:system-info:live',
   relaunchElevated: 'dust:app:relaunch-elevated',
 } as const;
 
-export type { BrowseDeleteResult, StartupSource };
+export type { BrowseDeleteResult, StartupSource, SystemInfoLive, SystemInfoStatic };
 
 export type ScanKind = 'analyze' | 'quick-clean' | 'browse';
 
@@ -401,6 +405,8 @@ export interface DustApi {
   disableStartupEntry(id: string): Promise<StartupToggleResult>;
   enableStartupEntry(id: string): Promise<StartupToggleResult>;
   getStartupLaunchHint(): Promise<StartupLaunchHint | null>;
+  getSystemInfo(force?: boolean): Promise<SystemInfoStatic>;
+  getSystemInfoLive(): Promise<SystemInfoLive>;
   relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
   onScanEvent(handler: (event: ScanEvent) => void): () => void;
 }

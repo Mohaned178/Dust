@@ -10,6 +10,8 @@ import type {
   ResultsState,
   StartupEntry,
   StartupListState,
+  SystemInfoLive,
+  SystemInfoStatic,
 } from '../../src/shared/ipc';
 
 export function makeResultsRows(): ResultRow[] {
@@ -337,6 +339,31 @@ export function makeStartupState(overrides: Partial<StartupListState> = {}): Sta
   return { ...base, ...overrides };
 }
 
+export function makeSystemInfo(overrides: Partial<SystemInfoStatic> = {}): SystemInfoStatic {
+  return {
+    capturedAt: new Date(2026, 8, 27, 14, 32).getTime(),
+    hardwareAvailable: true,
+    os: { name: 'Windows 11 Pro', version: '25H2', build: '26200.9457', arch: 'x64' },
+    hostname: 'dev-machine',
+    uptimeMs: (2 * 24 + 4) * 3_600_000,
+    cpu: { model: 'AMD Ryzen 7 5800X', physicalCores: 8, logicalThreads: 16 },
+    gpus: [{ name: 'NVIDIA GeForce RTX 4070', driverVersion: '560.94' }],
+    board: { manufacturer: 'ASUSTeK COMPUTER INC.', product: 'ROG STRIX B550-F GAMING' },
+    bios: { version: '2803', date: '2023-04-12' },
+    ...overrides,
+  };
+}
+
+export function makeSystemInfoLive(overrides: Partial<SystemInfoLive> = {}): SystemInfoLive {
+  return {
+    cpuPercent: 12,
+    memTotalBytes: 32 * 1024 ** 3,
+    memUsedBytes: 19_757_772_800,
+    memAvailableBytes: 32 * 1024 ** 3 - 19_757_772_800,
+    ...overrides,
+  };
+}
+
 export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
   return {
     getDashboard: async () => makeDashboardState(),
@@ -361,6 +388,8 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     disableStartupEntry: async () => ({ ok: true, state: makeStartupState() }),
     enableStartupEntry: async () => ({ ok: true, state: makeStartupState() }),
     getStartupLaunchHint: async () => null,
+    getSystemInfo: async () => makeSystemInfo(),
+    getSystemInfoLive: async () => makeSystemInfoLive(),
     relaunchElevated: async () => {},
     onScanEvent: () => () => {},
     ...overrides,

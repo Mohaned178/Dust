@@ -87,6 +87,10 @@ export function registerIpcHandlers(
   );
   registrar.handle(IPC.startupEnable, (_event, id) => host.enableStartup(typeof id === 'string' ? id : ''));
   registrar.handle(IPC.startupHint, () => getStartupLaunchHint());
+  registrar.handle(IPC.systemInfoGet, (_event, force) =>
+    timed('systemInfoGet', () => host.getSystemInfo(force === true)),
+  );
+  registrar.handle(IPC.systemInfoLive, () => host.getSystemInfoLive());
   registrar.handle(IPC.relaunchElevated, (_event, id, action) =>
     shell.relaunchElevated(
       typeof id === 'string' ? id : undefined,

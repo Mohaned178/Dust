@@ -18,6 +18,8 @@ import type {
   StartupListResult,
   StartupRelaunchAction,
   StartupToggleResult,
+  SystemInfoLive,
+  SystemInfoStatic,
 } from '../shared/ipc';
 
 const api: DustApi = {
@@ -40,6 +42,9 @@ const api: DustApi = {
     ipcRenderer.invoke(IPC.startupDisable, id) as Promise<StartupToggleResult>,
   enableStartupEntry: (id: string) => ipcRenderer.invoke(IPC.startupEnable, id) as Promise<StartupToggleResult>,
   getStartupLaunchHint: () => ipcRenderer.invoke(IPC.startupHint) as Promise<StartupLaunchHint | null>,
+  getSystemInfo: (force?: boolean) =>
+    ipcRenderer.invoke(IPC.systemInfoGet, force === true) as Promise<SystemInfoStatic>,
+  getSystemInfoLive: () => ipcRenderer.invoke(IPC.systemInfoLive) as Promise<SystemInfoLive>,
   relaunchElevated: (startupToggleId?: string, action?: StartupRelaunchAction) =>
     ipcRenderer.invoke(IPC.relaunchElevated, startupToggleId, action) as Promise<void>,
   onScanEvent: (handler: (event: ScanEvent) => void) => {

@@ -5,7 +5,7 @@ import type { EngineHostDeps } from '../src/main/host/engine-host';
 import { registerIpcHandlers, parseCleanPreviewRequest } from '../src/main/ipc';
 import type { IpcRegistrar } from '../src/main/ipc';
 import { IPC } from '../src/shared/ipc';
-import type { DashboardState, ScanEvent, StartAnalyzeResult } from '../src/shared/ipc';
+import type { DashboardState, ScanEvent, StartAnalyzeResult, SystemInfoStatic } from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
 import { TempTree } from './fixtures';
 
@@ -198,6 +198,47 @@ describe('registerIpcHandlers', () => {
       message: 'This startup entry no longer exists.',
     });
     expect(await registrar.invoke(IPC.startupHint)).toEqual(hint);
+
+    unsubscribe();
+    host.dispose();
+  });
+
+  it('routes system info and live samples through the host', async () => {
+    const snapshot: SystemInfoStatic = {
+      capturedAt: 5,
+      hardwareAvailable: true,
+      os: { name: 'Windows 11 Pro', version: null, build: '26200.9457', arch: 'x64' },
+      hostname: 'dev-machine',
+      uptimeMs: 1000,
+      cpu: null,
+      gpus: [],
+      board: null,
+      bios: null,
+    };
+    const systemInfo = {
+      get: vi.fn(async () => snapshot),
+      live: vi.fn(() => ({ cpuPercent: 7, memTotalBytes: 100, memUsedBytes: 40, memAvailableBytes: 60 })),
+      invalidate: vi.fn(),
+    };
+    const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { systemInfo });
+    const registrar = new FakeRegistrar();
+    const unsubscribe = registerIpcHandlers(
+      registrar,
+      host,
+      { send: () => {} },
+      { revealPath: async () => {}, relaunchElevated: async () => {} },
+    );
+
+    await expect(registrar.invoke(IPC.systemInfoGet, true)).resolves.toEqual(snapshot);
+    expect(systemInfo.get).toHaveBeenCalledWith(true);
+    await expect(registrar.invoke(IPC.systemInfoGet, 'not-a-boolean')).resolves.toEqual(snapshot);
+    expect(systemInfo.get).toHaveBeenLastCalledWith(false);
+    await expect(registrar.invoke(IPC.systemInfoLive)).resolves.toEqual({
+      cpuPercent: 7,
+      memTotalBytes: 100,
+      memUsedBytes: 40,
+      memAvailableBytes: 60,
+    });
 
     unsubscribe();
     host.dispose();
