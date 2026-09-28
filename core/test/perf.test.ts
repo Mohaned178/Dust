@@ -26,7 +26,6 @@ describe.skipIf(!enabled)('performance (gated: set DUST_PERF=1)', () => {
       const result = await new ScanSession({ root: fixture.root, pool: poolOptions }).start();
       const elapsedMs = Date.now() - startedAt;
       const filesPerSecond = elapsedMs > 0 ? Math.round((result.filesScanned / elapsedMs) * 1000) : 0;
-      // eslint-disable-next-line no-console
       console.log(`200k files: ${elapsedMs} ms (${filesPerSecond} files/sec) via ${result.filesScanned} files`);
       expect(result.status).toBe('complete');
       expect(result.filesScanned).toBe(dirs * filesPerDir);

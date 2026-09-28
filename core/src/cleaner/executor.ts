@@ -223,7 +223,7 @@ function walkDirectory(dir: string, outcome: DeleteOutcome, deps: Required<Delet
       continue;
     }
 
-    let size = 0;
+    let size: number;
     try {
       size = deps.lstat(abs).size;
     } catch (error) {

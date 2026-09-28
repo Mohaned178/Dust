@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { InstalledApp, RemovalPlan, RemovalReport } from '@dust/core';
 import { createUninstallService } from '../src/main/host/uninstall';
 import type { UninstallServiceDeps } from '../src/main/host/uninstall';
-import type { PendingUninstallJob } from '../src/main/uninstall-launch';
 import type { UninstallEvent, UninstallExecuteRequest, ScanKind } from '../src/shared/ipc';
 
 function installedApp(overrides: Partial<InstalledApp> & { displayName: string }): InstalledApp {

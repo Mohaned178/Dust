@@ -122,7 +122,7 @@ export function createStartupService(deps: StartupServiceDeps): StartupService {
     await Promise.all(
       paths.map(async (path) => {
         if (iconCache.has(path)) return;
-        let icon: string | null = null;
+        let icon: string | null;
         try {
           icon = await loadIcon(path);
         } catch {

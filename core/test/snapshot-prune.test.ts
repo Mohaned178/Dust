@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { CleanupReport } from '../src/cleaner/cleaner';
 import type { ItemResult } from '../src/cleaner/executor';

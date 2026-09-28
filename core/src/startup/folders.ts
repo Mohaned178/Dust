@@ -91,7 +91,7 @@ export function createFsFolderStore(options: FsFolderStoreOptions = {}): FolderS
   }
 
   async function toShortcut(root: string, fileName: string): Promise<StartupShortcut> {
-    let details: ShortcutDetails | null = null;
+    let details: ShortcutDetails | null;
     try {
       details = await resolve(join(root, fileName));
     } catch {
@@ -124,7 +124,7 @@ export function createFsFolderStore(options: FsFolderStoreOptions = {}): FolderS
       ]);
       const backups: string[] = [];
       if (paths.backup !== '' && existsSync(paths.backup)) {
-        let names: string[] = [];
+        let names: string[];
         try {
           names = readdirSync(paths.backup).filter((fileName) => extname(fileName).toLowerCase() === '.json');
         } catch {

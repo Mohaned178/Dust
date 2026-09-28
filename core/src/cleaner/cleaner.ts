@@ -17,7 +17,7 @@ export class PlanTokenError extends Error {
   }
 }
 
-export interface CleanerOptions extends BuildPlanOptions {}
+export type CleanerOptions = BuildPlanOptions;
 
 export interface ExecuteOptions {
   acknowledge?: string[];

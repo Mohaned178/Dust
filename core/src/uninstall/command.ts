@@ -87,8 +87,8 @@ export function parseUninstallCommand(raw: string, options: ParseUninstallComman
   if (trimmed.length === 0) return invalid(raw);
 
   const expanded = expandEnvironment(trimmed, env);
-  let executable = '';
-  let rest = '';
+  let executable: string;
+  let rest: string;
 
   if (expanded.startsWith('"')) {
     const end = expanded.indexOf('"', 1);

@@ -38,7 +38,6 @@ import type {
   Rule,
   RuleContext,
   RuleEnv,
-  RuleMatch,
   ScanResult,
   SessionOptions,
   SnapshotCategory,

@@ -33,7 +33,6 @@ describe('ScanSession', () => {
   });
 
   it('cancels mid-scan and returns a cancelled result with partial data', async () => {
-    let session!: ScanSession;
     let calls = 0;
     const enumerator: Enumerator = {
       list: () => {
@@ -44,7 +43,7 @@ describe('ScanSession', () => {
           : { entries: [{ name: 'x.txt', kind: 'file', size: 1, mtimeMs: 1000 }], entryErrors: 0 };
       },
     };
-    session = new ScanSession({ root: 'F:\\synthetic', enumerator });
+    const session = new ScanSession({ root: 'F:\\synthetic', enumerator });
 
     const result = await session.start();
 

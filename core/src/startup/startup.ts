@@ -4,7 +4,7 @@ import type { FolderStore } from './folders';
 import { isProtectedStartupEntry } from './protected';
 import type { RegistryStore } from './registry';
 import { entryId, FOLDER_SOURCES, isFolderSource, isRunSource, requiresAdministrator, RUN_SOURCES } from './types';
-import type { FolderSource, RunSource, StartupEntryRecord, StartupShortcut, StartupToggleResult } from './types';
+import type { FolderSource, StartupEntryRecord, StartupToggleResult } from './types';
 
 export interface StartupStore {
   registry: RegistryStore;
