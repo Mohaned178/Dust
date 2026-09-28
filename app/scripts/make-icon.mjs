@@ -112,8 +112,7 @@ export function buildIcon() {
   return encodeIco(SIZES.map((size) => ({ size, pixels: renderIcon(size) })));
 }
 
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (invokedDirectly) {
   const appRoot = dirname(dirname(fileURLToPath(import.meta.url)));

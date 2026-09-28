@@ -7,9 +7,16 @@ Dust is a Windows-first disk-cleanup tool for developers. It scans a drive, show
 Every deletion is previewed and explicitly confirmed. Dust never deletes anything on its own.
 
 > [!NOTE]
-> Dust is an MVP and Windows-only. Docker cleanup, an installed-apps manager, a quarantine buffer, and cross-platform builds are planned but not shipped yet — see [Roadmap](#roadmap).
+> Dust is Windows-only. Docker cleanup, a quarantine buffer, and cross-platform builds are planned but not shipped yet — see [Roadmap](#roadmap).
 
-**Contents:** [Why Dust](#why-dust) · [Quick start](#quick-start) · [Features](#features) · [How safety works](#how-safety-works) · [Documentation](#documentation) · [Reference](#reference) · [Roadmap](#roadmap)
+**Contents:** [Why Dust](#why-dust) · [Install](#install) · [Quick start](#quick-start) · [Features](#features) · [How safety works](#how-safety-works) · [Documentation](#documentation) · [Reference](#reference) · [Roadmap](#roadmap)
+
+## Install
+
+Download `Dust-Setup-1.0.0.exe` from [Releases](https://github.com/Mohaned178/Dust/releases) and run it. The installer is per-user, asks where to install, and creates Start Menu and desktop shortcuts.
+
+> [!IMPORTANT]
+> The 1.0.0 build is **not code-signed**, so Windows SmartScreen may show "Windows protected your PC" on first run. Choose **More info → Run anyway**. Signed builds are on the [Roadmap](#roadmap).
 
 ## Why Dust
 
@@ -71,6 +78,14 @@ One On/Off switch per Windows startup entry, grouped into **Enabled** and **Disa
 
 Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag; protected system entries (Windows Security, GPU/audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
 
+### Deep Uninstall
+
+Removes an installed app with its own uninstaller, then clears what it leaves behind. The app list comes from the Windows uninstall registry (per-user and machine-wide); pick an app and Dust builds a plan showing the uninstaller it will run, leftover folders (graded **safe** or **review**, with the reason for each grade), registry keys, and startup entries, plus what is kept and why.
+
+Only a whitelisted set of locations can be targeted: an app's registered install directory, its `%APPDATA%`/`%LOCALAPPDATA%`/`%ProgramData%` folders, and its registry keys. Paths are validated again at execution time against the protected-path policy, user-data items always go through the Recycle Bin, and registry keys are exported to `%APPDATA%\Dust\uninstall-backups` before deletion so every removal has a `reg import` restore command. Deletions are gated on a write-ahead journal.
+
+Machine-wide removals ask for administrator rights and relaunch elevated; the elevated instance rebuilds the plan from the app id and waits for your confirmation before touching anything.
+
 ### System Info
 
 A read-only view of the machine: OS name, version, build, and architecture; hostname and uptime; CPU model with physical cores and logical threads; every reported display adapter with its driver version and VRAM when Windows reports it; and motherboard/BIOS when Windows reports them. CPU and memory usage update live while the page is open; everything else is captured once and refreshed on demand. **Copy system info** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
@@ -114,6 +129,9 @@ Look-up material for day-to-day development.
 | `npm test -w core`      | Engine tests (plain Node)                                 |
 | `npm test -w app`       | Host and renderer tests (Node + jsdom)                    |
 | `npm run typecheck`     | TypeScript checks across both workspaces                  |
+| `npm run lint`          | ESLint across the repo                                    |
+| `npm run format`        | Prettier write                                            |
+| `npm run dist:app`      | Build the Windows installer into `app/release/`           |
 | `npm run bench -w core` | Scan throughput benchmarks                                |
 
 ### Project structure
@@ -147,7 +165,7 @@ docs/superpowers/            Design spec, implementation plans, perf measurement
 - **Snapshots make relaunch instant.** The last system-drive scan is persisted to `%APPDATA%\Dust\snapshot.json`; the Dashboard reads it immediately and the Results tree rebuilds from it. Staleness and `rulesVersion` mismatches prompt a rescan.
 - **One global scan lock.** Analyze and Quick Clean are mutually exclusive; a conflicting attempt offers "Wait" or "Cancel it".
 - **The engine is host-agnostic.** `core/` has zero Electron imports and runs under vitest in plain Node, so it can move into a utility process later without changes.
-- **Renderer security.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
+- **Renderer security.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, a strict production CSP, denied window-open/navigation outside the app, denied permission requests, and a top-level error boundary.
 
 ### Testing
 
@@ -161,6 +179,17 @@ npm test
 ```bash
 DUST_PERF=1 npm test -w core
 ```
+
+### Releasing
+
+Releases are tag-driven and produce a draft GitHub Release:
+
+1. Bump `version` in `app/package.json` and add a `CHANGELOG.md` entry; merge to `master`.
+2. Tag and push: `git tag v1.0.0 && git push origin v1.0.0`.
+3. The **Release** workflow (`.github/workflows/release.yml`) runs typecheck, tests, builds the NSIS installer, writes `sha256sums.txt`, and opens a draft release with both files attached.
+4. Review the draft, then publish it. `Dust-Setup-<version>.exe` is the asset users download.
+
+`npm run dist:app` reproduces the installer locally. Signing is unset: electron-builder's `win.certificateFile`/`certificatePassword` (or Azure Trusted Signing) are documented as a stub in `app/electron-builder.yml`.
 
 ### Startup Manager smoke checklist
 
@@ -205,9 +234,9 @@ Environment variables used by development and benchmark tooling — not needed f
 
 ## Roadmap
 
-Planned after the MVP, in rough order:
+Planned after 1.0, in rough order:
 
-- Deep Uninstall — an installed-apps manager
+- Code signing and auto-update
 - Docker image cleanup
 - Real pnpm/bun support (global store and symlink math); Yarn Berry
 - Quarantine (recovery buffer for deletions)

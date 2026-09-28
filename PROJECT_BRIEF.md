@@ -20,6 +20,8 @@ Dust is a Windows-first desktop disk-cleanup tool for developers. It scans a dri
 - **Category Strip** — reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree.
 - **Dev Cleanup** — npm project discovery from Analyze data: groups Dead / Occasional / Active / Orphaned / Pinned, restorability badges, bulk "Select all Dead + green", confirmation screen with rebuild commands, per-project progress, and a session-only "Recently cleaned" group holding copyable restore commands.
 - **Quick Clean** — targeted scan when no Analyze data exists, otherwise built from the freshest Analyze results without re-scanning: per-category plan with recovery notes, explicit confirmation, execute, and a freed-bytes summary. Never touches `node_modules`. `C:\Windows\Temp` items offer "Relaunch as Administrator".
+- **Startup Manager** — one On/Off switch per Windows startup entry (Run keys and Startup folders), with a Dust backup, 5-second Undo, protected read-only rows, and an elevated toggle handoff for machine-wide entries.
+- **Deep Uninstall** — an installed-apps manager: the app's own uninstaller plus leftover folders, registry keys, and startup entries. Plans grade every item, validate paths against the protected-path policy at plan and execution time, back registry keys up to `reg import` archives, gate deletions on a write-ahead journal, and rebuild the plan in the elevated instance before any write.
 - **System Info** — a read-only OS/CPU/GPU/firmware snapshot with live CPU and memory usage, and a copyable plain-text report for bug reports. No elevation, nothing written to disk, no serial numbers or addresses.
 - **Snapshot persistence** — scan results persisted to `userData/snapshot.json`; relaunch shows the Dashboard instantly, a depth-4 folder map backs the Results view, staleness/`rulesVersion` banners prompt a rescan, and `cleanedAt` updates after cleanup.
 - **Scan Lock** — one global lock; Analyze and Quick Clean are mutually exclusive. A conflicting attempt shows "A scan is already running" with [Cancel it] / [Wait].
@@ -27,7 +29,7 @@ Dust is a Windows-first desktop disk-cleanup tool for developers. It scans a dri
 ## What the app does NOT do yet (Phase 2)
 
 - Docker image cleanup
-- Installed-apps manager (Deep Uninstall) — planned next
+- Code signing and auto-update (1.0.0 ships unsigned with manual GitHub Releases downloads)
 - Visual treemap (the Tree Table is the MVP navigation surface)
 - Quarantine (recovery buffer for deletions)
 - Real pnpm/bun support (global store and symlink math); Yarn Berry is also not supported
@@ -51,22 +53,29 @@ core/                        TypeScript engine — zero Electron imports, runs u
   projects/                  npm project discovery and classification
   display/                   path-pattern display grades (green/yellow/red + why)
   snapshot/                  snapshot schema, build, store, post-cleanup prune
-  system/                    volume enumeration, drive types, cluster size
+  startup/                   Run-key and Startup-folder reads, toggles, envelopes
+  uninstall/                 app discovery, leftovers, path policy, plan, backup,
+                             journal, verify, executor
+  system/                    volume enumeration, drive types, cluster size, system info
 
 app/                         Electron app
-  src/main/                  window, typed IPC, engine host, worker-pool host,
-                             scan lock, analyze/results/cleanup/dev-cleanup hosts
+  src/main/                  window, typed IPC, engine host, worker-pool host, scan lock,
+                             analyze/results/cleanup/dev-cleanup/startup/uninstall/system-info
+                             hosts, security hardening
   src/preload/               typed bridge exposed as window.dust
   renderer/                  React 19 + Tailwind 4 (Vite), TanStack Table + react-virtual
+  scripts/                   esbuild bundling, dev server, icon generator
+  electron-builder.yml       NSIS installer configuration (unsigned, signing stub)
   test/                      vitest (node + jsdom projects), manual smoke checklist in README
 ```
 
 Key architectural facts:
 
 - Electron main owns scan sessions and the cleaner; the renderer holds no engine state and touches no filesystem. It reaches the engine only through `window.dust`.
-- The scanner uses 4–8 `worker_threads` with synchronous fs calls and directory-level work-stealing; reparse points (symlinks/junctions) are detected and never followed.
+- The scanner uses 4–8 `worker_threads` with synchronous fs calls and directory-level work-stealing; reparse points (symlinks/junctions) are detected and never followed, including a re-check before descending during removal.
 - `core/` is host-agnostic: moving it into an Electron `utilityProcess` later requires no core changes.
-- Renderer security: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
+- Renderer security: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, strict production CSP, navigation/window-open and permission denial, and a top-level error boundary.
+- Deep Uninstall has its own safety layer: a shared path policy (normalization, allowed parents, protected roots) enforced at plan and execution time, write-ahead journaling, and an elevated handoff that rebuilds the plan from an app id and waits for confirmation.
 
 ## The 13 locked decisions
 
@@ -96,7 +105,7 @@ Key architectural facts:
 
 ## Current state
 
-Plans 1–10 complete: the engine, snapshots, app shell, results surface, cleanup flows, and the scan-performance pass are merged to `master`, and the renderer is rebuilt on the light-first design system. Deep Uninstall is planned next.
+v1.0.0 is release-ready: the engine, snapshots, app shell, results surface, cleanup flows, the scan-performance pass, System Info, Startup Manager, and Deep Uninstall are merged to `master`. The renderer is on the light-first design system, the codebase is linted and hardened, and `npm run dist:app` produces an unsigned NSIS installer. CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests, and a production build on `master`; the release workflow builds a draft GitHub Release from a `v*` tag.
 
 Repository note: everything is merged to `master`; historical `plan-*` and `redesign/light-workbench` branches remain on the remote only.
 
@@ -113,12 +122,18 @@ Repository note: everything is merged to `master`; historical `plan-*` and `rede
   7. `2026-09-21-app-shell-engine-host.md`
   8. `2026-09-21-results-view.md`
   9. `2026-09-22-cleaner-quick-clean-dev-cleanup.md`
-- **Engine source:** [core/src/](core/src/) — `model/`, `scanner/`, `scan/`, `rules/`, `cleaner/`, `projects/`, `display/`, `snapshot/`, `system/`; tests in [core/test/](core/test/).
-- **Electron app source:** [app/](app/) — `src/main/`, `src/preload/`, `renderer/`; dev commands are in the [root README](README.md).
+  10. `2026-09-23-scan-performance.md`
+  11. `2026-09-28-system-info.md`
+  12. `2026-09-28-production-release.md`
+- **Engine source:** [core/src/](core/src/) — `model/`, `scanner/`, `scan/`, `rules/`, `cleaner/`, `projects/`, `display/`, `snapshot/`, `startup/`, `uninstall/`, `system/`; tests in [core/test/](core/test/).
+- **Electron app source:** [app/](app/) — `src/main/`, `src/preload/`, `renderer/`, `scripts/`, `electron-builder.yml`; dev commands are in the [root README](README.md).
+- **Release design and plan:** [docs/superpowers/specs/2026-09-28-production-release-design.md](docs/superpowers/specs/2026-09-28-production-release-design.md) and [docs/superpowers/plans/2026-09-28-production-release.md](docs/superpowers/plans/2026-09-28-production-release.md).
 - **Run it:**
   ```bash
   npm install
   npm run test        # all workspaces
   npm run typecheck
+  npm run lint
   npm run dev -w app  # launch the Electron app
+  npm run dist:app    # build the Windows installer
   ```
