@@ -33,6 +33,7 @@ function setup(overrides: Partial<LeftoverDiscoveryOptions> = {}): Setup {
     options: {
       roots,
       installLocation: fixture.dir('apps/FooApp'),
+      installParents: [fixture.root],
       home: fixture.dir('profile'),
       programFiles: [],
       systemRoot: 'C:\\Windows',
@@ -131,13 +132,23 @@ describe('discoverLeftovers', () => {
     expect(candidate?.evidence.some((line) => line.includes('Shared with'))).toBe(true);
   });
 
-  it('classifies Roaming leftovers as user data that stays unselected', () => {
+  it('classifies Roaming leftovers as review-grade user data that stays unselected', () => {
     const { fixture, options } = setup();
     fixture.dir('roaming/FooApp');
 
     const result = discoverLeftovers(fooApp(), [], options);
     const candidate = result.candidates.find((entry) => entry.path.includes('roaming'));
-    expect(candidate).toMatchObject({ class: 'user-data', grade: 'safe', defaultSelected: false });
+    expect(candidate).toMatchObject({ class: 'user-data', grade: 'review', defaultSelected: false });
+  });
+
+  it('grades ProgramData vendor folders as review, never safe', () => {
+    const { fixture, options } = setup();
+    fixture.dir('program-data/FooApp');
+
+    const result = discoverLeftovers(fooApp(), [], options);
+    const candidate = result.candidates.find((entry) => entry.path.includes('program-data'));
+    expect(candidate).toMatchObject({ class: 'program-data', grade: 'review', defaultSelected: false });
+    expect(candidate?.evidence.some((line) => line.toLowerCase().includes('shared'))).toBe(true);
   });
 
   it('classifies save/profile folders as user data even under AppData\\Local', () => {
@@ -183,6 +194,29 @@ describe('discoverLeftovers', () => {
     options.installLocation = options.roots.programData;
     const protectedResult = discoverLeftovers(fooApp(), [], options);
     expect(protectedResult.skipped.map((entry) => entry.reason)).toContain('protected-location');
+  });
+
+  it('refuses install locations with traversal and normalizes accepted ones', () => {
+    const { fixture, options } = setup();
+    options.installLocation = `${fixture.dir('apps/FooApp')}\\..\\..`;
+    const traversal = discoverLeftovers(fooApp(), [], options);
+    expect(traversal.skipped.map((entry) => entry.reason)).toContain('invalid-location');
+    expect(traversal.candidates.some((candidate) => candidate.class === 'install-dir')).toBe(false);
+
+    options.installLocation = fixture.dir('apps/FooApp').replace(/\\/g, '/');
+    const forwardSlashes = discoverLeftovers(fooApp(), [], options);
+    const install = forwardSlashes.candidates.find((candidate) => candidate.class === 'install-dir');
+    expect(install?.path).toBe(fixture.dir('apps/FooApp'));
+  });
+
+  it('refuses install locations outside the allowed parents', () => {
+    const { fixture, options } = setup();
+    options.installParents = [fixture.dir('allowed')];
+    options.installLocation = fixture.dir('apps/FooApp');
+
+    const result = discoverLeftovers(fooApp(), [], options);
+    expect(result.skipped.map((entry) => entry.reason)).toContain('untrusted-location');
+    expect(result.candidates.some((candidate) => candidate.class === 'install-dir')).toBe(false);
   });
 
   it('skips an install location that is too broad or shared with another app', () => {

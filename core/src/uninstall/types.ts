@@ -6,7 +6,7 @@ export type UninstallHive = 'hklm' | 'hklm-wow64' | 'hkcu';
 
 export type UninstallKind = 'msi' | 'exe' | 'rundll32' | 'url' | 'unknown';
 
-export type UninstallCommandBlock = 'missing-exe' | 'url-protocol' | 'malformed';
+export type UninstallCommandBlock = 'missing-exe' | 'url-protocol' | 'malformed' | 'not-absolute';
 
 export type LeftoverClass = 'install-dir' | 'app-data' | 'program-data' | 'user-data' | 'temp';
 
@@ -107,6 +107,7 @@ export interface StartupCandidate {
   state: 'enabled' | 'disabled';
   disabledKind: 'dust' | 'windows' | null;
   action: 'disable' | 'purge-envelope' | 'none';
+  match: 'path' | 'name';
   protected: boolean;
   requiresAdmin: boolean;
 }

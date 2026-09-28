@@ -20,7 +20,7 @@ function expandEnvironment(value: string, env: NodeJS.ProcessEnv): string {
   });
 }
 
-function isAbsoluteWindowsPath(value: string): boolean {
+export function isAbsoluteWindowsPath(value: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\');
 }
 
@@ -147,9 +147,9 @@ export function parseUninstallCommand(
   else return invalid(raw, executable, tokenizeCommandLine(rest));
 
   const args = tokenizeCommandLine(rest);
-  const exeExists =
-    kind === 'rundll32' || !isAbsoluteWindowsPath(executable) ? true : exists(executable);
-  const blockReason = exeExists ? null : 'missing-exe';
+  const absolute = isAbsoluteWindowsPath(executable);
+  const exeExists = absolute ? exists(executable) : kind === 'msi' || kind === 'rundll32';
+  const blockReason = exeExists ? null : absolute ? 'missing-exe' : 'not-absolute';
 
   return {
     raw,

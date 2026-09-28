@@ -90,6 +90,7 @@ function startupItem(overrides: Partial<StartupCandidate> & { entryId: string })
     state: 'enabled',
     disabledKind: null,
     action: 'disable',
+    match: 'path',
     protected: false,
     requiresAdmin: false,
     ...overrides,

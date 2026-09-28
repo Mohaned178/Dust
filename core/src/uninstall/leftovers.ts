@@ -4,6 +4,12 @@ import { defaultProtectedPaths } from '../cleaner/guard';
 import { vendorKey } from '../system/installed-apps';
 import type { InstalledApp } from '../system/installed-apps';
 import { matchAppName } from './apps';
+import {
+  assertUninstallTarget,
+  defaultUninstallParents,
+  normalizePlanPath,
+} from './path-policy';
+import type { UninstallTargetDenial } from './path-policy';
 import { uninstallItemId } from './types';
 import type { KeptItem, LeftoverCandidate, LeftoverClass, UninstallGrade } from './types';
 
@@ -20,6 +26,7 @@ export interface LeftoverRoots {
 export interface LeftoverDiscoveryOptions {
   roots: LeftoverRoots;
   installLocation?: string;
+  installParents?: string[];
   home?: string;
   oneDrive?: string[];
   programFiles?: string[];
@@ -132,6 +139,20 @@ function detectLink(path: string): 'junction' | 'symlink' | null {
   return null;
 }
 
+function installSkipReason(reason: UninstallTargetDenial): string {
+  switch (reason) {
+    case 'invalid-path':
+      return 'invalid-location';
+    case 'protected':
+      return 'protected-location';
+    case 'root-itself':
+    case 'too-broad':
+      return 'location-too-broad';
+    default:
+      return 'untrusted-location';
+  }
+}
+
 function matchDirName(name: string, app: InstalledApp): DirMatch | null {
   const strength = matchAppName(name, app);
   if (strength === null) return null;
@@ -207,8 +228,11 @@ export function discoverLeftovers(
     const link = detectLink(input.path);
     const syncRoot = oneDrive.some((prefix) => underRoot(input.path, prefix));
     let grade: UninstallGrade = input.match.strength === 'product' ? 'safe' : 'review';
+    if (input.class === 'program-data' || input.class === 'user-data') grade = 'review';
     if (input.sharedWith.length > 0 || syncRoot || link !== null) grade = 'review';
     const evidence = [input.match.evidence];
+    if (input.class === 'program-data') evidence.push('Shared location: other apps may use this folder');
+    if (input.class === 'user-data') evidence.push('User data: review before deleting');
     if (input.sharedWith.length > 0) evidence.push(`Shared with ${input.sharedWith.join(', ')}`);
     if (syncRoot) evidence.push('Inside a OneDrive-synced folder');
     if (link !== null) evidence.push('Reparse point: not followed, never deleted');
@@ -227,13 +251,26 @@ export function discoverLeftovers(
     };
   }
 
-  const installLocation = (options.installLocation ?? app.installLocation).trim();
-  if (installLocation.length > 0) {
+  const installParents = options.installParents ?? defaultUninstallParents();
+  const rawInstall = (options.installLocation ?? app.installLocation).trim();
+  const normalizedInstall = rawInstall.length > 0 ? normalizePlanPath(rawInstall) : null;
+  if (rawInstall.length > 0 && normalizedInstall === null) {
+    skipped.push({ target: rawInstall, reason: 'invalid-location' });
+  } else if (normalizedInstall !== null) {
+    const installLocation = normalizedInstall;
     const location = canonical(installLocation);
+    const policy = assertUninstallTarget(installLocation, {
+      roots: installParents,
+      systemRoot: options.systemRoot,
+      userProfile: options.home,
+      dustInstallPath: options.dustInstallPath,
+    });
     if (!existsSync(installLocation)) {
       skipped.push({ target: installLocation, reason: 'missing-location' });
     } else if (options.dustInstallPath !== undefined && underRoot(installLocation, options.dustInstallPath)) {
       skipped.push({ target: installLocation, reason: 'dust-location' });
+    } else if (!policy.ok) {
+      skipped.push({ target: installLocation, reason: installSkipReason(policy.reason) });
     } else if (protectedPaths.includes(location)) {
       skipped.push({ target: installLocation, reason: 'protected-location' });
     } else if (

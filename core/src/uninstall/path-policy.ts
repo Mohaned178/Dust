@@ -44,7 +44,7 @@ function pathKey(path: string): string {
   return canonicalizePath(path).toLowerCase();
 }
 
-function isInsideOrEqual(parent: string, child: string): boolean {
+export function isPathInsideOrEqual(parent: string, child: string): boolean {
   const base = pathKey(parent);
   const target = pathKey(child);
   if (base.length === 0 || target.length === 0) return false;
@@ -69,27 +69,28 @@ export function assertUninstallTarget(raw: string, options: UninstallTargetOptio
   const path = normalizePlanPath(raw);
   if (path === null) return { ok: false, reason: 'invalid-path' };
 
-  const blocked = (options.extraBlocked ?? []).some((entry) => isInsideOrEqual(entry, path));
+  const blocked = (options.extraBlocked ?? []).some((entry) => isPathInsideOrEqual(entry, path));
   if (blocked) return { ok: false, reason: 'blocked' };
 
   const guard = checkDeletable(path, {
     systemRoot: options.systemRoot,
     programFiles: [],
     programData: '',
+    userProfile: '',
     dustInstallPath: options.dustInstallPath,
   });
   if (!guard.allowed) return { ok: false, reason: 'protected' };
 
-  if (isProfileProtected(path, options.userProfile)) return { ok: false, reason: 'protected' };
-
-  const tooBroad = options.roots.some((root) => isInsideOrEqual(path, root) && pathKey(root) !== pathKey(path));
-  if (tooBroad) return { ok: false, reason: 'too-broad' };
-
-  const insideAny = options.roots.some((root) => isInsideOrEqual(root, path));
-  if (!insideAny) return { ok: false, reason: 'outside-allowed-roots' };
-
   const isRootItself = options.roots.some((root) => pathKey(root) === pathKey(path));
   if (isRootItself) return { ok: false, reason: 'root-itself' };
+
+  if (isProfileProtected(path, options.userProfile)) return { ok: false, reason: 'protected' };
+
+  const tooBroad = options.roots.some((root) => isPathInsideOrEqual(path, root) && pathKey(root) !== pathKey(path));
+  if (tooBroad) return { ok: false, reason: 'too-broad' };
+
+  const insideAny = options.roots.some((root) => isPathInsideOrEqual(root, path));
+  if (!insideAny) return { ok: false, reason: 'outside-allowed-roots' };
 
   return { ok: true, path };
 }

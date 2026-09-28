@@ -7,8 +7,8 @@ import {
   executeRemoval,
   fullRegistryPath,
   listRemovalApps,
-  parseUninstallCommand,
   resetInstalledAppsCache,
+  resolveUninstallerCommand,
   uninstallerRequiresAdmin,
 } from '@dust/core';
 import type {
@@ -135,7 +135,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   }
 
   function toSummary(app: InstalledApp): UninstallAppSummary {
-    const command = parseUninstallCommand(app.uninstallString);
+    const command = resolveUninstallerCommand(app, planEnvFor(app));
     return {
       id: app.id,
       displayName: app.displayName,
@@ -192,7 +192,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
             grade: 'safe',
             evidence: [item.action === 'disable' ? 'Turn off at sign-in' : 'Remove Dust backup'],
             adminRequired: item.requiresAdmin,
-            defaultSelected: true,
+            defaultSelected: item.match === 'path',
           }),
         ),
     ];

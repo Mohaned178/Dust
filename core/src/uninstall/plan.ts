@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { InstalledApp } from '../system/installed-apps';
 import type { StartupEntryRecord } from '../startup/types';
 import { matchAppName, toRemovalApp } from './apps';
-import { buildSilentOption, parseUninstallCommand } from './command';
+import { buildSilentOption, isAbsoluteWindowsPath, parseUninstallCommand } from './command';
 import { discoverLeftovers } from './leftovers';
 import type { LeftoverRoots } from './leftovers';
+import { assertUninstallTarget, defaultUninstallParents, isPathInsideOrEqual, normalizePlanPath } from './path-policy';
 import { scanRegistry, UNINSTALL_KEY_PREFIX } from './registry-scan';
 import type {
   KeptItem,
@@ -12,12 +15,14 @@ import type {
   RemovalPlan,
   RemovalTotals,
   StartupCandidate,
+  UninstallCommand,
   UninstallPlannedCommand,
 } from './types';
 
 export interface RemovalPlanEnv {
   roots: LeftoverRoots;
   installLocation?: string;
+  installParents?: string[];
   home?: string;
   oneDrive?: string[];
   programFiles?: string[];
@@ -31,19 +36,9 @@ export interface RemovalPlanInput {
   env: RemovalPlanEnv;
   startup?: readonly StartupEntryRecord[];
   registryRead?: () => Promise<string>;
+  exists?: (path: string) => boolean;
   now?: () => number;
   makeId?: () => string;
-}
-
-function canonical(value: string): string {
-  return value.replace(/[\\/]+$/, '').toLowerCase();
-}
-
-function underRoot(candidate: string, root: string): boolean {
-  const target = canonical(candidate);
-  const base = canonical(root);
-  if (target.length === 0 || base.length === 0) return false;
-  return target === base || target.startsWith(`${base}\\`) || target.startsWith(`${base}/`);
 }
 
 function defaultProgramFiles(): string[] {
@@ -54,24 +49,52 @@ function defaultProgramFiles(): string[] {
 
 export function uninstallerRequiresAdmin(app: InstalledApp, env: RemovalPlanEnv): boolean {
   if (app.hive !== 'hkcu') return true;
-  const installLocation = (env.installLocation ?? app.installLocation).trim();
-  if (installLocation.length === 0) return false;
+  const normalized = normalizePlanPath((env.installLocation ?? app.installLocation).trim());
+  if (normalized === null) return false;
   const programFiles = env.programFiles ?? defaultProgramFiles();
-  if (programFiles.some((root) => underRoot(installLocation, root))) return true;
-  if (underRoot(installLocation, env.roots.programData)) return true;
-  if (env.systemRoot !== undefined && underRoot(installLocation, env.systemRoot)) return true;
+  if (programFiles.some((root) => isPathInsideOrEqual(root, normalized))) return true;
+  if (isPathInsideOrEqual(env.roots.programData, normalized)) return true;
+  if (env.systemRoot !== undefined && isPathInsideOrEqual(env.systemRoot, normalized)) return true;
   return false;
+}
+
+function resolveBareExecutable(
+  command: UninstallCommand,
+  app: InstalledApp,
+  env: RemovalPlanEnv,
+  exists: (path: string) => boolean,
+): UninstallCommand {
+  if (command.kind !== 'exe' || command.launchable || isAbsoluteWindowsPath(command.executable)) {
+    return command;
+  }
+  const base = normalizePlanPath((env.installLocation ?? app.installLocation).trim());
+  if (base === null) return command;
+  const candidate = normalizePlanPath(join(base, command.executable));
+  if (candidate === null || !isPathInsideOrEqual(base, candidate) || !exists(candidate)) {
+    return command;
+  }
+  return { ...command, executable: candidate, exeExists: true, launchable: true, blockReason: null };
+}
+
+export function resolveUninstallerCommand(
+  app: InstalledApp,
+  env: RemovalPlanEnv,
+  exists: (path: string) => boolean = existsSync,
+): UninstallCommand {
+  const parsed = parseUninstallCommand(app.uninstallString.trim(), { exists });
+  return resolveBareExecutable(parsed, app, env, exists);
 }
 
 function planUninstaller(
   app: InstalledApp,
   env: RemovalPlanEnv,
+  exists: (path: string) => boolean,
 ): { plan: UninstallPlannedCommand | null; kept: KeptItem | null } {
   const raw = app.uninstallString.trim();
   if (raw.length === 0) {
     return { plan: null, kept: { target: app.displayName, reason: 'no-uninstaller' } };
   }
-  const command = parseUninstallCommand(raw);
+  const command = resolveUninstallerCommand(app, env, exists);
   return {
     plan: {
       command,
@@ -87,18 +110,27 @@ function planUninstaller(
   };
 }
 
-function startupMatches(entry: StartupEntryRecord, app: InstalledApp, installLocation: string): boolean {
-  const location = installLocation.trim().toLowerCase();
-  if (location.length > 0 && entry.command.toLowerCase().includes(location)) return true;
+function startupMatch(
+  entry: StartupEntryRecord,
+  app: InstalledApp,
+  installLocation: string,
+): 'path' | 'name' | null {
   const parsed = parseUninstallCommand(entry.command, { exists: () => true });
   if (parsed.executable.length > 0) {
+    if (
+      installLocation.length > 0 &&
+      isAbsoluteWindowsPath(parsed.executable) &&
+      isPathInsideOrEqual(installLocation, parsed.executable)
+    ) {
+      return 'path';
+    }
     const leaf = (parsed.executable.split(/[\\/]/).pop() ?? '').replace(/\.exe$/i, '');
-    if (leaf.length > 0 && matchAppName(leaf, app) !== null) return true;
+    if (leaf.length > 0 && matchAppName(leaf, app) !== null) return 'name';
   }
-  return matchAppName(entry.name, app) !== null;
+  return matchAppName(entry.name, app) !== null ? 'name' : null;
 }
 
-function toStartupCandidate(entry: StartupEntryRecord): StartupCandidate {
+function toStartupCandidate(entry: StartupEntryRecord, match: 'path' | 'name'): StartupCandidate {
   const action: StartupCandidate['action'] =
     entry.state === 'enabled' ? 'disable' : entry.disabledKind === 'dust' ? 'purge-envelope' : 'none';
   return {
@@ -108,6 +140,7 @@ function toStartupCandidate(entry: StartupEntryRecord): StartupCandidate {
     state: entry.state,
     disabledKind: entry.disabledKind,
     action,
+    match,
     protected: false,
     requiresAdmin: entry.requiresAdmin,
   };
@@ -156,15 +189,29 @@ function buildTotals(
 export async function buildRemovalPlan(input: RemovalPlanInput): Promise<RemovalPlan> {
   const { app, env } = input;
   const apps = input.apps ?? [app];
+  const exists = input.exists ?? existsSync;
   const installLocation = (env.installLocation ?? app.installLocation).trim();
+  const installParents = env.installParents ?? defaultUninstallParents();
   const kept: KeptItem[] = [];
 
-  const uninstaller = planUninstaller(app, env);
+  const policyLocation =
+    installLocation.length > 0
+      ? assertUninstallTarget(installLocation, {
+          roots: installParents,
+          systemRoot: env.systemRoot,
+          userProfile: env.home,
+          dustInstallPath: env.dustInstallPath,
+        })
+      : null;
+  const matchLocation = policyLocation?.ok === true ? policyLocation.path : '';
+
+  const uninstaller = planUninstaller(app, env, exists);
   if (uninstaller.kept !== null) kept.push(uninstaller.kept);
 
   const leftovers = discoverLeftovers(app, apps, {
     roots: env.roots,
     installLocation,
+    installParents,
     home: env.home,
     oneDrive: env.oneDrive,
     programFiles: env.programFiles,
@@ -192,12 +239,13 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
 
   const startup: StartupCandidate[] = [];
   for (const entry of input.startup ?? []) {
-    if (!startupMatches(entry, app, installLocation)) continue;
+    const match = startupMatch(entry, app, matchLocation);
+    if (match === null) continue;
     if (entry.protected) {
       kept.push({ target: entry.name, reason: 'protected-startup-entry' });
       continue;
     }
-    startup.push(toStartupCandidate(entry));
+    startup.push(toStartupCandidate(entry, match));
   }
 
   return {
@@ -225,7 +273,7 @@ export function defaultSelection(plan: RemovalPlan): string[] {
       .filter((candidate) => candidate.grade === 'safe')
       .map((candidate) => candidate.id),
     ...plan.startup
-      .filter((candidate) => candidate.action !== 'none')
+      .filter((candidate) => candidate.action !== 'none' && candidate.match === 'path')
       .map((candidate) => candidate.entryId),
   ];
 }

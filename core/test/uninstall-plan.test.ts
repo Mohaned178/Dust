@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { join } from 'node:path';
 import {
   buildRemovalPlan,
   defaultSelection,
@@ -97,7 +98,7 @@ describe('buildRemovalPlan', () => {
       interactiveOnly: true,
       requiresAdmin: false,
       silent: null,
-      command: { kind: 'exe', launchable: true },
+      command: { kind: 'exe', launchable: false, blockReason: 'not-absolute' },
     });
     expect(plan.leftovers).toHaveLength(1);
     expect(plan.registry.map((candidate) => candidate.scope)).toEqual([
@@ -208,6 +209,71 @@ describe('buildRemovalPlan', () => {
     expect(plan.kept).toContainEqual({ target: 'FooApp Security', reason: 'protected-startup-entry' });
   });
 
+  it('matches startup entries by executable footprint, not substring', async () => {
+    const { fixture, env } = setup();
+    env.installLocation = fixture.dir('apps/FooApp');
+    const app = makeInstalledApp({
+      displayName: 'FooApp',
+      publisher: 'Foo Corp',
+      keyName: '{F}',
+      installLocation: env.installLocation,
+    });
+    const plan = await buildRemovalPlan({
+      app,
+      env,
+      registryRead: registryQuery([]),
+      startup: [
+        startupEntry({ id: 'inside', name: 'FooApp', command: join(env.installLocation, 'FooApp.exe') }),
+        startupEntry({ id: 'outside', name: 'FooApp', command: 'C:\\Program Files\\Other\\thing.exe' }),
+      ],
+    });
+    expect(plan.startup.map((candidate) => [candidate.entryId, candidate.match])).toEqual([
+      ['inside', 'path'],
+      ['outside', 'name'],
+    ]);
+    const selection = defaultSelection(plan);
+    expect(selection).toContain('inside');
+    expect(selection).not.toContain('outside');
+  });
+
+  it('does not path-match startup entries from a too-broad install location', async () => {
+    const { env } = setup();
+    const app = makeInstalledApp({
+      displayName: 'FooApp',
+      publisher: 'Foo Corp',
+      keyName: '{F}',
+      installLocation: 'C:\\Program Files',
+    });
+    const plan = await buildRemovalPlan({
+      app,
+      env,
+      registryRead: registryQuery([]),
+      startup: [
+        startupEntry({ id: 'other', name: 'Unrelated', command: 'C:\\Program Files\\Other\\thing.exe' }),
+      ],
+    });
+    expect(plan.startup).toEqual([]);
+  });
+
+  it('resolves a bare uninstaller name against the install location', async () => {
+    const { fixture, env } = setup();
+    env.installLocation = fixture.dir('apps/FooApp');
+    fixture.file('apps/FooApp/uninstall.exe', 'MZ');
+    const app = makeInstalledApp({
+      displayName: 'FooApp',
+      publisher: 'Foo Corp',
+      keyName: '{F}',
+      installLocation: env.installLocation,
+      uninstallString: 'uninstall.exe /S',
+    });
+    const plan = await buildRemovalPlan({ app, env, registryRead: registryQuery([]) });
+    expect(plan.uninstaller?.command).toMatchObject({
+      executable: join(env.installLocation, 'uninstall.exe'),
+      launchable: true,
+      blockReason: null,
+    });
+  });
+
   it('computes admin requirements for machine-wide apps and install folders', async () => {
     const { fixture, env } = setup();
     const programFiles = fixture.dir('program-files');
@@ -260,7 +326,7 @@ describe('selection helpers', () => {
     expect(userData).toBeDefined();
     expect(selection).not.toContain(userData!.id);
     expect(selection).toContain(plan.leftovers.find((candidate) => candidate.class === 'app-data')!.id);
-    expect(selection).toHaveLength(4);
+    expect(selection).toHaveLength(3);
   });
 
   it('never defaults to review-grade registry keys', async () => {

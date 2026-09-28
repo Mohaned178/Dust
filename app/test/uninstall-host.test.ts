@@ -214,7 +214,7 @@ describe('list', () => {
     expect(result.elevated).toBe(false);
     expect(result.apps.map((app) => [app.id, app.kind, app.requiresAdmin, app.hasUninstaller])).toEqual([
       ['msi', 'msi', true, true],
-      ['exe', 'exe', false, true],
+      ['exe', 'exe', false, false],
     ]);
 
     await service.list(true);
@@ -266,6 +266,7 @@ describe('preview', () => {
           state: 'enabled',
           disabledKind: null,
           action: 'disable',
+          match: 'path',
           protected: false,
           requiresAdmin: false,
         },
@@ -276,6 +277,7 @@ describe('preview', () => {
           state: 'disabled',
           disabledKind: 'windows',
           action: 'none',
+          match: 'name',
           protected: false,
           requiresAdmin: false,
         },

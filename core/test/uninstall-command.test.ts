@@ -106,6 +106,17 @@ describe('parseUninstallCommand', () => {
     expect(command.blockReason).toBe('missing-exe');
   });
 
+  it('refuses bare executable names that cannot be verified', () => {
+    const command = parseUninstallCommand('uninstall.exe /S', { exists: () => true });
+    expect(command).toMatchObject({
+      kind: 'exe',
+      executable: 'uninstall.exe',
+      exeExists: false,
+      launchable: false,
+      blockReason: 'not-absolute',
+    });
+  });
+
   it('classifies rundll32 uninstallers', () => {
     const command = parseUninstallCommand('rundll32.exe "C:\\Foo\\setup.dll",Uninstall', { exists });
     expect(command).toMatchObject({ kind: 'rundll32', executable: 'rundll32.exe', launchable: true });

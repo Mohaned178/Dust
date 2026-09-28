@@ -279,6 +279,7 @@ export {
   defaultSelection,
   missingAcknowledgements,
   planRequiresAdmin,
+  resolveUninstallerCommand,
   uninstallerRequiresAdmin,
 } from './uninstall/plan';
 export type { RemovalPlanEnv, RemovalPlanInput } from './uninstall/plan';
