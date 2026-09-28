@@ -11,3 +11,7 @@ coverage/
 app/.bench-*.json
 .opencode/
 .impeccable/
+.env
+.env.*
+*.pem
+*.key
