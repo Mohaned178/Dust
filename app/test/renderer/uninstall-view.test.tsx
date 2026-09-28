@@ -144,7 +144,7 @@ describe('UninstallView', () => {
     expect(calls[0]!.selection).toContain('file-roaming');
   });
 
-  it('runs admin-flagged plans without an elevation prompt', async () => {
+  it('relaunches elevated instead of running an admin-flagged plan un-elevated', async () => {
     const calls: UninstallExecuteRequest[] = [];
     const relaunch = vi.fn(async () => {});
     const api = apiWithApps({
@@ -173,17 +173,25 @@ describe('UninstallView', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Remove Spotify/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Remove Spotify' });
-    expect(within(dialog).queryByRole('button', { name: 'Relaunch as Administrator' })).toBeNull();
-    expect(within(dialog).queryByText(/Continue without admin/)).toBeNull();
-    expect(within(dialog).queryByRole('note')).toBeNull();
-
     fireEvent.click(within(dialog).getByLabelText(/I understand review items/));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Uninstall' }));
 
-    await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]).not.toHaveProperty('allowDegraded');
-    expect(relaunch).not.toHaveBeenCalled();
-    expect(await within(dialog).findByText('Partly removed')).toBeInTheDocument();
+    await waitFor(() => expect(relaunch).toHaveBeenCalledWith('plan-1'));
+    expect(calls).toHaveLength(0);
+    expect(within(dialog).getByRole('button', { name: 'Uninstall' })).toBeInTheDocument();
+  });
+
+  it('opens the preview carried by an elevated launch hint', async () => {
+    const api = apiWithApps({ previewUninstall: async () => ({ ok: true, preview: makeUninstallPreview() }) });
+    renderView(api, {
+      open: true,
+      appId: 'app-1',
+      notice: null,
+      stalePending: false,
+      runningJobId: null,
+    });
+
+    expect(await screen.findByRole('dialog', { name: 'Remove Spotify' })).toBeInTheDocument();
   });
 
   it('streams the running phases, offers skip waiting, then shows the report', async () => {
@@ -235,7 +243,7 @@ describe('UninstallView', () => {
     render(
       <UninstallView
         api={api}
-        hint={{ open: true, notice: null, stalePending: true, runningJobId: null }}
+        hint={{ open: true, appId: null, notice: null, stalePending: true, runningJobId: null }}
         onHintShown={onHintShown}
       />,
     );

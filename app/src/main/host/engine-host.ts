@@ -82,7 +82,6 @@ import type {
 import type { StartupService } from './startup';
 import { createUninstallService } from './uninstall';
 import type { UninstallService, UninstallServiceDeps } from './uninstall';
-import type { PendingUninstallJob } from '../uninstall-launch';
 import { aggregateCategories, collectRuleMatches } from './analyze';
 import type { RuleMatchWithRule } from './analyze';
 import { buildDashboardState } from './dashboard';
@@ -173,8 +172,7 @@ export interface EngineHost {
   previewUninstall(appId: string): Promise<UninstallPreviewResult>;
   executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
   skipUninstallWaiting(): void;
-  adoptUninstallJob(job: PendingUninstallJob): void;
-  exportUninstallJob(jobId: string): PendingUninstallJob | null;
+  elevatedUninstallHandoff(jobId: string): { jobId: string; appId: string } | null;
   onUninstallEvent(listener: (event: UninstallEvent) => void): () => void;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
@@ -282,8 +280,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     preview: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
     execute: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
     skipWaiting: () => {},
-    adoptJob: () => {},
-    exportJob: () => null,
+    elevatedHandoff: () => null,
     onEvent: () => () => {},
   };
   const uninstallService: UninstallService =
@@ -668,12 +665,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     uninstallService.skipWaiting();
   }
 
-  function adoptUninstallJob(job: PendingUninstallJob): void {
-    uninstallService.adoptJob(job);
-  }
-
-  function exportUninstallJob(jobId: string): PendingUninstallJob | null {
-    return uninstallService.exportJob(jobId);
+  function elevatedUninstallHandoff(jobId: string): { jobId: string; appId: string } | null {
+    return uninstallService.elevatedHandoff(jobId);
   }
 
   function onUninstallEvent(listener: (event: UninstallEvent) => void): () => void {
@@ -1382,8 +1375,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     previewUninstall,
     executeUninstall,
     skipUninstallWaiting,
-    adoptUninstallJob,
-    exportUninstallJob,
+    elevatedUninstallHandoff,
     onUninstallEvent,
     onEvent,
     dispose,

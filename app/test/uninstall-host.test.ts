@@ -96,7 +96,7 @@ function makeReport(): RemovalReport {
       launchedAt: 1000,
       finishedAt: 1100,
     },
-    files: { deletedBytes: 0, recycledBytes: 0, deletedItems: 0, recycledItems: 0, skippedLocked: 0, errors: [], kept: [] },
+    files: { deletedBytes: 0, recycledBytes: 0, deletedItems: 0, recycledItems: 0, alreadyGone: 0, skippedLocked: 0, errors: [], kept: [] },
     registry: { backupPath: '', restoreCommand: '', deletedKeys: [], failedKeys: [] },
     startup: { disabled: [], purgedEnvelopes: [], failed: [] },
     elevation: 'none',
@@ -169,7 +169,7 @@ function makeService(overrides: Partial<UninstallServiceDeps> = {}): {
     executePlan: async () => ({ ok: true, report: makeReport() }),
     records: async () => [],
     resetAppsCache: () => { calls.reset += 1; },
-    createJournal: () => ({ append: () => {} }),
+    createJournal: () => ({ append: () => true }),
     lock,
     ...overrides,
   };
@@ -425,14 +425,16 @@ describe('execute', () => {
     await pending;
   });
 
-  it('consumes the pending token on execute and runs an adopted job elevated without degradation', async () => {
-    const plan = makePlan('app-1');
-    const harness = makeService({ buildPlan: async () => plan });
-    await harness.service.preview('app-1');
-    expect(harness.service.exportJob('plan-1')).toBeNull();
-    await harness.service.execute(BASE_REQUEST('plan-1'));
-    expect(harness.service.exportJob('plan-1')).toBeNull();
+  it('hands off only the job and app ids for an elevated relaunch', async () => {
+    const harness = await previewed();
+    expect(harness.service.elevatedHandoff('plan-1')).toEqual({ jobId: 'plan-1', appId: 'app-1' });
+    expect(harness.service.elevatedHandoff('ghost')).toBeNull();
 
+    await harness.service.execute(BASE_REQUEST('plan-1'));
+    expect(harness.service.elevatedHandoff('plan-1')).toBeNull();
+  });
+
+  it('runs a previewed plan elevated without degradation', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const elevated = makeService({
       elevated: true,
@@ -441,15 +443,9 @@ describe('execute', () => {
         return { ok: true, report: makeReport() };
       },
     });
-    const job: PendingUninstallJob = {
-      v: 1,
-      jobId: 'plan-2',
-      createdAt: 1000,
-      plan: { ...plan, id: 'plan-2' },
-      request: BASE_REQUEST('plan-2'),
-    };
-    elevated.service.adoptJob(job);
-    const result = await elevated.service.execute(BASE_REQUEST('plan-2'));
+    const preview = await elevated.service.preview('app-1');
+    expect(preview.ok).toBe(true);
+    const result = await elevated.service.execute(BASE_REQUEST('plan-1'));
     expect(result.ok).toBe(true);
     expect(seen[0]).toMatchObject({ degraded: false, elevated: true });
   });

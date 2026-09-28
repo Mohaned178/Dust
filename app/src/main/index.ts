@@ -34,6 +34,7 @@ import {
   readPendingUninstall,
   writePendingUninstall,
 } from './uninstall-launch';
+import type { PendingUninstallJob } from './uninstall-launch';
 import type { StartupLaunchHint, StartupRelaunchAction, UninstallLaunchHint } from '../shared/ipc';
 
 function isRunningElevated(): Promise<boolean> {
@@ -352,8 +353,16 @@ void app.whenReady().then(async () => {
   const dustInstallPath = app.isPackaged ? dirname(process.execPath) : dirname(app.getAppPath());
   const uninstallPendingPath = pendingUninstallPath(userDataDir);
   const uninstallArgId = parsePendingUninstallArg(process.argv);
-  const restoredJob = uninstallArgId === null ? null : readPendingUninstall(uninstallPendingPath);
+  const pendingJob = uninstallArgId === null ? null : readPendingUninstall(uninstallPendingPath);
+  const validPendingJob = pendingJob !== null && pendingJob.jobId === uninstallArgId ? pendingJob : null;
   let uninstallLaunchHint: UninstallLaunchHint | null = null;
+  if (uninstallArgId !== null || existsSync(uninstallPendingPath)) {
+    clearPendingUninstall(uninstallPendingPath);
+    uninstallLaunchHint =
+      validPendingJob !== null
+        ? { open: true, appId: validPendingJob.appId, notice: null, stalePending: false, runningJobId: null }
+        : { open: true, appId: null, notice: null, stalePending: true, runningJobId: null };
+  }
   const host = createEngineHost({
     store,
     workerPath: resolveWorkerPath(__dirname),
@@ -373,20 +382,6 @@ void app.whenReady().then(async () => {
       },
     },
   });
-  if (restoredJob !== null && elevated) {
-    clearPendingUninstall(uninstallPendingPath);
-    host.adoptUninstallJob(restoredJob);
-    uninstallLaunchHint = {
-      open: true,
-      notice: null,
-      stalePending: false,
-      runningJobId: restoredJob.jobId,
-    };
-    void host.executeUninstall(restoredJob.request);
-  } else if (uninstallArgId !== null || existsSync(uninstallPendingPath)) {
-    clearPendingUninstall(uninstallPendingPath);
-    uninstallLaunchHint = { open: true, notice: null, stalePending: true, runningJobId: null };
-  }
   const window = createMainWindow(benchRoot === undefined);
 
   const pendingToggle = parsePendingStartupToggle(process.argv);
@@ -427,9 +422,15 @@ void app.whenReady().then(async () => {
       },
       relaunchElevatedUninstall: async (jobId: string) => {
         if (process.platform !== 'win32') return;
-        const job = host.exportUninstallJob(jobId);
-        if (job === null) return;
-        if (!writePendingUninstall(uninstallPendingPath, job)) return;
+        const handoff = host.elevatedUninstallHandoff(jobId);
+        if (handoff === null) return;
+        const pending: PendingUninstallJob = {
+          v: 2,
+          jobId: handoff.jobId,
+          appId: handoff.appId,
+          createdAt: Date.now(),
+        };
+        if (!writePendingUninstall(uninstallPendingPath, pending)) return;
         const outcome = await requestElevation([`${PENDING_UNINSTALL_PREFIX}${jobId}`]);
         if (outcome === 'ready') {
           app.quit();

@@ -10,64 +10,18 @@ import {
   writePendingUninstall,
 } from '../src/main/uninstall-launch';
 import type { PendingUninstallJob } from '../src/main/uninstall-launch';
-import type { RemovalPlan } from '@dust/core';
 import { TempTree } from './fixtures';
 
-function makePlan(id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479'): RemovalPlan {
-  return {
-    id,
-    appId: 'app-1',
-    createdAt: 100,
-    app: {
-      id: 'app-1',
-      displayName: 'Spotify',
-      publisher: 'Spotify AB',
-      version: '1.0',
-      hive: 'hkcu',
-      installLocation: '',
-      estimatedSizeKb: null,
-    },
-    uninstaller: null,
-    leftovers: [],
-    registry: [],
-    startup: [],
-    kept: [],
-    totals: {
-      bytes: 0,
-      items: 0,
-      reviewBytes: 0,
-      reviewItems: 0,
-      userDataBytes: 0,
-      userDataItems: 0,
-      adminItems: 0,
-    },
-  };
-}
+const JOB_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const APP_ID = '1d3be282f0bb9014';
 
 function makeJob(overrides: Partial<PendingUninstallJob> = {}): PendingUninstallJob {
-  const plan = makePlan();
-  return {
-    v: 1,
-    jobId: plan.id,
-    createdAt: 100,
-    plan,
-    request: {
-      jobId: plan.id,
-      planId: plan.id,
-      selection: ['item-1'],
-      includeUserData: false,
-      runUninstaller: true,
-      quiet: false,
-      acknowledge: [],
-    },
-    ...overrides,
-  };
+  return { v: 2, jobId: JOB_ID, appId: APP_ID, createdAt: 100, ...overrides };
 }
 
 describe('parsePendingUninstallArg', () => {
   it('extracts a job id and rejects malformed values', () => {
-    const id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
-    expect(parsePendingUninstallArg(['--other', `${PENDING_UNINSTALL_PREFIX}${id}`])).toBe(id);
+    expect(parsePendingUninstallArg(['--other', `${PENDING_UNINSTALL_PREFIX}${JOB_ID}`])).toBe(JOB_ID);
     expect(parsePendingUninstallArg(['--other'])).toBeNull();
     expect(parsePendingUninstallArg([`${PENDING_UNINSTALL_PREFIX}../evil`])).toBeNull();
     expect(parsePendingUninstallArg([PENDING_UNINSTALL_PREFIX])).toBeNull();
@@ -75,7 +29,7 @@ describe('parsePendingUninstallArg', () => {
 });
 
 describe('pending uninstall persistence', () => {
-  it('round-trips a job file', () => {
+  it('round-trips a job file atomically', () => {
     const tree = new TempTree();
     try {
       const path = pendingUninstallPath(tree.root);
@@ -90,7 +44,7 @@ describe('pending uninstall persistence', () => {
     }
   });
 
-  it('returns null for missing, corrupt, expired or mismatched files', () => {
+  it('returns null for missing, corrupt, expired or future-dated files', () => {
     const tree = new TempTree();
     try {
       const path = pendingUninstallPath(tree.root);
@@ -102,11 +56,26 @@ describe('pending uninstall persistence', () => {
       writePendingUninstall(path, makeJob());
       expect(readPendingUninstall(path, { now: () => 100 + 15 * 60_000 + 1 })).toBeNull();
       expect(readPendingUninstall(path, { now: () => 100 - 5 * 60_000 - 1 })).toBeNull();
+      expect(readPendingUninstall(path, { now: () => 200 })).toEqual(makeJob());
+    } finally {
+      tree.cleanup();
+    }
+  });
 
+  it('rejects old plan-carrying files and malformed ids', () => {
+    const tree = new TempTree();
+    try {
+      const path = pendingUninstallPath(tree.root);
       tree.file(
         'pending-removal.json',
-        JSON.stringify({ ...makeJob(), request: { ...makeJob().request, planId: 'other' } }),
+        JSON.stringify({ v: 1, jobId: JOB_ID, createdAt: 100, plan: {}, request: {} }),
       );
+      expect(readPendingUninstall(path, { now: () => 200 })).toBeNull();
+
+      tree.file('pending-removal.json', JSON.stringify(makeJob({ appId: '..\\evil' })));
+      expect(readPendingUninstall(path, { now: () => 200 })).toBeNull();
+
+      tree.file('pending-removal.json', JSON.stringify(makeJob({ jobId: 'short' })));
       expect(readPendingUninstall(path, { now: () => 200 })).toBeNull();
     } finally {
       tree.cleanup();

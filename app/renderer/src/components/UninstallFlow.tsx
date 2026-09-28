@@ -34,6 +34,7 @@ export interface UninstallFlowProps {
   api: DustApi;
   appId: string | null;
   adoptJobId?: string | null;
+  elevated: boolean;
   onClose: () => void;
   onFinished: () => void;
 }
@@ -47,6 +48,7 @@ export function UninstallFlow({
   api,
   appId,
   adoptJobId = null,
+  elevated,
   onClose,
   onFinished,
 }: UninstallFlowProps) {
@@ -172,6 +174,17 @@ export function UninstallFlow({
     async () => {
       if (preview === null) return;
       const id = preview.planId;
+      const needsAdmin = preview.totals.adminItems > 0 || preview.uninstaller?.requiresAdmin === true;
+      if (needsAdmin && !elevated) {
+        jobId.current = id;
+        try {
+          await api.relaunchElevatedUninstall(id);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+          setStage('error');
+        }
+        return;
+      }
       jobId.current = id;
       setStage('running');
       setPhases({});
@@ -210,7 +223,7 @@ export function UninstallFlow({
         setStage('error');
       }
     },
-    [api, includeUserData, onFinished, preview, quiet, reviewItems, runUninstaller, selection],
+    [api, elevated, includeUserData, onFinished, preview, quiet, reviewItems, runUninstaller, selection],
   );
 
   const label = preview === null ? 'Deep Uninstall' : `Remove ${preview.app.displayName}`;

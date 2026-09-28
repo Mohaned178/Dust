@@ -38,7 +38,6 @@ import type {
   UninstallPreview,
   UninstallPreviewResult,
 } from '../../shared/ipc';
-import type { PendingUninstallJob } from '../uninstall-launch';
 
 export interface ScanLockLike {
   acquire(kind: ScanKind, root: string, now?: number): { ok: boolean; holder: { kind: ScanKind } };
@@ -73,8 +72,7 @@ export interface UninstallService {
   preview(appId: string): Promise<UninstallPreviewResult>;
   execute(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
   skipWaiting(): void;
-  adoptJob(job: PendingUninstallJob): void;
-  exportJob(jobId: string): PendingUninstallJob | null;
+  elevatedHandoff(jobId: string): { jobId: string; appId: string } | null;
   onEvent(listener: (event: UninstallEvent) => void): () => void;
 }
 
@@ -341,15 +339,11 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     skipRequested = true;
   }
 
-  function adoptJob(job: PendingUninstallJob): void {
-    pending.set(job.plan.id, { plan: job.plan, createdAt: job.createdAt, request: job.request });
-  }
-
-  function exportJob(jobId: string): PendingUninstallJob | null {
+  function elevatedHandoff(jobId: string): { jobId: string; appId: string } | null {
     prune();
     const entry = pending.get(jobId);
-    if (entry === undefined || entry.request === null) return null;
-    return { v: 1, jobId, createdAt: entry.createdAt, plan: entry.plan, request: entry.request };
+    if (entry === undefined) return null;
+    return { jobId, appId: entry.plan.appId };
   }
 
   function onEvent(listener: (event: UninstallEvent) => void): () => void {
@@ -359,7 +353,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     };
   }
 
-  return { list, preview, execute, skipWaiting, adoptJob, exportJob, onEvent };
+  return { list, preview, execute, skipWaiting, elevatedHandoff, onEvent };
 }
 
 function removalEventToIpc(jobId: string, event: RemovalEvent): UninstallEvent {

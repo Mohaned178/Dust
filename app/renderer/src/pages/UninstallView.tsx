@@ -63,6 +63,10 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
       setFlow({ appId: null, adoptJobId: hint.runningJobId });
       return;
     }
+    if (hint.appId !== null) {
+      setFlow({ appId: hint.appId, adoptJobId: null });
+      return;
+    }
     if (hint.stalePending) {
       toastKey.current += 1;
       setToast({
@@ -209,6 +213,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           api={api}
           appId={flow.appId}
           adoptJobId={flow.adoptJobId}
+          elevated={list !== null && list.ok && list.elevated}
           onClose={() => setFlow(null)}
           onFinished={() => load(true)}
         />

@@ -500,6 +500,7 @@ export type UninstallEvent =
 
 export interface UninstallLaunchHint {
   open: boolean;
+  appId: string | null;
   notice: { appName: string; outcome: RemovalReport['outcome'] } | null;
   stalePending: boolean;
   runningJobId: string | null;

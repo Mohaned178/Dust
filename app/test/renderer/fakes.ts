@@ -497,6 +497,7 @@ export function makeRemovalReport(overrides: Partial<RemovalReport> = {}): Remov
       recycledBytes: 0,
       deletedItems: 1,
       recycledItems: 0,
+      alreadyGone: 0,
       skippedLocked: 0,
       errors: [],
       kept: [],

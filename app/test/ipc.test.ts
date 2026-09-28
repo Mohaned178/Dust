@@ -234,16 +234,14 @@ describe('registerIpcHandlers', () => {
       skipWaiting: () => {
         calls.push('skip');
       },
-      adoptJob: () => {
-        calls.push('adopt');
-      },
-      exportJob: () => null,
+      elevatedHandoff: () => null,
       onEvent: () => () => {},
     };
     const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { uninstall });
     const registrar = new FakeRegistrar();
     const hint: UninstallLaunchHint = {
       open: true,
+      appId: null,
       notice: null,
       stalePending: false,
       runningJobId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
