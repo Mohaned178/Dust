@@ -102,12 +102,22 @@ describe('discoverProjects', () => {
     fixture.dir('app/patches');
     fixture.file('app/pnpm-lock.yaml', '');
 
-    const { units } = discoverProjects({ tree: new AggregateTree(), markers: [{ kind: 'package-json', path: join(app, 'package.json') }], probe: createNodeFsProbe() });
+    const { units } = discoverProjects({
+      tree: new AggregateTree(),
+      markers: [{ kind: 'package-json', path: join(app, 'package.json') }],
+      probe: createNodeFsProbe(),
+    });
     expect(units[0]).toMatchObject({ monorepo: true, pnp: false, patches: true, lockfiles: ['pnpm-lock.yaml'] });
   });
 
   it('ignores git markers and returns empty results for marker-less input', () => {
-    expect(discoverProjects({ tree: new AggregateTree(), markers: [{ kind: 'git-dir', path: join(fixture.root, 'x', '.git') }], probe: createNodeFsProbe() })).toEqual({
+    expect(
+      discoverProjects({
+        tree: new AggregateTree(),
+        markers: [{ kind: 'git-dir', path: join(fixture.root, 'x', '.git') }],
+        probe: createNodeFsProbe(),
+      }),
+    ).toEqual({
       units: [],
       orphans: [],
     });

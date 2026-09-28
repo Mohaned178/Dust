@@ -58,9 +58,7 @@ function fakeReg(files: Record<string, string>): (args: string[]) => Promise<str
 
 describe('backupFileName', () => {
   it('stamps the app id in UTC', () => {
-    expect(backupFileName('abc123', new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe(
-      'abc123-20260102-030405.reg',
-    );
+    expect(backupFileName('abc123', new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe('abc123-20260102-030405.reg');
   });
 });
 
@@ -68,12 +66,10 @@ describe('fullRegistryPath', () => {
   it('maps hives to reg.exe roots', () => {
     expect(fullRegistryPath('hklm', 'Software\\Vendor')).toBe('HKLM\\Software\\Vendor');
     expect(fullRegistryPath('hkcu', 'Software\\Vendor')).toBe('HKCU\\Software\\Vendor');
-    expect(fullRegistryPath('hklm-wow64', 'Software\\Vendor')).toBe(
-      'HKLM\\Software\\WOW6432Node\\Vendor',
+    expect(fullRegistryPath('hklm-wow64', 'Software\\Vendor')).toBe('HKLM\\Software\\WOW6432Node\\Vendor');
+    expect(fullRegistryPath('hklm-wow64', 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{X}')).toBe(
+      'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{X}',
     );
-    expect(
-      fullRegistryPath('hklm-wow64', 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{X}'),
-    ).toBe('HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{X}');
   });
 });
 
@@ -109,8 +105,7 @@ describe('backupDirFor', () => {
 
 describe('registry export encoding', () => {
   it('decodes UTF-16LE exports with a BOM and plain UTF-8 text', () => {
-    const content =
-      'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Foo]\r\n"a"="1"\r\n';
+    const content = 'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Foo]\r\n"a"="1"\r\n';
     expect(decodeRegistryText(encodeRegistryText(content))).toBe(content);
     expect(decodeRegistryText(Buffer.from(content, 'utf8'))).toBe(content);
     expect(decodeRegistryText(content)).toBe(content);
@@ -120,20 +115,15 @@ describe('registry export encoding', () => {
     const fixture = new Fixture();
     fixtures.push(fixture);
     const backupDir = fixture.dir('backups');
-    const exported =
-      'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Bar]\r\n"b"="2"\r\n';
-    const result = await createRegistryBackup(
-      [registryCandidate('hkcu', 'Software\\Bar')],
-      'abc123',
-      {
-        backupDir,
-        runReg: async (args) => {
-          const file = args[2]!;
-          writeFileSync(file, encodeRegistryText(exported));
-          return '';
-        },
+    const exported = 'Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Bar]\r\n"b"="2"\r\n';
+    const result = await createRegistryBackup([registryCandidate('hkcu', 'Software\\Bar')], 'abc123', {
+      backupDir,
+      runReg: async (args) => {
+        const file = args[2]!;
+        writeFileSync(file, encodeRegistryText(exported));
+        return '';
       },
-    );
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -179,23 +169,18 @@ describe('createRegistryBackup', () => {
     const fixture = new Fixture();
     fixtures.push(fixture);
     const backupDir = fixture.dir('backups');
-    const skipped = await createRegistryBackup(
-      [registryCandidate('hklm', 'Software\\Gone')],
-      'abc123',
-      { backupDir, runReg: fakeReg({}) },
-    );
+    const skipped = await createRegistryBackup([registryCandidate('hklm', 'Software\\Gone')], 'abc123', {
+      backupDir,
+      runReg: fakeReg({}),
+    });
     expect(skipped).toMatchObject({ ok: true, exportedKeys: [] });
 
-    const failed = await createRegistryBackup(
-      [registryCandidate('hklm', 'Software\\Foo')],
-      'abc123',
-      {
-        backupDir,
-        runReg: async () => {
-          throw new Error('reg.exe exploded');
-        },
+    const failed = await createRegistryBackup([registryCandidate('hklm', 'Software\\Foo')], 'abc123', {
+      backupDir,
+      runReg: async () => {
+        throw new Error('reg.exe exploded');
       },
-    );
+    });
     expect(failed).toMatchObject({ ok: false, reason: 'export-failed' });
   });
 

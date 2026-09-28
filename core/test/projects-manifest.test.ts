@@ -29,7 +29,10 @@ describe('readManifest', () => {
 
   it('parses name, workspaces array and the packageManager field', () => {
     const dir = fixture.dir('app');
-    fixture.file('app/package.json', JSON.stringify({ name: 'my-app', workspaces: ['packages/*'], packageManager: 'pnpm@8.6.0' }));
+    fixture.file(
+      'app/package.json',
+      JSON.stringify({ name: 'my-app', workspaces: ['packages/*'], packageManager: 'pnpm@8.6.0' }),
+    );
     expect(readManifest(dir, createNodeFsProbe())).toEqual({
       name: 'my-app',
       workspaces: true,
@@ -120,7 +123,11 @@ describe('sampleRegistryHosts', () => {
       '"resolved": "https://npm.internal.example/secret/-/secret-2.0.0.tgz"',
       '"resolved": "https://npm.internal.example/other/-/other-1.0.0.tgz"',
     ].join('\n');
-    expect(sampleRegistryHosts(content)).toEqual(['registry.npmjs.org', 'registry.yarnpkg.com', 'npm.internal.example']);
+    expect(sampleRegistryHosts(content)).toEqual([
+      'registry.npmjs.org',
+      'registry.yarnpkg.com',
+      'npm.internal.example',
+    ]);
     expect(PUBLIC_REGISTRY_HOSTS.has('npm.internal.example')).toBe(false);
     expect(sampleRegistryHosts('')).toEqual([]);
   });

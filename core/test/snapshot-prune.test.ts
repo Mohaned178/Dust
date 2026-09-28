@@ -107,7 +107,13 @@ describe('pruneSnapshotAfterCleanup', () => {
 
     expect(result.cleanedAt).toBe(20);
     expect(result.folders.map((entry) => entry.path)).toEqual(['C:\\']);
-    expect(result.folders[0]).toMatchObject({ bytes: 0, allocatedBytes: 0, fileCount: 0, folderCount: 0, childCount: 0 });
+    expect(result.folders[0]).toMatchObject({
+      bytes: 0,
+      allocatedBytes: 0,
+      fileCount: 0,
+      folderCount: 0,
+      childCount: 0,
+    });
     expect(result.matches).toEqual([]);
     expect(result.categories).toEqual([{ ruleId: 'system-temp', category: 'temp', bytes: 0, items: 0 }]);
   });
@@ -146,10 +152,7 @@ describe('pruneSnapshotAfterCleanup', () => {
 
   it('drops fully cleaned projects and shrinks partially cleaned ones', () => {
     const base = snapshot({
-      projects: [
-        project('C:\\a', 'C:\\a\\node_modules', 15),
-        project('C:\\b', 'C:\\b\\node_modules', 25),
-      ],
+      projects: [project('C:\\a', 'C:\\a\\node_modules', 15), project('C:\\b', 'C:\\b\\node_modules', 25)],
     });
     const result = pruneSnapshotAfterCleanup(
       base,

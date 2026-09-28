@@ -513,7 +513,11 @@ describe('executeRemoval', () => {
         harness.removed.push({ path, mode });
         if (path.endsWith('locked')) return { status: 'skipped-locked', bytes: 0, skippedLocked: 1 };
         if (path.endsWith('boom')) return { status: 'failed', bytes: 0, skippedLocked: 0, code: 'EPERM' };
-        return { status: mode === 'recycle' ? 'recycled' : 'deleted', bytes: mode === 'recycle' ? 0 : 5, skippedLocked: 0 };
+        return {
+          status: mode === 'recycle' ? 'recycled' : 'deleted',
+          bytes: mode === 'recycle' ? 0 : 5,
+          skippedLocked: 0,
+        };
       },
     });
     const plan = makePlan({
@@ -538,7 +542,9 @@ describe('executeRemoval', () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(harness.removed.map((entry) => [entry.path.endsWith('safe') ? 'safe' : entry.path.split('\\').pop(), entry.mode])).toEqual([
+    expect(
+      harness.removed.map((entry) => [entry.path.endsWith('safe') ? 'safe' : entry.path.split('\\').pop(), entry.mode]),
+    ).toEqual([
       ['safe', 'delete'],
       ['review', 'recycle'],
       ['locked', 'delete'],
@@ -580,7 +586,10 @@ describe('executeRemoval', () => {
         interactiveOnly: true,
         silent: null,
       },
-      leftovers: [leftover({ id: 'admin-dir', adminRequired: true, class: 'install-dir' }), leftover({ id: 'user-file' })],
+      leftovers: [
+        leftover({ id: 'admin-dir', adminRequired: true, class: 'install-dir' }),
+        leftover({ id: 'user-file' }),
+      ],
       registry: [registryItem({ id: 'reg-1' })],
     });
     const result = await run(plan, {
@@ -618,7 +627,16 @@ describe('executeRemoval', () => {
       },
     });
     const plan = makePlan({
-      startup: [startupItem({ entryId: 'startup-1' }), startupItem({ entryId: 'startup-2', name: 'Foo Helper', disabledKind: 'dust', state: 'disabled', action: 'purge-envelope' })],
+      startup: [
+        startupItem({ entryId: 'startup-1' }),
+        startupItem({
+          entryId: 'startup-2',
+          name: 'Foo Helper',
+          disabledKind: 'dust',
+          state: 'disabled',
+          action: 'purge-envelope',
+        }),
+      ],
     });
     const result = await run(plan, {
       selection: ['startup-1', 'startup-2'],

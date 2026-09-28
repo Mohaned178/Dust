@@ -86,9 +86,7 @@ export function registerIpcHandlers(
     host.setPin(typeof path === 'string' ? path : '', pinned === true),
   );
   registrar.handle(IPC.startupList, () => timed('startupList', () => host.getStartup()));
-  registrar.handle(IPC.startupDisable, (_event, id) =>
-    host.disableStartup(typeof id === 'string' ? id : ''),
-  );
+  registrar.handle(IPC.startupDisable, (_event, id) => host.disableStartup(typeof id === 'string' ? id : ''));
   registrar.handle(IPC.startupEnable, (_event, id) => host.enableStartup(typeof id === 'string' ? id : ''));
   registrar.handle(IPC.startupHint, () => getStartupLaunchHint());
   registrar.handle(IPC.systemInfoGet, (_event, force) =>
@@ -96,10 +94,7 @@ export function registerIpcHandlers(
   );
   registrar.handle(IPC.systemInfoLive, () => host.getSystemInfoLive());
   registrar.handle(IPC.relaunchElevated, (_event, id, action) =>
-    shell.relaunchElevated(
-      typeof id === 'string' ? id : undefined,
-      action === 'enable' ? 'enable' : 'disable',
-    ),
+    shell.relaunchElevated(typeof id === 'string' ? id : undefined, action === 'enable' ? 'enable' : 'disable'),
   );
   registrar.handle(IPC.uninstallList, (_event, force) =>
     timed('uninstallList', () => host.listUninstall(force === true)),
@@ -112,8 +107,9 @@ export function registerIpcHandlers(
   );
   registrar.handle(IPC.uninstallSkipWaiting, () => host.skipUninstallWaiting());
   registrar.handle(IPC.uninstallHint, () => getUninstallLaunchHint());
-  registrar.handle(IPC.relaunchElevatedUninstall, (_event, jobId) =>
-    shell.relaunchElevatedUninstall?.(typeof jobId === 'string' ? jobId : '') ?? Promise.resolve(),
+  registrar.handle(
+    IPC.relaunchElevatedUninstall,
+    (_event, jobId) => shell.relaunchElevatedUninstall?.(typeof jobId === 'string' ? jobId : '') ?? Promise.resolve(),
   );
   const offScan = host.onEvent((event: ScanEvent) => {
     instrument('ipc.send', () => sender.send(IPC.scanEvent, event));

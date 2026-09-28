@@ -4,7 +4,10 @@ import { isProtectedStartupEntry } from '../src/index';
 describe('isProtectedStartupEntry', () => {
   it('protects Windows security entries', () => {
     expect(
-      isProtectedStartupEntry({ name: 'SecurityHealth', command: '"C:\\Windows\\System32\\SecurityHealthSystray.exe"' }),
+      isProtectedStartupEntry({
+        name: 'SecurityHealth',
+        command: '"C:\\Windows\\System32\\SecurityHealthSystray.exe"',
+      }),
     ).toBe(true);
     expect(isProtectedStartupEntry({ name: 'Windows Defender', command: 'mpcmdrun.exe' })).toBe(true);
   });

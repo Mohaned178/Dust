@@ -13,11 +13,7 @@ interface Deduction {
   folderCount: number;
 }
 
-export function pruneSnapshotAfterCleanup(
-  snapshot: SnapshotData,
-  report: CleanupReport,
-  nowTs: number,
-): SnapshotData {
+export function pruneSnapshotAfterCleanup(snapshot: SnapshotData, report: CleanupReport, nowTs: number): SnapshotData {
   const folderByKey = new Map(snapshot.folders.map((entry) => [pathKey(entry.path), entry]));
   const gonePaths: string[] = [];
   const removedKeys: string[] = [];
@@ -113,9 +109,7 @@ export function pruneSnapshotAfterCleanup(
         changed = true;
       }
     }
-    projects.push(
-      changed ? { ...entry, nodeModules: { ...entry.nodeModules, bytes: Math.max(bytes, 0) } } : entry,
-    );
+    projects.push(changed ? { ...entry, nodeModules: { ...entry.nodeModules, bytes: Math.max(bytes, 0) } } : entry);
   }
 
   const categoryMap: Record<string, string> = {};

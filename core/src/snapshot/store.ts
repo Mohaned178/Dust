@@ -20,9 +20,7 @@ export interface SaveResult {
 }
 
 export type SnapshotLoadResult =
-  | { kind: 'ok'; snapshot: SnapshotData }
-  | { kind: 'missing' }
-  | { kind: 'corrupt'; reason: string };
+  { kind: 'ok'; snapshot: SnapshotData } | { kind: 'missing' } | { kind: 'corrupt'; reason: string };
 
 export class SnapshotStore {
   private cache: { key: string; result: SnapshotLoadResult } | null = null;

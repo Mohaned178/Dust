@@ -13,15 +13,7 @@ export interface SwitchProps {
   onToggle: (next: boolean) => void;
 }
 
-export function Switch({
-  checked,
-  disabled = false,
-  busy = false,
-  label,
-  title,
-  describedBy,
-  onToggle,
-}: SwitchProps) {
+export function Switch({ checked, disabled = false, busy = false, label, title, describedBy, onToggle }: SwitchProps) {
   const inactive = disabled || busy;
   return (
     <button
@@ -73,11 +65,7 @@ export function StartupRow({ entry, busy, onToggle }: StartupRowProps) {
     <li className="flex min-h-[52px] items-center gap-3 px-4 py-2.5">
       <span className="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
         {entry.iconDataUrl !== null ? (
-          <img
-            src={entry.iconDataUrl}
-            alt=""
-            className={`h-5 w-5 rounded ${disabled ? 'opacity-60' : ''}`}
-          />
+          <img src={entry.iconDataUrl} alt="" className={`h-5 w-5 rounded ${disabled ? 'opacity-60' : ''}`} />
         ) : (
           <AppWindowIcon className={`h-5 w-5 text-ink-muted ${disabled ? 'opacity-60' : ''}`} />
         )}

@@ -93,14 +93,19 @@ describe('parseUninstallCommand', () => {
     expect(pkg.kind).toBe('msi');
     expect(pkg.msiProductCode).toBe('{11111111-2222-3333-4444-555555555555}');
 
-    const uninstall = parseUninstallCommand('MsiExec.exe /uninstall {11111111-2222-3333-4444-555555555555}', { exists });
+    const uninstall = parseUninstallCommand('MsiExec.exe /uninstall {11111111-2222-3333-4444-555555555555}', {
+      exists,
+    });
     expect(uninstall.msiProductCode).toBe('{11111111-2222-3333-4444-555555555555}');
   });
 
   it('checks an absolute msiexec path for existence', () => {
-    const command = parseUninstallCommand('C:\\Windows\\System32\\msiexec.exe /X{11111111-2222-3333-4444-555555555555}', {
-      exists: missing,
-    });
+    const command = parseUninstallCommand(
+      'C:\\Windows\\System32\\msiexec.exe /X{11111111-2222-3333-4444-555555555555}',
+      {
+        exists: missing,
+      },
+    );
     expect(command.kind).toBe('msi');
     expect(command.exeExists).toBe(false);
     expect(command.blockReason).toBe('missing-exe');
@@ -164,12 +169,8 @@ describe('buildSilentOption', () => {
   });
 
   it('requires a non-empty, parseable quiet string', () => {
-    expect(
-      buildSilentOption({ command: msi, quietUninstallString: '', windowsInstaller: true }),
-    ).toBeNull();
-    expect(
-      buildSilentOption({ command: msi, quietUninstallString: '   ', windowsInstaller: true }),
-    ).toBeNull();
+    expect(buildSilentOption({ command: msi, quietUninstallString: '', windowsInstaller: true })).toBeNull();
+    expect(buildSilentOption({ command: msi, quietUninstallString: '   ', windowsInstaller: true })).toBeNull();
     expect(
       buildSilentOption({ command: msi, quietUninstallString: 'not a command', windowsInstaller: true }),
     ).toBeNull();

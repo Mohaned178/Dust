@@ -23,7 +23,9 @@ export interface ProtectedEntryInput {
 
 function system32Prefix(windowsDir: string | undefined): string | null {
   if (windowsDir === undefined || windowsDir.trim().length === 0) return null;
-  const normalized = normalize(join(windowsDir, 'System32')).replace(/[\\/]+$/, '').toLowerCase();
+  const normalized = normalize(join(windowsDir, 'System32'))
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
   return normalized.length > 0 ? normalized : null;
 }
 
@@ -33,6 +35,10 @@ export function isProtectedStartupEntry(input: ProtectedEntryInput): boolean {
 
   const prefix = system32Prefix(input.windowsDir);
   if (prefix === null || input.command.trim().length === 0) return false;
-  const command = input.command.trim().replace(/^"/, '').replace(/[\\/]+/g, '\\').toLowerCase();
+  const command = input.command
+    .trim()
+    .replace(/^"/, '')
+    .replace(/[\\/]+/g, '\\')
+    .toLowerCase();
   return command.startsWith(`${prefix}\\`) || command === prefix;
 }

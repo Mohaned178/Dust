@@ -23,9 +23,9 @@ describe('protectedAppReason', () => {
   });
 
   it('protects anything installed under the Windows directory', () => {
-    expect(
-      reason({ displayName: 'Platform Helper', installLocation: 'C:\\Windows\\System32\\DriverStore' }),
-    ).toBe('system-location');
+    expect(reason({ displayName: 'Platform Helper', installLocation: 'C:\\Windows\\System32\\DriverStore' })).toBe(
+      'system-location',
+    );
   });
 
   it('protects apps under system-managed program files locations', () => {
@@ -52,22 +52,27 @@ describe('protectedAppReason', () => {
   it('protects by publisher signature', () => {
     expect(reason({ displayName: 'Edge', publisher: 'Microsoft Corporation' })).toBe('protected-publisher');
     expect(reason({ displayName: 'GeForce Experience', publisher: 'NVIDIA Corporation' })).toBe('protected-publisher');
-    expect(reason({ displayName: 'AMD Software', publisher: 'Advanced Micro Devices, Inc.' })).toBe('protected-publisher');
-    expect(reason({ displayName: 'Graphics Command Center', publisher: 'Intel Corporation' })).toBe('protected-publisher');
-    expect(reason({ displayName: 'Audio Console', publisher: 'Realtek Semiconductor Corp.' })).toBe('protected-publisher');
+    expect(reason({ displayName: 'AMD Software', publisher: 'Advanced Micro Devices, Inc.' })).toBe(
+      'protected-publisher',
+    );
+    expect(reason({ displayName: 'Graphics Command Center', publisher: 'Intel Corporation' })).toBe(
+      'protected-publisher',
+    );
+    expect(reason({ displayName: 'Audio Console', publisher: 'Realtek Semiconductor Corp.' })).toBe(
+      'protected-publisher',
+    );
     expect(reason({ displayName: 'Endpoint Agent', publisher: 'CrowdStrike, Inc.' })).toBe('protected-publisher');
   });
 
   it('protects known runtime and security products by name', () => {
     expect(
-      reason({ displayName: 'Microsoft Visual C++ 2015-2022 Redistributable (x64)', publisher: 'Microsoft Corporation' }),
+      reason({
+        displayName: 'Microsoft Visual C++ 2015-2022 Redistributable (x64)',
+        publisher: 'Microsoft Corporation',
+      }),
     ).toBe('protected-publisher');
-    expect(
-      reason({ displayName: 'Windows Defender', publisher: 'Microsoft Corporation' }),
-    ).toBe('protected-publisher');
-    expect(
-      reason({ displayName: 'Contoso Redistributable', publisher: 'Contoso Ltd' }),
-    ).toBe('protected-product');
+    expect(reason({ displayName: 'Windows Defender', publisher: 'Microsoft Corporation' })).toBe('protected-publisher');
+    expect(reason({ displayName: 'Contoso Redistributable', publisher: 'Contoso Ltd' })).toBe('protected-product');
   });
 
   it('leaves ordinary applications alone', () => {
@@ -90,6 +95,8 @@ describe('protectedAppReason', () => {
 describe('isProtectedApp', () => {
   it('is the boolean wrapper', () => {
     expect(isProtectedApp(makeInstalledApp({ displayName: 'Spotify', publisher: 'Spotify AB' }), ENV)).toBe(false);
-    expect(isProtectedApp(makeInstalledApp({ displayName: 'Edge', publisher: 'Microsoft Corporation' }), ENV)).toBe(true);
+    expect(isProtectedApp(makeInstalledApp({ displayName: 'Edge', publisher: 'Microsoft Corporation' }), ENV)).toBe(
+      true,
+    );
   });
 });

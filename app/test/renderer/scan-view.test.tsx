@@ -140,7 +140,13 @@ describe('ScanView', () => {
 
   it('keeps the last progress payload when non-progress events arrive', () => {
     const { rerender } = render(
-      <ScanView api={makeApi()} root="C:\\" runId="run-1" event={progressEvent('C:\\Windows\\Temp')} onBack={vi.fn()} />,
+      <ScanView
+        api={makeApi()}
+        root="C:\\"
+        runId="run-1"
+        event={progressEvent('C:\\Windows\\Temp')}
+        onBack={vi.fn()}
+      />,
     );
 
     expect(screen.getByText('1,234')).toBeInTheDocument();
@@ -363,15 +369,15 @@ describe('ScanView', () => {
       ingestScanEvent({
         type: 'categories',
         runId: 'run-1',
-        categories: categoryRows([['temp', 512], ['npm-cache', 4096]]),
+        categories: categoryRows([
+          ['temp', 512],
+          ['npm-cache', 4096],
+        ]),
       });
       ingestScanEvent({
         type: 'folders',
         runId: 'run-1',
-        folders: [
-          resultRow('C:\\Temp', 'Temp', 512, 'C:\\'),
-          resultRow('C:\\npm-cache', 'npm-cache', 4096, 'C:\\'),
-        ],
+        folders: [resultRow('C:\\Temp', 'Temp', 512, 'C:\\'), resultRow('C:\\npm-cache', 'npm-cache', 4096, 'C:\\')],
       });
       ingestScanEvent({
         type: 'matches',
@@ -424,9 +430,7 @@ describe('ScanView', () => {
       reclaimableBytes: 512,
       saved: true,
     };
-    const { rerender } = render(
-      <ScanView api={api} root="C:\\" runId="run-1" event={null} onBack={vi.fn()} />,
-    );
+    const { rerender } = render(<ScanView api={api} root="C:\\" runId="run-1" event={null} onBack={vi.fn()} />);
 
     act(() => {
       ingestScanEvent({ type: 'folders', runId: 'run-1', folders: [resultRow('C:\\Temp', 'Temp', 512, 'C:\\')] });
@@ -456,9 +460,7 @@ describe('ScanView', () => {
       reclaimableBytes: 512,
       saved: false,
     };
-    const { rerender } = render(
-      <ScanView api={api} root="C:\\" runId="run-1" event={null} onBack={vi.fn()} />,
-    );
+    const { rerender } = render(<ScanView api={api} root="C:\\" runId="run-1" event={null} onBack={vi.fn()} />);
 
     act(() => {
       ingestScanEvent({ type: 'folders', runId: 'run-1', folders: [resultRow('C:\\Temp', 'Temp', 512, 'C:\\')] });

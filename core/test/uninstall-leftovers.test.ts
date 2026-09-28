@@ -108,9 +108,7 @@ describe('discoverLeftovers', () => {
     fixture.dir('local/Container/FooApp');
 
     const result = discoverLeftovers(fooApp(), [], options);
-    expect(result.candidates.map((candidate) => candidate.path)).toContain(
-      options.installLocation,
-    );
+    expect(result.candidates.map((candidate) => candidate.path)).toContain(options.installLocation);
     expect(result.candidates.some((candidate) => candidate.path.endsWith('Unrelated'))).toBe(false);
     expect(result.candidates.some((candidate) => candidate.path.includes('Container'))).toBe(false);
   });

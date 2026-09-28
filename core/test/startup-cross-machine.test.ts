@@ -2,11 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  createFsFolderStore,
-  listStartupEntries,
-  resolveStartupFolderPaths,
-} from '../src/index';
+import { createFsFolderStore, listStartupEntries, resolveStartupFolderPaths } from '../src/index';
 import type { ShortcutDetails } from '../src/index';
 import { FakeRegistryStore } from './startup-fakes';
 
@@ -19,9 +15,7 @@ describe('startup roots across machines', () => {
 
     const paths = resolveStartupFolderPaths(alice);
 
-    expect(paths.user).toBe(
-      'D:\\Users\\alice\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup',
-    );
+    expect(paths.user).toBe('D:\\Users\\alice\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup');
     expect(paths.common).toBe('D:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup');
     expect(paths.backup).toBe('D:\\Users\\alice\\AppData\\Roaming\\Dust\\startup-disabled');
     expect(paths.user).not.toContain('pc');

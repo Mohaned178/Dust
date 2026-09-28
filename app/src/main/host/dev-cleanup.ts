@@ -57,9 +57,7 @@ export function groupDevProjects(projects: DevProject[]): DevGroup[] {
   }
 
   for (const group of groups) {
-    group.projects.sort(
-      (a, b) => b.nodeModulesBytes - a.nodeModulesBytes || a.path.localeCompare(b.path),
-    );
+    group.projects.sort((a, b) => b.nodeModulesBytes - a.nodeModulesBytes || a.path.localeCompare(b.path));
   }
   return groups;
 }

@@ -96,7 +96,16 @@ function makeReport(): RemovalReport {
       launchedAt: 1000,
       finishedAt: 1100,
     },
-    files: { deletedBytes: 0, recycledBytes: 0, deletedItems: 0, recycledItems: 0, alreadyGone: 0, skippedLocked: 0, errors: [], kept: [] },
+    files: {
+      deletedBytes: 0,
+      recycledBytes: 0,
+      deletedItems: 0,
+      recycledItems: 0,
+      alreadyGone: 0,
+      skippedLocked: 0,
+      errors: [],
+      kept: [],
+    },
     registry: { backupPath: '', restoreCommand: '', deletedKeys: [], failedKeys: [] },
     startup: { disabled: [], purgedEnvelopes: [], failed: [] },
     elevation: 'none',
@@ -155,11 +164,21 @@ function makeService(overrides: Partial<UninstallServiceDeps> = {}): {
   events: UninstallEvent[];
   lock: { lock: UninstallServiceDeps['lock']; state: LockState };
 } {
-  const calls = { reset: 0, marked: [] as number[], lock: { acquireOk: true, acquires: 0, releases: 0, current: null } as LockState, executeRequests: [] as unknown[] };
+  const calls = {
+    reset: 0,
+    marked: [] as number[],
+    lock: { acquireOk: true, acquires: 0, releases: 0, current: null } as LockState,
+    executeRequests: [] as unknown[],
+  };
   const { lock, state } = makeLock();
   calls.lock = state;
   const deps: UninstallServiceDeps = {
-    store: { markAppsChanged: (at) => { calls.marked.push(at ?? 0); return { ok: true }; } },
+    store: {
+      markAppsChanged: (at) => {
+        calls.marked.push(at ?? 0);
+        return { ok: true };
+      },
+    },
     now: () => 1000,
     journalPath: 'C:\\Dust\\history.log',
     backupDir: 'C:\\Dust\\backups',
@@ -168,7 +187,9 @@ function makeService(overrides: Partial<UninstallServiceDeps> = {}): {
     buildPlan: async ({ app }) => makePlan(app.id),
     executePlan: async () => ({ ok: true, report: makeReport() }),
     records: async () => [],
-    resetAppsCache: () => { calls.reset += 1; },
+    resetAppsCache: () => {
+      calls.reset += 1;
+    },
     createJournal: () => ({ append: () => true }),
     lock,
     ...overrides,
@@ -200,7 +221,13 @@ describe('list', () => {
     const { service, calls } = makeService({
       listApps: async () => ({
         apps: [
-          installedApp({ id: 'msi', displayName: 'Office', hive: 'hklm', windowsInstaller: true, uninstallString: 'MsiExec.exe /X{11111111-2222-3333-4444-555555555555}' }),
+          installedApp({
+            id: 'msi',
+            displayName: 'Office',
+            hive: 'hklm',
+            windowsInstaller: true,
+            uninstallString: 'MsiExec.exe /X{11111111-2222-3333-4444-555555555555}',
+          }),
           installedApp({ id: 'exe', displayName: 'Spotify', uninstallString: 'uninstall.exe /S' }),
         ],
         trusted: true,
@@ -283,7 +310,15 @@ describe('preview', () => {
         },
       ],
       kept: [{ target: 'C:\\ProgramData\\Spotify', reason: 'needs-admin' }],
-      totals: { bytes: 100, items: 3, reviewBytes: 0, reviewItems: 0, userDataBytes: 0, userDataItems: 0, adminItems: 0 },
+      totals: {
+        bytes: 100,
+        items: 3,
+        reviewBytes: 0,
+        reviewItems: 0,
+        userDataBytes: 0,
+        userDataItems: 0,
+        adminItems: 0,
+      },
     });
     const { service } = makeService({
       listApps: async () => ({ apps: [app], trusted: true }),

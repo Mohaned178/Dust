@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CategoryId } from '@dust/core';
-import type { CategorySummaryRow, DashboardState, DashboardVolumeCard, DustApi, StartAnalyzeResult } from '../../../src/shared/ipc';
+import type {
+  CategorySummaryRow,
+  DashboardState,
+  DashboardVolumeCard,
+  DustApi,
+  StartAnalyzeResult,
+} from '../../../src/shared/ipc';
 import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, RECLAIMABLE_SCOPE_NOTE } from '../../../src/shared/categories';
 import { CleanDialog } from '../components/CleanDialog';
 import { UsageBar } from '../components/UsageBar';
@@ -352,7 +358,9 @@ export function Dashboard({
 
         {system !== null && !analyzed && <FirstRunHint />}
 
-        {system !== null && analyzed && categoryError === null &&
+        {system !== null &&
+          analyzed &&
+          categoryError === null &&
           (categories === null ? (
             <EvidenceLoading />
           ) : (
@@ -378,8 +386,7 @@ export function Dashboard({
           <p className="text-sm text-ink">
             {state.scan !== null ? (
               <>
-                A scan is already running on <span className="font-mono">{state.scan.root}</span>. Cancel it
-                first?
+                A scan is already running on <span className="font-mono">{state.scan.root}</span>. Cancel it first?
               </>
             ) : (
               'A scan is already running. Cancel it first?'
@@ -441,10 +448,7 @@ function SystemHero({
     >
       <div className="grid gap-x-10 gap-y-8 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] sm:items-center">
         <div className="min-w-0">
-          <h2
-            id="system-drive-label"
-            className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted"
-          >
+          <h2 id="system-drive-label" className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
             System drive
           </h2>
 
@@ -473,9 +477,7 @@ function SystemHero({
           ) : (
             <>
               <p className="mt-7 text-lg font-semibold tracking-tight text-ink">Not analyzed yet</p>
-              <p className="mt-2 text-sm text-ink-muted">
-                Analyze this drive to see what is safe to delete.
-              </p>
+              <p className="mt-2 text-sm text-ink-muted">Analyze this drive to see what is safe to delete.</p>
               {capacity !== null && <p className="mt-2.5 font-mono text-xs text-ink-muted">{capacity}</p>}
               {capacityBar}
             </>
@@ -558,10 +560,7 @@ function CategorySection({
   return (
     <section className="mt-10" aria-labelledby="categories-label">
       <div className="flex items-center gap-4">
-        <h2
-          id="categories-label"
-          className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted"
-        >
+        <h2 id="categories-label" className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
           Reclaimable by category
         </h2>
         <div className="h-px flex-1 bg-hairline" />
@@ -584,16 +583,12 @@ function CategorySection({
               }`}
               onClick={() => onSelect(category)}
               className={`group flex flex-col items-start gap-1.5 rounded-xl border border-hairline bg-surface px-4 py-3.5 text-left transition-colors ${FOCUS} ${
-                known
-                  ? 'hover:border-hairline-strong hover:bg-surface-hover'
-                  : 'cursor-not-allowed opacity-55'
+                known ? 'hover:border-hairline-strong hover:bg-surface-hover' : 'cursor-not-allowed opacity-55'
               }`}
             >
               <span className="flex w-full items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-medium text-ink">{label}</span>
-                <ChevronRightIcon
-                  className={`h-3.5 w-3.5 shrink-0 text-ink-muted ${reveal}`}
-                />
+                <ChevronRightIcon className={`h-3.5 w-3.5 shrink-0 text-ink-muted ${reveal}`} />
               </span>
               <span
                 className={`font-mono text-lg font-semibold tracking-tight ${known ? 'text-ink' : 'text-ink-muted'}`}
@@ -617,13 +612,7 @@ function CategorySection({
   );
 }
 
-function DeveloperSection({
-  categories,
-  onOpen,
-}: {
-  categories: CategorySummaryRow[];
-  onOpen: () => void;
-}) {
+function DeveloperSection({ categories, onOpen }: { categories: CategorySummaryRow[]; onOpen: () => void }) {
   const row = categories.find((entry) => entry.category === 'npm-projects') ?? null;
   const detail =
     row !== null
@@ -732,10 +721,7 @@ function FirstRunHint() {
   return (
     <section className="mt-10" aria-labelledby="categories-label">
       <div className="flex items-center gap-4">
-        <h2
-          id="categories-label"
-          className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted"
-        >
+        <h2 id="categories-label" className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
           Reclaimable by category
         </h2>
         <div className="h-px flex-1 bg-hairline" />

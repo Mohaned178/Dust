@@ -146,19 +146,13 @@ export function App({ api }: AppProps) {
       />
     );
   } else if (view.name === 'startup') {
-    content = (
-      <StartupView api={api} notice={startupNotice} onNoticeShown={() => setStartupNotice(null)} />
-    );
+    content = <StartupView api={api} notice={startupNotice} onNoticeShown={() => setStartupNotice(null)} />;
   } else if (view.name === 'system-info') {
     content = <SystemInfoView api={api} />;
   } else if (view.name === 'uninstall') {
-    content = (
-      <UninstallView api={api} hint={uninstallHint} onHintShown={() => setUninstallHint(null)} />
-    );
+    content = <UninstallView api={api} hint={uninstallHint} onHintShown={() => setUninstallHint(null)} />;
   } else if (view.name === 'dev-cleanup') {
-    content = (
-      <DevCleanupView api={api} root={view.root} onBack={back} onViewResults={viewResults} />
-    );
+    content = <DevCleanupView api={api} root={view.root} onBack={back} onViewResults={viewResults} />;
   } else if (view.name === 'drives') {
     content = <DrivesView api={api} onBrowse={browse} />;
   } else if (view.name === 'browse') {

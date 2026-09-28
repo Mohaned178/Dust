@@ -4,7 +4,13 @@ import { CleanDialog } from '../../renderer/src/components/CleanDialog';
 import { CleanFlow } from '../../renderer/src/components/CleanFlow';
 import { CleanPlan } from '../../renderer/src/components/CleanPlan';
 import { CleanSummary } from '../../renderer/src/components/CleanSummary';
-import type { CleanItemPreview, CleanItemResult, CleanPreview, CleanReport, CleanPreviewResult } from '../../src/shared/ipc';
+import type {
+  CleanItemPreview,
+  CleanItemResult,
+  CleanPreview,
+  CleanReport,
+  CleanPreviewResult,
+} from '../../src/shared/ipc';
 import { makeApi, makeCleanPreview } from './fakes';
 
 const writeText = vi.fn().mockResolvedValue(undefined);
@@ -198,9 +204,7 @@ describe('CleanSummary', () => {
   });
 
   it('groups partial and error caveats into one notice', () => {
-    render(
-      <CleanSummary report={report({ deletedBytes: 2048, skippedLocked: 2, itemErrors: 1 })} onDone={() => {}} />,
-    );
+    render(<CleanSummary report={report({ deletedBytes: 2048, skippedLocked: 2, itemErrors: 1 })} onDone={() => {}} />);
     expect(screen.getByText('Partially cleaned: 2 files in use were skipped.')).toBeInTheDocument();
     expect(screen.getByText('1 item could not be cleaned — see the item list below.')).toBeInTheDocument();
   });

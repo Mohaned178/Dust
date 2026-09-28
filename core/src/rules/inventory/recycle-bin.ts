@@ -83,9 +83,7 @@ export function defaultRecycleBinEnumeration(): Promise<RecycleBinInfo> {
   });
 }
 
-export function recycleBinRule(
-  options: { enumerate?: () => RecycleBinInfo | Promise<RecycleBinInfo> } = {},
-): Rule {
+export function recycleBinRule(options: { enumerate?: () => RecycleBinInfo | Promise<RecycleBinInfo> } = {}): Rule {
   const enumerate = options.enumerate ?? defaultRecycleBinEnumeration;
   return {
     id: 'recycle-bin',

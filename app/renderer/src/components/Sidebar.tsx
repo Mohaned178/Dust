@@ -53,9 +53,7 @@ function NavButton({ icon: Icon, label, collapsed, active = false, disabled = fa
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS} ${
-        active
-          ? 'bg-accent-soft text-accent-strong'
-          : 'text-ink-muted hover:bg-canvas hover:text-ink'
+        active ? 'bg-accent-soft text-accent-strong' : 'text-ink-muted hover:bg-canvas hover:text-ink'
       } ${collapsed ? 'justify-center px-0' : ''}`}
     >
       <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -88,7 +86,9 @@ export function Sidebar({ active, devCleanupDisabled, onNavigate, onOpenSettings
         collapsed ? 'w-14' : 'w-60'
       }`}
     >
-      <div className={`flex h-16 items-center border-b border-hairline px-3 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+      <div
+        className={`flex h-16 items-center border-b border-hairline px-3 ${collapsed ? 'justify-center' : 'justify-between'}`}
+      >
         {!collapsed && <span className="pl-1 text-lg font-semibold tracking-tight text-ink">Dust</span>}
         <button
           type="button"

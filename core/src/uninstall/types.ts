@@ -17,14 +17,7 @@ export type UninstallGrade = 'safe' | 'review';
 export type UninstallOutcome = 'complete' | 'partial' | 'failed' | 'reboot-required' | 'not-started';
 
 export type UninstallPhase =
-  | 'prepare'
-  | 'backup'
-  | 'uninstaller'
-  | 'verify'
-  | 'files'
-  | 'registry'
-  | 'startup'
-  | 'finish';
+  'prepare' | 'backup' | 'uninstaller' | 'verify' | 'files' | 'registry' | 'startup' | 'finish';
 
 export const UNINSTALL_VERIFY_POLL_MS = 2_000;
 export const UNINSTALL_VERIFY_GRACE_MS = 120_000;
@@ -33,7 +26,10 @@ export const UNINSTALL_PENDING_TTL_MS = 15 * 60_000;
 export const UNINSTALL_JOURNAL_VERSION = 1;
 
 export function uninstallItemId(kind: UninstallItemKind, target: string): string {
-  const key = target.trim().replace(/[\\/]+$/, '').toLowerCase();
+  const key = target
+    .trim()
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
   return createHash('sha1').update(`${kind}\u0000${key}`).digest('hex').slice(0, 16);
 }
 

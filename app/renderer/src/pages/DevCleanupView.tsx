@@ -76,10 +76,7 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
     });
   }, [api, cleanId]);
 
-  const projects = useMemo(
-    () => (state === null ? [] : state.groups.flatMap((group) => group.projects)),
-    [state],
-  );
+  const projects = useMemo(() => (state === null ? [] : state.groups.flatMap((group) => group.projects)), [state]);
   const selectedBytes = useMemo(
     () =>
       projects
@@ -89,9 +86,7 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
   );
   const groups = useMemo(() => {
     if (state === null) return [];
-    return [...state.groups].sort(
-      (a, b) => GROUP_ORDER.indexOf(a.id) - GROUP_ORDER.indexOf(b.id),
-    );
+    return [...state.groups].sort((a, b) => GROUP_ORDER.indexOf(a.id) - GROUP_ORDER.indexOf(b.id));
   }, [state]);
 
   const toggle = useCallback((path: string) => {
@@ -209,7 +204,11 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
             Bands by last activity:{' '}
             {BAND_LEGEND.map((band, index) => (
               <span key={band.id}>
-                {index > 0 && <span className="mx-1.5" aria-hidden="true">·</span>}
+                {index > 0 && (
+                  <span className="mx-1.5" aria-hidden="true">
+                    ·
+                  </span>
+                )}
                 <span className="font-medium text-ink">{GROUP_TITLES[band.id]}</span> — {band.detail}
               </span>
             ))}
@@ -246,7 +245,10 @@ export function DevCleanupView({ api, root, onBack, onViewResults }: DevCleanupV
 
           <div className="mx-auto w-full max-w-5xl flex-1 px-6 pb-14 pt-8 sm:px-8">
             {error !== null && preview === null && report === null && (
-              <p role="alert" className="mb-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+              <p
+                role="alert"
+                className="mb-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+              >
                 {error}
               </p>
             )}
@@ -383,9 +385,7 @@ function GroupLedger({ group, collapsed, onToggle, selected, onToggleProject, on
         className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-canvas/60 ${FOCUS}`}
       >
         <ChevronRightIcon
-          className={`h-4 w-4 shrink-0 text-ink-muted transition-transform duration-150 ${
-            expanded ? 'rotate-90' : ''
-          }`}
+          className={`h-4 w-4 shrink-0 text-ink-muted transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
         />
         <span className="text-sm font-semibold text-ink">{GROUP_TITLES[group.id]}</span>
         <span className="text-sm text-ink-muted">{group.projects.length}</span>

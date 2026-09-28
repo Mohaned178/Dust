@@ -4,13 +4,7 @@ import { CleanDialog } from '../components/CleanDialog';
 import { TreeTable } from '../components/TreeTable';
 import { InfoIcon } from '../components/icons';
 import { browseRefusalMessage } from '../clean';
-import {
-  applyBrowseDelete,
-  browseRootBytes,
-  createBrowseStore,
-  flattenBrowse,
-  upsertBrowseRows,
-} from '../browse-tree';
+import { applyBrowseDelete, browseRootBytes, createBrowseStore, flattenBrowse, upsertBrowseRows } from '../browse-tree';
 import type { BrowseNode, BrowseStore } from '../browse-tree';
 import { pathKey, sameRoot } from '../tree';
 import type { SortState } from '../tree';

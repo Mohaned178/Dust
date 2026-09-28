@@ -13,12 +13,7 @@ export function BulkBar({ count, bytes, onClear, onClean }: BulkBarProps) {
   return (
     <div className="sticky bottom-0 z-30 mt-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-hairline bg-surface/95 px-4 py-3 shadow-pop backdrop-blur">
-        <p
-          role="status"
-          aria-live="polite"
-          aria-label="Selection"
-          className="min-w-0 text-sm text-ink"
-        >
+        <p role="status" aria-live="polite" aria-label="Selection" className="min-w-0 text-sm text-ink">
           Clean <span className="font-mono">{formatCount(count)}</span> selected
           <span className="mx-1.5 text-ink-muted/60" aria-hidden="true">
             ·

@@ -61,7 +61,12 @@ function run(
 const tree: Record<string, Tree> = {
   [root]: { dirs: ['a', 'b'] },
   [join(root, 'a')]: { dirs: ['c'] },
-  [join(root, 'a', 'c')]: { files: [['f1', 5], ['f2', 7]] },
+  [join(root, 'a', 'c')]: {
+    files: [
+      ['f1', 5],
+      ['f2', 7],
+    ],
+  },
   [join(root, 'b')]: { files: [['f3', 3]] },
 };
 

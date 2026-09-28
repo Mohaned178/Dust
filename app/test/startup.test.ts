@@ -60,7 +60,9 @@ class MemoryRegistry implements RegistryStore {
   }
 
   async readBackupValue(source: RunSource, id: string): Promise<string | null> {
-    return this.backups.find((entry) => entry.source === source && parseBackupEnvelope(entry.raw)?.id === id)?.raw ?? null;
+    return (
+      this.backups.find((entry) => entry.source === source && parseBackupEnvelope(entry.raw)?.id === id)?.raw ?? null
+    );
   }
 
   async writeBackupValue(source: RunSource, id: string, raw: string): Promise<void> {
@@ -123,7 +125,11 @@ const discordCommand = '"C:\\Apps\\Discord\\Update.exe" --processStart Discord.e
 function memoryStore(): { store: StartupStore; registry: MemoryRegistry; folders: MemoryFolders } {
   const registry = new MemoryRegistry();
   const folders = new MemoryFolders();
-  return { store: { registry, folders, now: () => Date.UTC(2026, 0, 5), windowsDir: 'C:\\Windows' }, registry, folders };
+  return {
+    store: { registry, folders, now: () => Date.UTC(2026, 0, 5), windowsDir: 'C:\\Windows' },
+    registry,
+    folders,
+  };
 }
 
 describe('executableFromCommand', () => {

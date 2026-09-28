@@ -40,9 +40,7 @@ describe('SystemInfoView', () => {
     expect(within(graphics).queryByTitle(VRAM_CAVEAT)).toBeNull();
 
     const firmware = screen.getByRole('region', { name: 'Firmware' });
-    expect(
-      within(firmware).getByText('ASUSTeK COMPUTER INC. ROG STRIX B550-F GAMING'),
-    ).toBeInTheDocument();
+    expect(within(firmware).getByText('ASUSTeK COMPUTER INC. ROG STRIX B550-F GAMING')).toBeInTheDocument();
     expect(within(firmware).getByText('2803 (2023-04-12)')).toBeInTheDocument();
 
     expect(screen.getByText('12%')).toBeInTheDocument();
@@ -172,10 +170,7 @@ describe('SystemInfoView', () => {
   it('refreshes the snapshot on demand', async () => {
     const getSystemInfo = vi.fn(async (force?: boolean) =>
       makeSystemInfo({
-        capturedAt:
-          force === true
-            ? new Date(2026, 8, 28, 9, 15).getTime()
-            : new Date(2026, 8, 27, 14, 32).getTime(),
+        capturedAt: force === true ? new Date(2026, 8, 28, 9, 15).getTime() : new Date(2026, 8, 27, 14, 32).getTime(),
       }),
     );
     render(<SystemInfoView api={makeApi({ getSystemInfo })} />);

@@ -39,19 +39,15 @@ export interface UninstallFlowProps {
   onFinished: () => void;
 }
 
-function previewMessage(result: { reason: 'busy' | 'not-found' | 'protected' | 'nothing-to-remove' | 'failed'; message?: string }): string {
+function previewMessage(result: {
+  reason: 'busy' | 'not-found' | 'protected' | 'nothing-to-remove' | 'failed';
+  message?: string;
+}): string {
   if (result.reason === 'busy') return 'A scan is already running. Wait for it to finish, then try again.';
   return result.message ?? "This app can't be removed right now.";
 }
 
-export function UninstallFlow({
-  api,
-  appId,
-  adoptJobId = null,
-  elevated,
-  onClose,
-  onFinished,
-}: UninstallFlowProps) {
+export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose, onFinished }: UninstallFlowProps) {
   const [stage, setStage] = useState<Stage>(adoptJobId === null ? 'building' : 'running');
   const [preview, setPreview] = useState<UninstallPreview | null>(null);
   const [report, setReport] = useState<RemovalReport | null>(null);
@@ -100,7 +96,8 @@ export function UninstallFlow({
       if (event.type === 'phase') {
         setPhases((current) => ({
           ...current,
-          [event.phase]: event.note === undefined ? { status: event.status } : { status: event.status, note: event.note },
+          [event.phase]:
+            event.note === undefined ? { status: event.status } : { status: event.status, note: event.note },
         }));
         if (event.phase === 'uninstaller' && event.status === 'started') setWaitingSince(Date.now());
         return;
@@ -133,17 +130,17 @@ export function UninstallFlow({
   }, [stage]);
 
   const totals = useMemo(
-    () => (preview === null ? { items: 0, bytes: 0, reviewItems: 0, adminItems: 0 } : uninstallSelectionTotals(preview.items, selection)),
+    () =>
+      preview === null
+        ? { items: 0, bytes: 0, reviewItems: 0, adminItems: 0 }
+        : uninstallSelectionTotals(preview.items, selection),
     [preview, selection],
   );
   const reviewItems = useMemo(
     () => (preview === null ? [] : selectedReviewItems(preview.items, selection)),
     [preview, selection],
   );
-  const sections = useMemo(
-    () => (preview === null ? [] : groupUninstallItems(preview.items)),
-    [preview],
-  );
+  const sections = useMemo(() => (preview === null ? [] : groupUninstallItems(preview.items)), [preview]);
 
   const toggleItem = useCallback((id: string) => {
     setSelection((current) => {
@@ -170,61 +167,58 @@ export function UninstallFlow({
     [preview],
   );
 
-  const execute = useCallback(
-    async () => {
-      if (preview === null) return;
-      const id = preview.planId;
-      const needsAdmin = preview.totals.adminItems > 0 || preview.uninstaller?.requiresAdmin === true;
-      if (needsAdmin && !elevated) {
-        jobId.current = id;
-        try {
-          await api.relaunchElevatedUninstall(id);
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : String(cause));
-          setStage('error');
-        }
-        return;
-      }
+  const execute = useCallback(async () => {
+    if (preview === null) return;
+    const id = preview.planId;
+    const needsAdmin = preview.totals.adminItems > 0 || preview.uninstaller?.requiresAdmin === true;
+    if (needsAdmin && !elevated) {
       jobId.current = id;
-      setStage('running');
-      setPhases({});
-      setWaitingSince(null);
-      setReboot(false);
       try {
-        const result = await api.executeUninstall({
-          jobId: id,
-          planId: id,
-          selection: [...selection],
-          includeUserData,
-          runUninstaller,
-          quiet,
-          acknowledge: reviewItems.map((item) => item.id),
-        });
-        if (result.ok) {
-          setReport(result.report);
-          setStage('report');
-          onFinished();
-          return;
-        }
-        if (result.reason === 'busy') {
-          setError('A scan is already running. Wait for it to finish, then try again.');
-          setStage('error');
-          return;
-        }
-        if (result.reason === 'unacknowledged-review') {
-          setError('Check the acknowledgement before removing review items.');
-          setStage('plan');
-          return;
-        }
-        setError(result.message ?? "The uninstall couldn't start.");
-        setStage('error');
+        await api.relaunchElevatedUninstall(id);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
         setStage('error');
       }
-    },
-    [api, elevated, includeUserData, onFinished, preview, quiet, reviewItems, runUninstaller, selection],
-  );
+      return;
+    }
+    jobId.current = id;
+    setStage('running');
+    setPhases({});
+    setWaitingSince(null);
+    setReboot(false);
+    try {
+      const result = await api.executeUninstall({
+        jobId: id,
+        planId: id,
+        selection: [...selection],
+        includeUserData,
+        runUninstaller,
+        quiet,
+        acknowledge: reviewItems.map((item) => item.id),
+      });
+      if (result.ok) {
+        setReport(result.report);
+        setStage('report');
+        onFinished();
+        return;
+      }
+      if (result.reason === 'busy') {
+        setError('A scan is already running. Wait for it to finish, then try again.');
+        setStage('error');
+        return;
+      }
+      if (result.reason === 'unacknowledged-review') {
+        setError('Check the acknowledgement before removing review items.');
+        setStage('plan');
+        return;
+      }
+      setError(result.message ?? "The uninstall couldn't start.");
+      setStage('error');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setStage('error');
+    }
+  }, [api, elevated, includeUserData, onFinished, preview, quiet, reviewItems, runUninstaller, selection]);
 
   const label = preview === null ? 'Deep Uninstall' : `Remove ${preview.app.displayName}`;
   const dismissible = stage !== 'running';
@@ -259,7 +253,10 @@ export function UninstallFlow({
           <div className="mt-6 h-px w-full bg-hairline" aria-hidden="true" />
 
           {preview.uninstaller !== null && (
-            <section aria-label="Official uninstaller" className="mt-5 rounded-xl border border-hairline bg-surface p-4">
+            <section
+              aria-label="Official uninstaller"
+              className="mt-5 rounded-xl border border-hairline bg-surface p-4"
+            >
               <label className="flex items-start gap-2.5 text-sm text-ink">
                 <input
                   type="checkbox"
@@ -304,16 +301,18 @@ export function UninstallFlow({
           )}
 
           {sections.map((section) => (
-            <section key={section.id} aria-label={section.title} className="mt-4 rounded-xl border border-hairline bg-surface p-4">
+            <section
+              key={section.id}
+              aria-label={section.title}
+              className="mt-4 rounded-xl border border-hairline bg-surface p-4"
+            >
               <div className="flex items-baseline justify-between gap-3">
                 <h3 className="text-sm font-semibold text-ink">{section.title}</h3>
                 <span className="font-mono text-xs tabular-nums text-ink-muted">
                   {section.items.length} {section.items.length === 1 ? 'item' : 'items'}
                 </span>
               </div>
-              {section.description !== null && (
-                <p className="mt-1 text-xs text-ink-muted">{section.description}</p>
-              )}
+              {section.description !== null && <p className="mt-1 text-xs text-ink-muted">{section.description}</p>}
               {section.id === 'user-data' && (
                 <label className="mt-2 flex items-start gap-2.5 text-sm text-ink">
                   <input
@@ -341,7 +340,9 @@ export function UninstallFlow({
 
           {preview.kept.length > 0 && (
             <details className="mt-4 rounded-lg border border-hairline bg-canvas/40">
-              <summary className={`cursor-pointer list-none rounded-lg px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-canvas/60 ${FOCUS}`}>
+              <summary
+                className={`cursor-pointer list-none rounded-lg px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-canvas/60 ${FOCUS}`}
+              >
                 {preview.kept.length} {preview.kept.length === 1 ? 'item will' : 'items will'} be kept
               </summary>
               <ul className="space-y-2 border-t border-hairline px-3 py-2.5">
@@ -398,7 +399,10 @@ export function UninstallFlow({
           </div>
 
           {reboot && (
-            <div role="note" className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+            <div
+              role="note"
+              className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+            >
               This app finishes uninstalling after a restart. Dust left its leftovers alone.
             </div>
           )}
@@ -423,9 +427,7 @@ export function UninstallFlow({
         </>
       )}
 
-      {stage === 'report' && report !== null && (
-        <ReportBody report={report} onDone={onClose} />
-      )}
+      {stage === 'report' && report !== null && <ReportBody report={report} onDone={onClose} />}
 
       {stage === 'error' && error !== null && (
         <>
@@ -498,7 +500,10 @@ function ItemRow({
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div role="alert" className="mt-4 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+    <div
+      role="alert"
+      className="mt-4 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+    >
       <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
       <p className="min-w-0">{message}</p>
     </div>
@@ -555,33 +560,39 @@ function ReportBody({ report, onDone }: { report: RemovalReport; onDone: () => v
       </dl>
 
       {report.uninstaller.skippedReason !== null && (
-        <div role="note" className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+        <div
+          role="note"
+          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+        >
           <p className="font-medium">The app&apos;s own uninstaller did not run</p>
           <p className="mt-0.5 text-xs text-ink-muted">
-            {blockReasonText(report.uninstaller.skippedReason) ??
-              keptReasonText(report.uninstaller.skippedReason)}
+            {blockReasonText(report.uninstaller.skippedReason) ?? keptReasonText(report.uninstaller.skippedReason)}
           </p>
         </div>
       )}
 
       {report.uninstaller.ran && !report.uninstaller.verifiedGone && (
-        <div role="note" className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
-          The app still appears in the installed list. The maker&apos;s uninstaller may not have finished; run it
-          again from Windows Settings if needed.
+        <div
+          role="note"
+          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+        >
+          The app still appears in the installed list. The maker&apos;s uninstaller may not have finished; run it again
+          from Windows Settings if needed.
         </div>
       )}
 
       {report.outcome === 'reboot-required' && (
-        <div role="note" className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+        <div
+          role="note"
+          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+        >
           Restart to finish uninstalling. Leftovers were not touched.
         </div>
       )}
 
       {report.registry.backupPath.length > 0 && (
         <div className="mt-4 rounded-lg border border-hairline bg-canvas/40 p-3">
-          <p className="text-xs text-ink-muted">
-            Registry backup · restore with this command
-          </p>
+          <p className="text-xs text-ink-muted">Registry backup · restore with this command</p>
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <code className="min-w-0 break-all font-mono text-xs text-ink">{report.registry.restoreCommand}</code>
             <CopyButton text={report.registry.restoreCommand} label="Copy restore command" />
@@ -591,7 +602,9 @@ function ReportBody({ report, onDone }: { report: RemovalReport; onDone: () => v
 
       {kept.length > 0 && (
         <details className="mt-4 rounded-lg border border-hairline bg-canvas/40">
-          <summary className={`cursor-pointer list-none rounded-lg px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-canvas/60 ${FOCUS}`}>
+          <summary
+            className={`cursor-pointer list-none rounded-lg px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-canvas/60 ${FOCUS}`}
+          >
             {kept.length} {kept.length === 1 ? 'item was' : 'items were'} kept
           </summary>
           <ul className="space-y-2 border-t border-hairline px-3 py-2.5">

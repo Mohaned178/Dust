@@ -37,9 +37,7 @@ describe('listStartupEntries', () => {
   it('reads .lnk files from both startup folders', async () => {
     const folders = new FakeFolderStore({
       shortcuts: {
-        'startup-folder-user': [
-          { fileName: 'Slack.lnk', name: 'Slack', command: '"C:\\Apps\\Slack\\slack.exe"' },
-        ],
+        'startup-folder-user': [{ fileName: 'Slack.lnk', name: 'Slack', command: '"C:\\Apps\\Slack\\slack.exe"' }],
         'startup-folder-common': [
           { fileName: 'Teams.lnk', name: 'Teams', command: '"C:\\Program Files\\Teams\\teams.exe"' },
         ],

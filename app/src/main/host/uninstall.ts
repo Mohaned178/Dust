@@ -57,10 +57,7 @@ export interface UninstallServiceDeps {
   lock?: ScanLockLike;
   listApps?: (options?: RemovalAppsOptions) => Promise<InstalledAppsSnapshot>;
   buildPlan?: (input: RemovalPlanInput) => Promise<RemovalPlan>;
-  executePlan?: (
-    request: RemovalExecutionRequest,
-    deps: RemovalExecutionDeps,
-  ) => Promise<RemovalExecutionResult>;
+  executePlan?: (request: RemovalExecutionRequest, deps: RemovalExecutionDeps) => Promise<RemovalExecutionResult>;
   records?: () => Promise<StartupEntryRecord[]>;
   startupActions?: StartupActions;
   resetAppsCache?: () => void;
@@ -93,10 +90,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   const resetApps = deps.resetAppsCache ?? resetInstalledAppsCache;
   const elevated = deps.elevated === true;
   const listeners = new Set<(event: UninstallEvent) => void>();
-  const pending = new Map<
-    string,
-    { plan: RemovalPlan; createdAt: number; request: UninstallExecuteRequest | null }
-  >();
+  const pending = new Map<string, { plan: RemovalPlan; createdAt: number; request: UninstallExecuteRequest | null }>();
   const consumed = new Set<string>();
   let skipRequested = false;
 
@@ -150,49 +144,43 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
 
   function toPreview(plan: RemovalPlan, app: InstalledApp): UninstallPreview {
     const items: UninstallItemPreview[] = [
-      ...plan.leftovers.map(
-        (item): UninstallItemPreview => ({
-          id: item.id,
-          kind: 'file',
-          target: item.path,
-          label: basename(item.path) || item.path,
-          bytes: item.bytes,
-          grade: item.grade,
-          dataClass: item.class,
-          evidence: item.evidence,
-          adminRequired: item.adminRequired,
-          defaultSelected: item.defaultSelected,
-          syncRoot: item.syncRoot,
-        }),
-      ),
-      ...plan.registry.map(
-        (item): UninstallItemPreview => ({
-          id: item.id,
-          kind: 'registry',
-          target: fullRegistryPath(item.hive, item.path),
-          label: fullRegistryPath(item.hive, item.path),
-          bytes: null,
-          grade: item.grade,
-          evidence: [`${item.scope} (${item.hive})`],
-          adminRequired: item.adminRequired,
-          defaultSelected: item.grade === 'safe',
-        }),
-      ),
+      ...plan.leftovers.map((item): UninstallItemPreview => ({
+        id: item.id,
+        kind: 'file',
+        target: item.path,
+        label: basename(item.path) || item.path,
+        bytes: item.bytes,
+        grade: item.grade,
+        dataClass: item.class,
+        evidence: item.evidence,
+        adminRequired: item.adminRequired,
+        defaultSelected: item.defaultSelected,
+        syncRoot: item.syncRoot,
+      })),
+      ...plan.registry.map((item): UninstallItemPreview => ({
+        id: item.id,
+        kind: 'registry',
+        target: fullRegistryPath(item.hive, item.path),
+        label: fullRegistryPath(item.hive, item.path),
+        bytes: null,
+        grade: item.grade,
+        evidence: [`${item.scope} (${item.hive})`],
+        adminRequired: item.adminRequired,
+        defaultSelected: item.grade === 'safe',
+      })),
       ...plan.startup
         .filter((item) => item.action !== 'none')
-        .map(
-          (item): UninstallItemPreview => ({
-            id: item.entryId,
-            kind: 'startup',
-            target: item.name,
-            label: item.name,
-            bytes: null,
-            grade: 'safe',
-            evidence: [item.action === 'disable' ? 'Turn off at sign-in' : 'Remove Dust backup'],
-            adminRequired: item.requiresAdmin,
-            defaultSelected: item.match === 'path',
-          }),
-        ),
+        .map((item): UninstallItemPreview => ({
+          id: item.entryId,
+          kind: 'startup',
+          target: item.name,
+          label: item.name,
+          bytes: null,
+          grade: 'safe',
+          evidence: [item.action === 'disable' ? 'Turn off at sign-in' : 'Remove Dust backup'],
+          adminRequired: item.requiresAdmin,
+          defaultSelected: item.match === 'path',
+        })),
     ];
     const totals: RemovalTotals = plan.totals;
     return {
@@ -284,8 +272,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     skipRequested = false;
 
     const makeJournal =
-      deps.createJournal ??
-      ((options: { path: string; planId: string; appId: string }) => new Journal(options));
+      deps.createJournal ?? ((options: { path: string; planId: string; appId: string }) => new Journal(options));
     const journal = makeJournal({
       path: deps.journalPath,
       planId: entry.plan.id,

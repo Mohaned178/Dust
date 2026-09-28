@@ -1,14 +1,5 @@
-import {
-  appDisplayTokens,
-  appPublisherTokens,
-  listInstalledApps,
-  vendorKey,
-} from '../system/installed-apps';
-import type {
-  InstalledApp,
-  InstalledAppsOptions,
-  InstalledAppsSnapshot,
-} from '../system/installed-apps';
+import { appDisplayTokens, appPublisherTokens, listInstalledApps, vendorKey } from '../system/installed-apps';
+import type { InstalledApp, InstalledAppsOptions, InstalledAppsSnapshot } from '../system/installed-apps';
 import { isProtectedApp } from './protected';
 import type { RemovalApp } from './types';
 
@@ -35,8 +26,7 @@ export function matchAppName(name: string, app: InstalledApp): AppNameMatchStren
   const compactProduct = vendorKey(app.displayName);
   if (compactProduct.length >= 3 && key === compactProduct) return 'product';
 
-  const installLeaf =
-    app.installLocation.length > 0 ? vendorKey(baseName(app.installLocation)) : '';
+  const installLeaf = app.installLocation.length > 0 ? vendorKey(baseName(app.installLocation)) : '';
   if (installLeaf.length >= 3 && key === installLeaf) return 'product';
 
   if (appDisplayTokens(app).includes(key)) return 'partial';
@@ -71,20 +61,16 @@ export function isUninstallableApp(app: InstalledApp): boolean {
   return app.uninstallString.length > 0 || app.installLocation.length > 0;
 }
 
-export async function listRemovalApps(
-  options: RemovalAppsOptions = {},
-): Promise<InstalledAppsSnapshot> {
+export async function listRemovalApps(options: RemovalAppsOptions = {}): Promise<InstalledAppsSnapshot> {
   const snapshot = await listInstalledApps(options);
-  const apps = snapshot.apps
-    .filter(isUninstallableApp)
-    .filter(
-      (app) =>
-        !isProtectedApp(app, {
-          systemRoot: options.systemRoot,
-          programFiles: options.programFiles,
-          dustInstallPath: options.dustInstallPath,
-        }),
-    );
+  const apps = snapshot.apps.filter(isUninstallableApp).filter(
+    (app) =>
+      !isProtectedApp(app, {
+        systemRoot: options.systemRoot,
+        programFiles: options.programFiles,
+        dustInstallPath: options.dustInstallPath,
+      }),
+  );
   return { apps, trusted: snapshot.trusted };
 }
 

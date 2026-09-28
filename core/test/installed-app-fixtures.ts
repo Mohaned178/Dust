@@ -1,9 +1,7 @@
 import { appId, vendorKey } from '../src/system/installed-apps';
 import type { InstalledApp } from '../src/system/installed-apps';
 
-export function makeInstalledApp(
-  overrides: Partial<InstalledApp> & { displayName: string },
-): InstalledApp {
+export function makeInstalledApp(overrides: Partial<InstalledApp> & { displayName: string }): InstalledApp {
   const keyName = overrides.keyName ?? vendorKey(overrides.displayName);
   const hive = overrides.hive ?? 'hklm';
   const base: InstalledApp = {

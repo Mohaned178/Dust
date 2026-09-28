@@ -111,10 +111,7 @@ export function parseSnapshot(raw: string): SnapshotData {
   if (!Array.isArray(object.matches) || !object.matches.every(isSnapshotMatch)) {
     throw new SnapshotCorruptError('matches');
   }
-  if (
-    object.findings !== undefined &&
-    (!Array.isArray(object.findings) || !object.findings.every(isSnapshotFinding))
-  ) {
+  if (object.findings !== undefined && (!Array.isArray(object.findings) || !object.findings.every(isSnapshotFinding))) {
     throw new SnapshotCorruptError('findings');
   }
   if (!Array.isArray(object.projects) || !object.projects.every(isProjectRecord)) {

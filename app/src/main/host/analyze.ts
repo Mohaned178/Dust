@@ -27,5 +27,7 @@ export function aggregateCategories(matches: RuleMatchWithRule[]): SnapshotCateg
       byRule.set(match.ruleId, { ruleId: match.ruleId, category: match.category, bytes: match.bytes, items: 1 });
     }
   }
-  return [...byRule.values()].sort((a, b) => b.bytes - a.bytes || (a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0));
+  return [...byRule.values()].sort(
+    (a, b) => b.bytes - a.bytes || (a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0),
+  );
 }

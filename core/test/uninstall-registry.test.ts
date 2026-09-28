@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  parseRegistryKeySnapshot,
-  scanRegistry,
-} from '../src/uninstall/registry-scan';
+import { parseRegistryKeySnapshot, scanRegistry } from '../src/uninstall/registry-scan';
 import type { RegistryHiveKeys, RegistryVendor } from '../src/uninstall/registry-scan';
 import { makeInstalledApp } from './installed-app-fixtures';
 
@@ -100,13 +97,12 @@ describe('scanRegistry', () => {
   it('maps hives to admin requirements and reads all three views', async () => {
     const app = makeInstalledApp({ displayName: 'FooApp', publisher: 'Foo Corp', hive: 'hkcu', keyName: '{HKCU}' });
     const result = await scanRegistry(app, [], {
-      read: queryFor([
-        hive('hkcu', [vendor('FooApp', [])]),
-        hive('hklm-wow64', [vendor('FooApp', [])]),
-      ]),
+      read: queryFor([hive('hkcu', [vendor('FooApp', [])]), hive('hklm-wow64', [vendor('FooApp', [])])]),
     });
     const user = result.candidates.find((candidate) => candidate.hive === 'hkcu' && candidate.scope === 'vendor-root');
-    const wow = result.candidates.find((candidate) => candidate.hive === 'hklm-wow64' && candidate.scope === 'vendor-root');
+    const wow = result.candidates.find(
+      (candidate) => candidate.hive === 'hklm-wow64' && candidate.scope === 'vendor-root',
+    );
     const uninstall = result.candidates.find((candidate) => candidate.scope === 'uninstall-key');
     expect(user).toMatchObject({ adminRequired: false });
     expect(wow).toMatchObject({ adminRequired: true });

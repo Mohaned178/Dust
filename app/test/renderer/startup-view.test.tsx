@@ -1,12 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StartupView } from '../../renderer/src/pages/StartupView';
-import type {
-  StartupEntry,
-  StartupListResult,
-  StartupNotice,
-  StartupToggleResult,
-} from '../../src/shared/ipc';
+import type { StartupEntry, StartupListResult, StartupNotice, StartupToggleResult } from '../../src/shared/ipc';
 import { makeApi, makeStartupEntry, makeStartupState } from './fakes';
 
 function renderView(api = makeApi(), notice: StartupNotice | null = null) {
@@ -74,12 +69,10 @@ describe('StartupView', () => {
     vi.useFakeTimers();
     const enabled: StartupEntry = makeStartupEntry({ id: 'a1b2c3d4e5f60718', name: 'Discord' });
     const disabled: StartupEntry = { ...enabled, state: 'disabled', disabledKind: 'dust', disabledAt: 1 };
-    const disableStartupEntry = vi.fn(
-      async (): Promise<StartupToggleResult> => ({
-        ok: true,
-        state: makeStartupState({ entries: [disabled] }),
-      }),
-    );
+    const disableStartupEntry = vi.fn(async (): Promise<StartupToggleResult> => ({
+      ok: true,
+      state: makeStartupState({ entries: [disabled] }),
+    }));
     renderView(
       makeApi({
         getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [enabled] }) }),
@@ -114,9 +107,7 @@ describe('StartupView', () => {
       current = { ok: true, state: makeStartupState({ entries: [enabled] }) };
       return current as StartupToggleResult;
     });
-    renderView(
-      makeApi({ getStartup: async () => current, disableStartupEntry, enableStartupEntry }),
-    );
+    renderView(makeApi({ getStartup: async () => current, disableStartupEntry, enableStartupEntry }));
     await flush();
 
     fireEvent.click(screen.getByRole('switch', { name: 'Disable Discord' }));
@@ -139,12 +130,10 @@ describe('StartupView', () => {
       disabledAt: 1,
     });
     const enabled: StartupEntry = { ...disabled, state: 'enabled', disabledKind: null, disabledAt: null };
-    const enableStartupEntry = vi.fn(
-      async (): Promise<StartupToggleResult> => ({
-        ok: true,
-        state: makeStartupState({ entries: [enabled] }),
-      }),
-    );
+    const enableStartupEntry = vi.fn(async (): Promise<StartupToggleResult> => ({
+      ok: true,
+      state: makeStartupState({ entries: [enabled] }),
+    }));
     renderView(
       makeApi({
         getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [disabled] }) }),
@@ -248,13 +237,11 @@ describe('StartupView', () => {
       state: 'disabled',
       disabledKind: 'windows',
     });
-    const enableStartupEntry = vi.fn(
-      async (): Promise<StartupToggleResult> => ({
-        ok: false,
-        reason: 'failed',
-        message: "Windows didn't allow this change.",
-      }),
-    );
+    const enableStartupEntry = vi.fn(async (): Promise<StartupToggleResult> => ({
+      ok: false,
+      reason: 'failed',
+      message: "Windows didn't allow this change.",
+    }));
     renderView(
       makeApi({
         getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [oneDrive] }) }),
@@ -304,10 +291,12 @@ describe('StartupView', () => {
       state: 'disabled',
       disabledKind: 'windows',
     });
-    renderView(
-      makeApi({ getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [oneDrive] }) }) }),
-      { entryId: oneDrive.id, name: oneDrive.name, to: 'enabled', disabledKind: 'windows' },
-    );
+    renderView(makeApi({ getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [oneDrive] }) }) }), {
+      entryId: oneDrive.id,
+      name: oneDrive.name,
+      to: 'enabled',
+      disabledKind: 'windows',
+    });
     await flush();
 
     expect(screen.getByRole('status')).toHaveTextContent('Turned on OneDrive — starts at next sign-in.');

@@ -12,14 +12,7 @@ export { defaultWorkerCount, defaultWorkersForVolume, DEFAULT_POOL_LIMITS, HDD_W
 export { scanTree } from './scanner/scanner';
 export type { ScanConfig, ScanStats } from './scanner/scanner';
 export { buildPlan } from './cleaner/plan';
-export type {
-  BuildPlanOptions,
-  CleanupPlan,
-  PlanItem,
-  PlanTotals,
-  RefusedMatch,
-  RefusedReason,
-} from './cleaner/plan';
+export type { BuildPlanOptions, CleanupPlan, PlanItem, PlanTotals, RefusedMatch, RefusedReason } from './cleaner/plan';
 export { checkDeletable, defaultProtectedPaths } from './cleaner/guard';
 export type { GuardDenial, GuardOptions, GuardResult } from './cleaner/guard';
 export { Cleaner, PlanTokenError } from './cleaner/cleaner';
@@ -30,16 +23,7 @@ export { deleteUnprotectedPath } from './cleaner/browse-delete';
 export type { BrowseDeleteResult, BrowseDeleteStatus } from './cleaner/browse-delete';
 export { createNodeFsProbe } from './rules/probe';
 export { RuleValidationError, validateRules } from './rules/validate';
-export type {
-  Action,
-  ActionGrade,
-  CategoryId,
-  FsProbe,
-  Recovery,
-  Rule,
-  RuleContext,
-  RuleMatch,
-} from './rules/types';
+export type { Action, ActionGrade, CategoryId, FsProbe, Recovery, Rule, RuleContext, RuleMatch } from './rules/types';
 export { createInventoryRules } from './rules/inventory';
 export { scopeRuleToRoot } from './rules/scope';
 export { systemTempRule } from './rules/inventory/system-temp';
@@ -167,11 +151,7 @@ export type {
   StartupToggleRefusal,
   StartupToggleResult,
 } from './startup/types';
-export {
-  BACKUP_ENVELOPE_VERSION,
-  encodeBackupEnvelope,
-  parseBackupEnvelope,
-} from './startup/envelope';
+export { BACKUP_ENVELOPE_VERSION, encodeBackupEnvelope, parseBackupEnvelope } from './startup/envelope';
 export type { StartupBackupEnvelope } from './startup/envelope';
 export { isProtectedStartupEntry } from './startup/protected';
 export type { ProtectedEntryInput } from './startup/protected';
@@ -191,12 +171,7 @@ export type {
   ShortcutResolver,
   StartupFolderPaths,
 } from './startup/folders';
-export {
-  disableStartupEntry,
-  enableStartupEntry,
-  listStartupEntries,
-  removeStartupBackup,
-} from './startup/startup';
+export { disableStartupEntry, enableStartupEntry, listStartupEntries, removeStartupBackup } from './startup/startup';
 export type { StartupStore } from './startup/startup';
 export { createWindowsStartupStore } from './startup/index';
 export type { WindowsStartupStoreOptions } from './startup/index';
@@ -232,13 +207,7 @@ export {
   UNINSTALL_VERIFY_POLL_MS,
   uninstallItemId,
 } from './uninstall/types';
-export {
-  isHiddenReleaseType,
-  isUninstallableApp,
-  listRemovalApps,
-  matchAppName,
-  toRemovalApp,
-} from './uninstall/apps';
+export { isHiddenReleaseType, isUninstallableApp, listRemovalApps, matchAppName, toRemovalApp } from './uninstall/apps';
 export type { AppNameMatchStrength, RemovalAppsOptions } from './uninstall/apps';
 export { isProtectedApp, protectedAppReason } from './uninstall/protected';
 export type { ProtectedAppInput, ProtectedAppOptions } from './uninstall/protected';
@@ -250,17 +219,9 @@ export {
   defaultUninstallParents,
   normalizePlanPath,
 } from './uninstall/path-policy';
-export type {
-  UninstallTargetDenial,
-  UninstallTargetOptions,
-  UninstallTargetResult,
-} from './uninstall/path-policy';
+export type { UninstallTargetDenial, UninstallTargetOptions, UninstallTargetResult } from './uninstall/path-policy';
 export { LEFTOVER_MAX_DEPTH, defaultDirectorySize, discoverLeftovers } from './uninstall/leftovers';
-export type {
-  LeftoverDiscoveryOptions,
-  LeftoverRoots,
-  LeftoversResult,
-} from './uninstall/leftovers';
+export type { LeftoverDiscoveryOptions, LeftoverRoots, LeftoversResult } from './uninstall/leftovers';
 export {
   parseRegistryKeySnapshot,
   readRegistryKeySnapshot,

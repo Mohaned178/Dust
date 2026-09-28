@@ -57,11 +57,7 @@ describe('cache registry', () => {
 
     const matches = await chromeCacheRule(env).match(ctx());
     expect(matches.map((m) => m.path).sort()).toEqual(
-      [
-        defaultCache,
-        profileTwoCache,
-        join(env.localAppData, 'Google/Chrome/User Data/Default/Code Cache'),
-      ].sort(),
+      [defaultCache, profileTwoCache, join(env.localAppData, 'Google/Chrome/User Data/Default/Code Cache')].sort(),
     );
     expect(matches.every((m) => m.grade === 'safe')).toBe(true);
     expect(matches[0]!.recovery).toEqual({
@@ -92,10 +88,7 @@ describe('cache registry', () => {
     fixture.dir('roaming/discordcanary/Code Cache');
     const matches = await discordCacheRule(env).match(ctx());
     expect(matches.map((m) => m.path).sort()).toEqual(
-      [
-        join(env.appData, 'discordptb', 'GPUCache'),
-        join(env.appData, 'discordcanary', 'Code Cache'),
-      ].sort(),
+      [join(env.appData, 'discordptb', 'GPUCache'), join(env.appData, 'discordcanary', 'Code Cache')].sort(),
     );
   });
 

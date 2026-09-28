@@ -66,10 +66,7 @@ describe('pending uninstall persistence', () => {
     const tree = new TempTree();
     try {
       const path = pendingUninstallPath(tree.root);
-      tree.file(
-        'pending-removal.json',
-        JSON.stringify({ v: 1, jobId: JOB_ID, createdAt: 100, plan: {}, request: {} }),
-      );
+      tree.file('pending-removal.json', JSON.stringify({ v: 1, jobId: JOB_ID, createdAt: 100, plan: {}, request: {} }));
       expect(readPendingUninstall(path, { now: () => 200 })).toBeNull();
 
       tree.file('pending-removal.json', JSON.stringify(makeJob({ appId: '..\\evil' })));

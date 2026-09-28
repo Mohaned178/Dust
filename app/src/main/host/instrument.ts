@@ -1,7 +1,6 @@
 import { AggregateTree } from '@dust/core';
 
-export const instrumentEnabled =
-  process.env.DUST_INSTRUMENT === '1' || process.env.DUST_BENCH_ROOT !== undefined;
+export const instrumentEnabled = process.env.DUST_INSTRUMENT === '1' || process.env.DUST_BENCH_ROOT !== undefined;
 
 interface Sample {
   totalMs: number;

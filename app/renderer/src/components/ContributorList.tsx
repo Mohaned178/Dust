@@ -29,10 +29,7 @@ export interface SelectAllControl {
   onToggle: () => void;
 }
 
-type RecoveryEntry =
-  | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'loaded'; item: CleanItemPreview | null };
+type RecoveryEntry = { status: 'loading' } | { status: 'error' } | { status: 'loaded'; item: CleanItemPreview | null };
 
 export interface ContributorListProps {
   contributors: Contributor[];
@@ -76,10 +73,7 @@ export function ContributorList({
       loadRecovery(path)
         .then((item) => {
           setRecovery((current) => ({ ...current, [key]: { status: 'loaded', item } }));
-          onAnnounce?.(
-            item === null ? `No restore command for ${path}.` : `Recovery details ready for ${path}.`,
-            true,
-          );
+          onAnnounce?.(item === null ? `No restore command for ${path}.` : `Recovery details ready for ${path}.`, true);
         })
         .catch(() => {
           setRecovery((current) => ({ ...current, [key]: { status: 'error' } }));
@@ -198,8 +192,8 @@ export function ContributorList({
       </ul>
       {totalCount > contributors.length && (
         <p className="border-t border-hairline px-4 py-2.5 text-xs text-ink-muted">
-          Showing the {formatCount(contributors.length)} largest of {formatCount(totalCount)} contributors. Use search or a
-          category to narrow.
+          Showing the {formatCount(contributors.length)} largest of {formatCount(totalCount)} contributors. Use search
+          or a category to narrow.
         </p>
       )}
       {keptCount > 0 && <KeptLine count={keptCount} onUndo={onUndoKept} />}

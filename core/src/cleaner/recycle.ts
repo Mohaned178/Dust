@@ -10,7 +10,7 @@ export type RecycleRunner = (path: string) => Promise<StageResult>;
 
 export const RECYCLE_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
-  "Add-Type -AssemblyName Microsoft.VisualBasic",
+  'Add-Type -AssemblyName Microsoft.VisualBasic',
   '$p = $env:DUST_RECYCLE_PATH',
   'if ([System.IO.Directory]::Exists($p)) {',
   "  [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')",
@@ -49,10 +49,7 @@ export function createPowerShellRecycleRunner(): RecycleRunner {
     });
 }
 
-export async function stageToRecycleBin(
-  path: string,
-  options: { run?: RecycleRunner } = {},
-): Promise<StageResult> {
+export async function stageToRecycleBin(path: string, options: { run?: RecycleRunner } = {}): Promise<StageResult> {
   const run = options.run ?? createPowerShellRecycleRunner();
   try {
     return await run(path);

@@ -1,4 +1,12 @@
-import { SnapshotStore, backupDirFor, createWindowsStartupStore, getVolumeUsage, journalPathFor, listVolumes, pruneRegistryBackups } from '@dust/core';
+import {
+  SnapshotStore,
+  backupDirFor,
+  createWindowsStartupStore,
+  getVolumeUsage,
+  journalPathFor,
+  listVolumes,
+  pruneRegistryBackups,
+} from '@dust/core';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, openSync, rmSync, writeFileSync } from 'node:fs';
@@ -176,12 +184,15 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
     }
   }
 
-  const timeout = setTimeout(() => {
-    const report = { root, ok: false, reason: 'bench-timeout', samples: reportSamples(), renderer: [] };
-    writeFileSync(reportPath, JSON.stringify(report, null, 2));
-    console.log(JSON.stringify(report, null, 2));
-    app.quit();
-  }, 20 * 60 * 1000);
+  const timeout = setTimeout(
+    () => {
+      const report = { root, ok: false, reason: 'bench-timeout', samples: reportSamples(), renderer: [] };
+      writeFileSync(reportPath, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      app.quit();
+    },
+    20 * 60 * 1000,
+  );
 
   await done;
   clearTimeout(timeout);
@@ -214,272 +225,267 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
   app.quit();
 }
 
-void app.whenReady().then(async () => {
-  const benchRoot = process.env.DUST_BENCH_ROOT;
-  if (benchRoot) {
-    app.setPath('userData', join(tmpdir(), 'dust-bench-userdata'));
-  }
-  const userDataDir = app.getPath('userData');
-  const ackPath = elevationAckPath(userDataDir);
-  const launchedViaElevation = hasElevatedFlag(process.argv);
-  let elevated = launchedViaElevation || (await isRunningElevated());
-  const requestElevation = async (extra: string[] = []): Promise<'ready' | 'declined' | 'failed'> => {
-    try {
-      rmSync(ackPath, { force: true });
-    } catch {
-      /* best effort */
+void app
+  .whenReady()
+  .then(async () => {
+    const benchRoot = process.env.DUST_BENCH_ROOT;
+    if (benchRoot) {
+      app.setPath('userData', join(tmpdir(), 'dust-bench-userdata'));
     }
-    const args = [
-      ...elevationArgs({ packaged: app.isPackaged, appPath: app.getAppPath(), argv: process.argv }),
-      ...extra,
-    ];
-    const command = buildElevationLaunchCommand(process.execPath, args, ackPath);
-    const launchLog = join(userDataDir, 'elevation-launch.log');
-    const log = (text: string): void => {
+    const userDataDir = app.getPath('userData');
+    const ackPath = elevationAckPath(userDataDir);
+    const launchedViaElevation = hasElevatedFlag(process.argv);
+    let elevated = launchedViaElevation || (await isRunningElevated());
+    const requestElevation = async (extra: string[] = []): Promise<'ready' | 'declined' | 'failed'> => {
       try {
-        appendFileSync(launchLog, `${new Date().toISOString()} ${text}\n`, 'utf8');
+        rmSync(ackPath, { force: true });
       } catch {
         /* best effort */
       }
-    };
-    log(`request: ${command}`);
-    return awaitElevatedStartup({
-      spawn: () => {
-        let child;
+      const args = [
+        ...elevationArgs({ packaged: app.isPackaged, appPath: app.getAppPath(), argv: process.argv }),
+        ...extra,
+      ];
+      const command = buildElevationLaunchCommand(process.execPath, args, ackPath);
+      const launchLog = join(userDataDir, 'elevation-launch.log');
+      const log = (text: string): void => {
         try {
-          const fd = openSync(launchLog, 'a');
-          child = spawn(
-            'powershell.exe',
-            [
-              '-NoProfile',
-              '-WindowStyle',
-              'Hidden',
-              '-EncodedCommand',
-              encodePowerShellCommand(command),
-            ],
-            {
-              detached: false,
-              stdio: ['ignore', fd, fd],
-            },
-          );
-          closeSync(fd);
-        } catch (error) {
-          log(`spawn failed: ${String(error)}`);
-          return { exited: Promise.resolve(1) };
+          appendFileSync(launchLog, `${new Date().toISOString()} ${text}\n`, 'utf8');
+        } catch {
+          /* best effort */
         }
-        child.unref();
-        log(`spawned launcher pid=${String(child.pid)}`);
-        return {
-          exited: new Promise<number | null>((resolve) => {
-            child.once('spawn', () => log('launcher spawn event'));
-            child.once('close', (code, signal) => log(`launcher close code=${String(code)} signal=${String(signal)}`));
-            child.once('exit', (code) => {
-              log(`launcher exit: ${String(code)}`);
-              resolve(code);
-            });
-            child.once('error', (error) => {
-              log(`launcher error: ${String(error)}`);
-              resolve(null);
-            });
-          }),
-        };
-      },
-      ackExists: () => existsSync(ackPath),
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    }).then((outcome) => {
-      log(`outcome: ${outcome}`);
-      return outcome;
-    });
-  };
-  if (
-    decideElevation({ platform: process.platform, argv: process.argv, isElevated: elevated }) === 'relaunch'
-  ) {
-    for (;;) {
-      const outcome = await requestElevation();
-      if (outcome === 'ready') {
-        app.quit();
-        return;
-      }
-      const choice = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Dust',
-        message: "Dust couldn't restart with administrator rights.",
-        detail:
-          'Apps install and uninstall more completely when Dust runs as administrator. You can continue without it, or try again.',
-        buttons: ['Continue without admin', 'Try again', 'Quit'],
-        defaultId: 1,
-        cancelId: 0,
+      };
+      log(`request: ${command}`);
+      return awaitElevatedStartup({
+        spawn: () => {
+          let child;
+          try {
+            const fd = openSync(launchLog, 'a');
+            child = spawn(
+              'powershell.exe',
+              ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', encodePowerShellCommand(command)],
+              {
+                detached: false,
+                stdio: ['ignore', fd, fd],
+              },
+            );
+            closeSync(fd);
+          } catch (error) {
+            log(`spawn failed: ${String(error)}`);
+            return { exited: Promise.resolve(1) };
+          }
+          child.unref();
+          log(`spawned launcher pid=${String(child.pid)}`);
+          return {
+            exited: new Promise<number | null>((resolve) => {
+              child.once('spawn', () => log('launcher spawn event'));
+              child.once('close', (code, signal) =>
+                log(`launcher close code=${String(code)} signal=${String(signal)}`),
+              );
+              child.once('exit', (code) => {
+                log(`launcher exit: ${String(code)}`);
+                resolve(code);
+              });
+              child.once('error', (error) => {
+                log(`launcher error: ${String(error)}`);
+                resolve(null);
+              });
+            }),
+          };
+        },
+        ackExists: () => existsSync(ackPath),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      }).then((outcome) => {
+        log(`outcome: ${outcome}`);
+        return outcome;
       });
-      if (choice.response === 2) {
-        app.quit();
-        return;
-      }
-      if (choice.response === 0) {
-        elevated = false;
-        break;
-      }
-    }
-  }
-  const store = new SnapshotStore(createStorePaths(userDataDir));
-  const backupDir = backupDirFor(userDataDir);
-  pruneRegistryBackups(backupDir);
-  if (process.env.DUST_TIMING === '1') {
-    setTimingLogPath(join(userDataDir, 'perf.log'));
-  }
-  const startupStore = createWindowsStartupStore({
-    env: process.env,
-    windowsDir: process.env.SystemRoot,
-    resolveShortcut: async (shortcutPath) => {
-      try {
-        const details = shell.readShortcutLink(shortcutPath);
-        return { target: details.target, args: details.args ?? '' };
-      } catch {
-        return null;
-      }
-    },
-  });
-  const startup = createStartupService({
-    store: startupStore,
-    loadPublisher: createFilePublisherLoader(),
-    loadIcon: async (executablePath) => {
-      try {
-        const icon = await app.getFileIcon(executablePath, { size: 'small' });
-        return icon.isEmpty() ? null : icon.toDataURL();
-      } catch {
-        return null;
-      }
-    },
-  });
-  const dustInstallPath = app.isPackaged ? dirname(process.execPath) : dirname(app.getAppPath());
-  const uninstallPendingPath = pendingUninstallPath(userDataDir);
-  const uninstallArgId = parsePendingUninstallArg(process.argv);
-  const pendingJob = uninstallArgId === null ? null : readPendingUninstall(uninstallPendingPath);
-  const validPendingJob = pendingJob !== null && pendingJob.jobId === uninstallArgId ? pendingJob : null;
-  let uninstallLaunchHint: UninstallLaunchHint | null = null;
-  if (uninstallArgId !== null || existsSync(uninstallPendingPath)) {
-    clearPendingUninstall(uninstallPendingPath);
-    uninstallLaunchHint =
-      validPendingJob !== null
-        ? { open: true, appId: validPendingJob.appId, notice: null, stalePending: false, runningJobId: null }
-        : { open: true, appId: null, notice: null, stalePending: true, runningJobId: null };
-  }
-  const host = createEngineHost({
-    store,
-    workerPath: resolveWorkerPath(__dirname),
-    startup,
-    dustInstallPath,
-    uninstallDeps: {
-      store,
-      journalPath: journalPathFor(userDataDir),
-      backupDir,
-      elevated,
-      systemRoot: process.env.SystemRoot,
-      dustInstallPath,
-      records: () => startup.records(),
-      startupActions: {
-        disable: async (id) => (await startup.disable(id)).ok,
-        purgeEnvelope: async (id) => (await startup.removeBackup(id)).ok,
-      },
-    },
-  });
-  const window = createMainWindow(benchRoot === undefined);
-
-  const pendingToggle = parsePendingStartupToggle(process.argv);
-  let startupLaunchHint: StartupLaunchHint | null = pendingToggle.requested
-    ? { open: true, notice: null }
-    : null;
-  if (pendingToggle.requested && pendingToggle.id !== null) {
-    const notice = await applyPendingStartupToggle(host, pendingToggle.id, pendingToggle.action);
-    if (notice !== null) startupLaunchHint = { open: true, notice };
-  }
-
-  const registrar: IpcRegistrar = {
-    handle: (channel, listener) => {
-      ipcMain.handle(channel, (event, ...args) => listener(event, ...args));
-    },
-  };
-  registerIpcHandlers(
-    registrar,
-    host,
-    {
-      send: (channel, payload) => {
-        if (!window.webContents.isDestroyed()) window.webContents.send(channel, payload);
-      },
-    },
-    {
-      revealPath: async (path) => {
-        shell.showItemInFolder(path);
-      },
-      relaunchElevated: async (startupToggleId?: string, action: StartupRelaunchAction = 'disable') => {
-        if (process.platform !== 'win32') return;
-        const extra: string[] = [];
-        if (typeof startupToggleId === 'string' && /^[a-f0-9]{16}$/.test(startupToggleId)) {
-          const prefix = action === 'enable' ? PENDING_ENABLE_PREFIX : PENDING_TOGGLE_PREFIX;
-          extra.push(`${prefix}${startupToggleId}`);
-        }
-        const outcome = await requestElevation(extra);
-        if (outcome === 'ready') app.quit();
-      },
-      relaunchElevatedUninstall: async (jobId: string) => {
-        if (process.platform !== 'win32') return;
-        const handoff = host.elevatedUninstallHandoff(jobId);
-        if (handoff === null) return;
-        const pending: PendingUninstallJob = {
-          v: 2,
-          jobId: handoff.jobId,
-          appId: handoff.appId,
-          createdAt: Date.now(),
-        };
-        if (!writePendingUninstall(uninstallPendingPath, pending)) return;
-        const outcome = await requestElevation([`${PENDING_UNINSTALL_PREFIX}${jobId}`]);
+    };
+    if (decideElevation({ platform: process.platform, argv: process.argv, isElevated: elevated }) === 'relaunch') {
+      for (;;) {
+        const outcome = await requestElevation();
         if (outcome === 'ready') {
           app.quit();
           return;
         }
-        await dialog.showMessageBox({
+        const choice = await dialog.showMessageBox({
           type: 'info',
           title: 'Dust',
           message: "Dust couldn't restart with administrator rights.",
-          detail: 'Nothing was changed. You can try again, or continue without admin.',
-          buttons: ['OK'],
+          detail:
+            'Apps install and uninstall more completely when Dust runs as administrator. You can continue without it, or try again.',
+          buttons: ['Continue without admin', 'Try again', 'Quit'],
+          defaultId: 1,
+          cancelId: 0,
         });
-      },
-    },
-    () => startupLaunchHint,
-    () => uninstallLaunchHint,
-  );
-
-  window.once('ready-to-show', () => window.show());
-  app.on('before-quit', () => host.dispose());
-  try {
-    const volumes = listVolumes();
-    getVolumeUsage(volumes.map((volume) => volume.root));
-  } catch {
-    /* volume warm-up is best effort */
-  }
-  await loadRenderer(window);
-  if (launchedViaElevation) {
-    try {
-      writeFileSync(ackPath, `${Date.now()}`, 'utf8');
-    } catch {
-      /* the parent falls back to its timeout */
+        if (choice.response === 2) {
+          app.quit();
+          return;
+        }
+        if (choice.response === 0) {
+          elevated = false;
+          break;
+        }
+      }
     }
-  }
-  if (process.env.DUST_AUTO === '1') await runAutoNav(window);
-  if (benchRoot) await runBench(host, window, benchRoot);
-}).catch((error: unknown) => {
-  console.error('Dust failed to start', error);
-  try {
-    appendFileSync(
-      join(app.getPath('userData'), 'startup-error.log'),
-      `${new Date().toISOString()} ${String(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
-      'utf8',
+    const store = new SnapshotStore(createStorePaths(userDataDir));
+    const backupDir = backupDirFor(userDataDir);
+    pruneRegistryBackups(backupDir);
+    if (process.env.DUST_TIMING === '1') {
+      setTimingLogPath(join(userDataDir, 'perf.log'));
+    }
+    const startupStore = createWindowsStartupStore({
+      env: process.env,
+      windowsDir: process.env.SystemRoot,
+      resolveShortcut: async (shortcutPath) => {
+        try {
+          const details = shell.readShortcutLink(shortcutPath);
+          return { target: details.target, args: details.args ?? '' };
+        } catch {
+          return null;
+        }
+      },
+    });
+    const startup = createStartupService({
+      store: startupStore,
+      loadPublisher: createFilePublisherLoader(),
+      loadIcon: async (executablePath) => {
+        try {
+          const icon = await app.getFileIcon(executablePath, { size: 'small' });
+          return icon.isEmpty() ? null : icon.toDataURL();
+        } catch {
+          return null;
+        }
+      },
+    });
+    const dustInstallPath = app.isPackaged ? dirname(process.execPath) : dirname(app.getAppPath());
+    const uninstallPendingPath = pendingUninstallPath(userDataDir);
+    const uninstallArgId = parsePendingUninstallArg(process.argv);
+    const pendingJob = uninstallArgId === null ? null : readPendingUninstall(uninstallPendingPath);
+    const validPendingJob = pendingJob !== null && pendingJob.jobId === uninstallArgId ? pendingJob : null;
+    let uninstallLaunchHint: UninstallLaunchHint | null = null;
+    if (uninstallArgId !== null || existsSync(uninstallPendingPath)) {
+      clearPendingUninstall(uninstallPendingPath);
+      uninstallLaunchHint =
+        validPendingJob !== null
+          ? { open: true, appId: validPendingJob.appId, notice: null, stalePending: false, runningJobId: null }
+          : { open: true, appId: null, notice: null, stalePending: true, runningJobId: null };
+    }
+    const host = createEngineHost({
+      store,
+      workerPath: resolveWorkerPath(__dirname),
+      startup,
+      dustInstallPath,
+      uninstallDeps: {
+        store,
+        journalPath: journalPathFor(userDataDir),
+        backupDir,
+        elevated,
+        systemRoot: process.env.SystemRoot,
+        dustInstallPath,
+        records: () => startup.records(),
+        startupActions: {
+          disable: async (id) => (await startup.disable(id)).ok,
+          purgeEnvelope: async (id) => (await startup.removeBackup(id)).ok,
+        },
+      },
+    });
+    const window = createMainWindow(benchRoot === undefined);
+
+    const pendingToggle = parsePendingStartupToggle(process.argv);
+    let startupLaunchHint: StartupLaunchHint | null = pendingToggle.requested ? { open: true, notice: null } : null;
+    if (pendingToggle.requested && pendingToggle.id !== null) {
+      const notice = await applyPendingStartupToggle(host, pendingToggle.id, pendingToggle.action);
+      if (notice !== null) startupLaunchHint = { open: true, notice };
+    }
+
+    const registrar: IpcRegistrar = {
+      handle: (channel, listener) => {
+        ipcMain.handle(channel, (event, ...args) => listener(event, ...args));
+      },
+    };
+    registerIpcHandlers(
+      registrar,
+      host,
+      {
+        send: (channel, payload) => {
+          if (!window.webContents.isDestroyed()) window.webContents.send(channel, payload);
+        },
+      },
+      {
+        revealPath: async (path) => {
+          shell.showItemInFolder(path);
+        },
+        relaunchElevated: async (startupToggleId?: string, action: StartupRelaunchAction = 'disable') => {
+          if (process.platform !== 'win32') return;
+          const extra: string[] = [];
+          if (typeof startupToggleId === 'string' && /^[a-f0-9]{16}$/.test(startupToggleId)) {
+            const prefix = action === 'enable' ? PENDING_ENABLE_PREFIX : PENDING_TOGGLE_PREFIX;
+            extra.push(`${prefix}${startupToggleId}`);
+          }
+          const outcome = await requestElevation(extra);
+          if (outcome === 'ready') app.quit();
+        },
+        relaunchElevatedUninstall: async (jobId: string) => {
+          if (process.platform !== 'win32') return;
+          const handoff = host.elevatedUninstallHandoff(jobId);
+          if (handoff === null) return;
+          const pending: PendingUninstallJob = {
+            v: 2,
+            jobId: handoff.jobId,
+            appId: handoff.appId,
+            createdAt: Date.now(),
+          };
+          if (!writePendingUninstall(uninstallPendingPath, pending)) return;
+          const outcome = await requestElevation([`${PENDING_UNINSTALL_PREFIX}${jobId}`]);
+          if (outcome === 'ready') {
+            app.quit();
+            return;
+          }
+          await dialog.showMessageBox({
+            type: 'info',
+            title: 'Dust',
+            message: "Dust couldn't restart with administrator rights.",
+            detail: 'Nothing was changed. You can try again, or continue without admin.',
+            buttons: ['OK'],
+          });
+        },
+      },
+      () => startupLaunchHint,
+      () => uninstallLaunchHint,
     );
-  } catch {
-    /* best effort */
-  }
-  app.quit();
-});
+
+    window.once('ready-to-show', () => window.show());
+    app.on('before-quit', () => host.dispose());
+    try {
+      const volumes = listVolumes();
+      getVolumeUsage(volumes.map((volume) => volume.root));
+    } catch {
+      /* volume warm-up is best effort */
+    }
+    await loadRenderer(window);
+    if (launchedViaElevation) {
+      try {
+        writeFileSync(ackPath, `${Date.now()}`, 'utf8');
+      } catch {
+        /* the parent falls back to its timeout */
+      }
+    }
+    if (process.env.DUST_AUTO === '1') await runAutoNav(window);
+    if (benchRoot) await runBench(host, window, benchRoot);
+  })
+  .catch((error: unknown) => {
+    console.error('Dust failed to start', error);
+    try {
+      appendFileSync(
+        join(app.getPath('userData'), 'startup-error.log'),
+        `${new Date().toISOString()} ${String(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
+        'utf8',
+      );
+    } catch {
+      /* best effort */
+    }
+    app.quit();
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

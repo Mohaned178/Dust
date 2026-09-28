@@ -83,7 +83,13 @@ describe('createEngineHost', () => {
     expect(started.ok).toBe(true);
 
     const event = await finished;
-    expect(event).toMatchObject({ type: 'finished', status: 'complete', saved: true, projects: 1, reclaimableBytes: 10 });
+    expect(event).toMatchObject({
+      type: 'finished',
+      status: 'complete',
+      saved: true,
+      projects: 1,
+      reclaimableBytes: 10,
+    });
 
     const loaded = store.load();
     expect(loaded.kind).toBe('ok');
@@ -326,7 +332,10 @@ describe('createEngineHost', () => {
     const host = createEngineHost({
       store,
       pool: false,
-      listVolumes: () => [...volumeList(), { root: externalRoot, label: 'USB', driveType: 'removable', mediaType: 'unknown' }],
+      listVolumes: () => [
+        ...volumeList(),
+        { root: externalRoot, label: 'USB', driveType: 'removable', mediaType: 'unknown' },
+      ],
       getVolumeUsage: () => [],
       createRules: (_env, projects) => {
         captured.push(projects);
@@ -466,8 +475,32 @@ describe('createEngineHost', () => {
       categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 25, items: 1 }],
       projects: [],
       folders: [
-        { path: 'C:\\', name: 'C:\\', bytes: 25, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: 'C:\\Temp', name: 'Temp', bytes: 25, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 0 },
+        {
+          path: 'C:\\',
+          name: 'C:\\',
+          bytes: 25,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: 'C:\\Temp',
+          name: 'Temp',
+          bytes: 25,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 0,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 0,
+        },
       ],
       matches: [
         { path: 'C:\\Temp', ruleId: 'system-temp', category: 'temp', bytes: 25, grade: 'safe', evidence: 'fixture' },
@@ -785,9 +818,45 @@ describe('createEngineHost', () => {
         },
       ],
       folders: [
-        { path: tree.root, name: tree.root, bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: projectDir, name: 'proj', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: nodeModules, name: 'node_modules', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 0 },
+        {
+          path: tree.root,
+          name: tree.root,
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 5,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: projectDir,
+          name: 'proj',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 5,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: nodeModules,
+          name: 'node_modules',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 0,
+          newestMtimeMs: 5,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 0,
+        },
       ],
     });
 
@@ -803,9 +872,7 @@ describe('createEngineHost', () => {
 
     const dev = host.getDevCleanup(tree.root);
     expect(dev.source).toBe('snapshot');
-    expect(dev.groups.find((group) => group.id === 'dead')?.projects.map((entry) => entry.path)).toEqual([
-      projectDir,
-    ]);
+    expect(dev.groups.find((group) => group.id === 'dead')?.projects.map((entry) => entry.path)).toEqual([projectDir]);
 
     const preview = await host.previewClean({ scope: 'dev', root: tree.root, paths: [projectDir] });
     expect(preview.ok).toBe(true);
@@ -819,9 +886,7 @@ describe('createEngineHost', () => {
     expect(existsSync(nodeModules)).toBe(false);
 
     const after = host.getDevCleanup(tree.root);
-    expect(after.recentlyCleaned.map((entry) => [entry.path, entry.restoreCommand])).toEqual([
-      [projectDir, 'npm ci'],
-    ]);
+    expect(after.recentlyCleaned.map((entry) => [entry.path, entry.restoreCommand])).toEqual([[projectDir, 'npm ci']]);
     expect(after.groups.flatMap((group) => group.projects)).toEqual([]);
 
     const loaded = store.load();
@@ -845,13 +910,35 @@ describe('createEngineHost', () => {
       cleanedAt: null,
       disks: [],
       categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 10, items: 1 }],
-      matches: [
-        { path: temp, ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'temp' },
-      ],
+      matches: [{ path: temp, ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'temp' }],
       projects: [],
       folders: [
-        { path: tree.root, name: tree.root, bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: temp, name: 'temp', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 5, errorCount: 0, partial: false, complete: true, childCount: 0 },
+        {
+          path: tree.root,
+          name: tree.root,
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 5,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: temp,
+          name: 'temp',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 0,
+          newestMtimeMs: 5,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 0,
+        },
       ],
     });
 

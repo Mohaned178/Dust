@@ -138,7 +138,10 @@ describe('browse IPC', () => {
     holder.session!.finish(emptyScanResult(volumeRoot(), 'complete'));
     await nextEvent(host, 'browse-finished');
 
-    const deleted = (await registrar.invoke(IPC.browseDelete, join(tree.root, 'windows', 'Temp'))) as BrowseDeleteResult;
+    const deleted = (await registrar.invoke(
+      IPC.browseDelete,
+      join(tree.root, 'windows', 'Temp'),
+    )) as BrowseDeleteResult;
     expect(deleted).toMatchObject({ status: 'refused', refusal: 'inside-protected' });
     expect(existsSync(join(tree.root, 'windows', 'Temp'))).toBe(true);
 

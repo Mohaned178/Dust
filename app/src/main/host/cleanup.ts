@@ -98,16 +98,11 @@ function recoveryForMatch(match: SnapshotMatch, projects: ProjectRecord[]): Reco
 
 export function snapshotRules(snapshot: SnapshotData, pins: readonly string[]): Rule[] {
   const pinned = new Set(pins.map(canonicalKey));
-  const offered = snapshot.projects.filter(
-    (entry) => entry.offered && !pinned.has(canonicalKey(entry.path)),
-  );
+  const offered = snapshot.projects.filter((entry) => entry.offered && !pinned.has(canonicalKey(entry.path)));
 
   const byRuleId = new Map<string, SnapshotMatch[]>();
   for (const match of snapshot.matches) {
-    if (
-      match.ruleId === 'npm-project-modules' &&
-      !offered.some((entry) => isUnderAny(match.path, [entry.path]))
-    ) {
+    if (match.ruleId === 'npm-project-modules' && !offered.some((entry) => isUnderAny(match.path, [entry.path]))) {
       continue;
     }
     const entries = byRuleId.get(match.ruleId) ?? [];

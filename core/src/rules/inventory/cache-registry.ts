@@ -23,11 +23,5 @@ export const CURATED_CACHE_SPECS: CuratedCacheSpec[] = [
 ];
 
 export function cacheRegistryRules(env: RuleEnv): Rule[] {
-  return [
-    chromeCacheRule(env),
-    edgeCacheRule(env),
-    firefoxCacheRule(env),
-    discordCacheRule(env),
-    slackCacheRule(env),
-  ];
+  return [chromeCacheRule(env), edgeCacheRule(env), firefoxCacheRule(env), discordCacheRule(env), slackCacheRule(env)];
 }

@@ -52,7 +52,12 @@ export function defaultEmptyRecycleBin(): EmptyRecycleBinResult {
   try {
     execFileSync(
       resolvePowerShell(),
-      ['-NoProfile', '-NonInteractive', '-Command', 'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop -DriveLetter $env:SystemDrive'],
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop -DriveLetter $env:SystemDrive',
+      ],
       {
         encoding: 'utf8',
         timeout: 60_000,

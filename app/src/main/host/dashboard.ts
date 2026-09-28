@@ -30,8 +30,7 @@ export function buildDashboardState(input: DashboardInput): DashboardState {
     const usage = usageByVolume.get(volume.root.toLowerCase());
     const root = volume.root.toLowerCase();
     const liveMatch = liveVolume !== null && liveVolume.toLowerCase() === root;
-    const snapshotMatch =
-      !liveMatch && snapshotVolume !== null && snapshotVolume.toLowerCase() === root;
+    const snapshotMatch = !liveMatch && snapshotVolume !== null && snapshotVolume.toLowerCase() === root;
 
     let lastAnalyzedAt: number | null = null;
     let lastCleanedAt: number | null = null;

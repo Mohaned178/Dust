@@ -26,11 +26,7 @@ export function upsertBrowseRows(store: BrowseStore, rows: BrowseRow[]): void {
   for (const row of rows) upsertBrowseRow(store, row);
 }
 
-export function flattenBrowse(
-  store: BrowseStore,
-  expanded: ReadonlySet<string>,
-  sort: SortState,
-): BrowseFlatRow[] {
+export function flattenBrowse(store: BrowseStore, expanded: ReadonlySet<string>, sort: SortState): BrowseFlatRow[] {
   const root = store.nodes.get(pathKey(store.root));
   if (!root) return [];
 

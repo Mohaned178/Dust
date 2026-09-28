@@ -44,8 +44,7 @@ const api: DustApi = {
   getDevCleanup: (root: string) => ipcRenderer.invoke(IPC.devCleanupGet, root) as Promise<DevCleanupState>,
   setPin: (path: string, pinned: boolean) => ipcRenderer.invoke(IPC.pinsSet, path, pinned) as Promise<SetPinResult>,
   getStartup: () => ipcRenderer.invoke(IPC.startupList) as Promise<StartupListResult>,
-  disableStartupEntry: (id: string) =>
-    ipcRenderer.invoke(IPC.startupDisable, id) as Promise<StartupToggleResult>,
+  disableStartupEntry: (id: string) => ipcRenderer.invoke(IPC.startupDisable, id) as Promise<StartupToggleResult>,
   enableStartupEntry: (id: string) => ipcRenderer.invoke(IPC.startupEnable, id) as Promise<StartupToggleResult>,
   getStartupLaunchHint: () => ipcRenderer.invoke(IPC.startupHint) as Promise<StartupLaunchHint | null>,
   getSystemInfo: (force?: boolean) =>
@@ -60,8 +59,7 @@ const api: DustApi = {
   executeUninstall: (request: UninstallExecuteRequest) =>
     ipcRenderer.invoke(IPC.uninstallExecute, request) as Promise<UninstallExecuteResult>,
   skipUninstallWaiting: () => ipcRenderer.invoke(IPC.uninstallSkipWaiting) as Promise<void>,
-  getUninstallLaunchHint: () =>
-    ipcRenderer.invoke(IPC.uninstallHint) as Promise<UninstallLaunchHint | null>,
+  getUninstallLaunchHint: () => ipcRenderer.invoke(IPC.uninstallHint) as Promise<UninstallLaunchHint | null>,
   relaunchElevatedUninstall: (jobId: string) =>
     ipcRenderer.invoke(IPC.relaunchElevatedUninstall, jobId) as Promise<void>,
   onUninstallEvent: (handler: (event: UninstallEvent) => void) => {

@@ -80,10 +80,7 @@ function invalid(raw: string, executable = '', args: string[] = []): UninstallCo
   };
 }
 
-export function parseUninstallCommand(
-  raw: string,
-  options: ParseUninstallCommandOptions = {},
-): UninstallCommand {
+export function parseUninstallCommand(raw: string, options: ParseUninstallCommandOptions = {}): UninstallCommand {
   const exists = options.exists ?? existsSync;
   const env = options.env ?? process.env;
   const trimmed = raw.trim();

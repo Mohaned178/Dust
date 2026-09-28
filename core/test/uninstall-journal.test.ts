@@ -31,11 +31,29 @@ describe('Journal', () => {
     journal.append('phase', { phase: 'backup', status: 'done' });
     journal.append('finished', { outcome: 'complete' });
 
-    const lines = readFileSync(path, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    const lines = readFileSync(path, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
     expect(lines).toEqual([
       { v: UNINSTALL_JOURNAL_VERSION, ts: 1000, kind: 'started', planId: 'plan-1', appId: 'app-1', appName: 'FooApp' },
-      { v: UNINSTALL_JOURNAL_VERSION, ts: 1001, kind: 'phase', planId: 'plan-1', appId: 'app-1', phase: 'backup', status: 'done' },
-      { v: UNINSTALL_JOURNAL_VERSION, ts: 1002, kind: 'finished', planId: 'plan-1', appId: 'app-1', outcome: 'complete' },
+      {
+        v: UNINSTALL_JOURNAL_VERSION,
+        ts: 1001,
+        kind: 'phase',
+        planId: 'plan-1',
+        appId: 'app-1',
+        phase: 'backup',
+        status: 'done',
+      },
+      {
+        v: UNINSTALL_JOURNAL_VERSION,
+        ts: 1002,
+        kind: 'finished',
+        planId: 'plan-1',
+        appId: 'app-1',
+        outcome: 'complete',
+      },
     ]);
   });
 

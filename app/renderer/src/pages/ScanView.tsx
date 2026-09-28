@@ -6,12 +6,7 @@ import { CategoryStrip } from '../components/CategoryStrip';
 import { GradePill } from '../components/GradePill';
 import { FolderIcon, InfoIcon } from '../components/icons';
 import { formatBytes, formatClock, formatCount } from '../format';
-import {
-  selectContributorRows,
-  selectFolderRows,
-  selectSafeTotals,
-  useLiveScan,
-} from '../live-scan';
+import { selectContributorRows, selectFolderRows, selectSafeTotals, useLiveScan } from '../live-scan';
 import type { TrayContributor } from '../live-scan';
 import { pathParent } from '../tree';
 import { ResultsView } from './ResultsView';
@@ -39,15 +34,7 @@ interface PathLine {
   path: string;
 }
 
-export function ScanView({
-  api,
-  root,
-  runId,
-  event,
-  onBack,
-  mode = 'analyze',
-  onBrowseComplete,
-}: ScanViewProps) {
+export function ScanView({ api, root, runId, event, onBack, mode = 'analyze', onBrowseComplete }: ScanViewProps) {
   const browse = mode === 'browse';
   const [cancelFailed, setCancelFailed] = useState(false);
   const [lastProgress, setLastProgress] = useState<ScanProgressPayload | null>(null);
@@ -247,11 +234,7 @@ export function ScanView({
             <section aria-label="Live results" className="mt-12">
               <SectionDivider label="Results" />
               {browse ? (
-                <BrowseTray
-                  rows={folderTray.rows}
-                  total={folderTray.total}
-                  bytes={folderTray.bytes}
-                />
+                <BrowseTray rows={folderTray.rows} total={folderTray.total} bytes={folderTray.bytes} />
               ) : (
                 <ContributorTray
                   rows={contributorTray.rows}
@@ -444,9 +427,7 @@ function ContributorTray({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-ink">{row.name}</span>
                 {pathParent(row.path) !== null && (
-                  <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
-                    {pathParent(row.path)}
-                  </span>
+                  <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">{pathParent(row.path)}</span>
                 )}
               </span>
               <span className="shrink-0 font-mono text-sm tabular-nums text-ink">{formatBytes(row.bytes)}</span>
@@ -486,9 +467,7 @@ function BrowseTray({ rows, total, bytes }: { rows: BrowseRow[]; total: number; 
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-ink">{row.name}</span>
                 {pathParent(row.path) !== null && (
-                  <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
-                    {pathParent(row.path)}
-                  </span>
+                  <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">{pathParent(row.path)}</span>
                 )}
               </span>
               <span className="shrink-0 font-mono text-sm tabular-nums text-ink">{formatBytes(row.bytes)}</span>

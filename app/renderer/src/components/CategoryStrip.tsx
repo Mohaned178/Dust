@@ -43,7 +43,9 @@ export function CategoryStrip({ categories, active, onSelect }: CategoryStripPro
             } disabled:cursor-not-allowed disabled:opacity-55`}
           >
             <span className={`font-medium ${selected ? 'text-accent-strong' : 'text-ink'}`}>{row.label}</span>
-            <span className={`font-mono ${empty ? 'text-ink-muted' : selected ? 'text-accent-strong' : 'text-ink-muted'}`}>
+            <span
+              className={`font-mono ${empty ? 'text-ink-muted' : selected ? 'text-accent-strong' : 'text-ink-muted'}`}
+            >
               {empty ? '—' : formatBytes(row.bytes)}
             </span>
           </button>

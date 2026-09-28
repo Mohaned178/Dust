@@ -82,8 +82,19 @@ describe('ScanCoordinator failure handling', () => {
     const run = h.coordinator.run();
     const first = h.transports[0]!;
     first.emit({ type: 'ready' });
-    first.emit({ type: 'batch', batch: { dirOpens: [open(join(ROOT, 'a'), false)], markers: [], submits: [], progress: null } });
-    first.emit({ type: 'batch', batch: { dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')])], markers: [], submits: [join(ROOT, 'b')], progress: null } });
+    first.emit({
+      type: 'batch',
+      batch: { dirOpens: [open(join(ROOT, 'a'), false)], markers: [], submits: [], progress: null },
+    });
+    first.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')])],
+        markers: [],
+        submits: [join(ROOT, 'b')],
+        progress: null,
+      },
+    });
     first.exit(1);
 
     expect(h.transports).toHaveLength(2);
@@ -93,8 +104,14 @@ describe('ScanCoordinator failure handling', () => {
     expect(replacement.sent.find((c) => c.type === 'task')).toMatchObject({ type: 'task', path: ROOT, isRoot: true });
 
     replacement.emit({ type: 'ready' });
-    expect(replacement.sent.filter((c) => c.type === 'task').at(-1)).toMatchObject({ type: 'task', path: join(ROOT, 'b') });
-    replacement.emit({ type: 'batch', batch: { dirOpens: [open(join(ROOT, 'b'), false)], markers: [], submits: [], progress: null } });
+    expect(replacement.sent.filter((c) => c.type === 'task').at(-1)).toMatchObject({
+      type: 'task',
+      path: join(ROOT, 'b'),
+    });
+    replacement.emit({
+      type: 'batch',
+      batch: { dirOpens: [open(join(ROOT, 'b'), false)], markers: [], submits: [], progress: null },
+    });
     const result = await run;
     expect(result.rootRecord.partial).toBe(false);
   }, 5_000);
@@ -104,7 +121,10 @@ describe('ScanCoordinator failure handling', () => {
     const run = h.coordinator.run();
     const first = h.transports[0]!;
     first.emit({ type: 'ready' });
-    first.emit({ type: 'batch', batch: { dirOpens: [open(ROOT, true, [join(ROOT, 'lost')])], markers: [], submits: [], progress: null } });
+    first.emit({
+      type: 'batch',
+      batch: { dirOpens: [open(ROOT, true, [join(ROOT, 'lost')])], markers: [], submits: [], progress: null },
+    });
     first.exit(1);
     const second = h.transports[1]!;
     second.emit({ type: 'ready' });
@@ -121,7 +141,15 @@ describe('ScanCoordinator failure handling', () => {
     const [w0, w1] = h.transports;
     w0!.emit({ type: 'ready' });
     w1!.emit({ type: 'ready' });
-    w0!.emit({ type: 'batch', batch: { dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')])], markers: [], submits: [join(ROOT, 'a'), join(ROOT, 'b')], progress: null } });
+    w0!.emit({
+      type: 'batch',
+      batch: {
+        dirOpens: [open(ROOT, true, [join(ROOT, 'a'), join(ROOT, 'b')])],
+        markers: [],
+        submits: [join(ROOT, 'a'), join(ROOT, 'b')],
+        progress: null,
+      },
+    });
 
     h.coordinator.cancel();
     expect(Atomics.load(h.abortFlag, 0)).toBe(1);
@@ -141,7 +169,10 @@ describe('ScanCoordinator failure handling', () => {
     const h = makeHarness(1);
     const run = h.coordinator.run();
     h.transports[0]!.emit({ type: 'ready' });
-    h.transports[0]!.emit({ type: 'batch', batch: { dirOpens: [open(ROOT, true)], markers: [], submits: [], progress: null } });
+    h.transports[0]!.emit({
+      type: 'batch',
+      batch: { dirOpens: [open(ROOT, true)], markers: [], submits: [], progress: null },
+    });
     await run;
     expect(h.transports[0]!.terminated).toBe(true);
   });
@@ -175,7 +206,9 @@ describe('ScanCoordinator failure handling', () => {
     first.emit({
       type: 'batch',
       batch: {
-        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        dirOpens: [
+          open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 }),
+        ],
         markers: [],
         submits: [],
         progress: null,
@@ -198,7 +231,9 @@ describe('ScanCoordinator failure handling', () => {
     replacement.emit({
       type: 'batch',
       batch: {
-        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        dirOpens: [
+          open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 }),
+        ],
         markers: [],
         submits: [],
         progress: null,
@@ -208,7 +243,9 @@ describe('ScanCoordinator failure handling', () => {
     replacement.emit({
       type: 'batch',
       batch: {
-        dirOpens: [open(join(ROOT, 'b'), false, [], { directBytes: 3, directAllocatedBytes: 4096, directFileCount: 1 })],
+        dirOpens: [
+          open(join(ROOT, 'b'), false, [], { directBytes: 3, directAllocatedBytes: 4096, directFileCount: 1 }),
+        ],
         markers: [],
         submits: [],
         progress: null,
@@ -240,7 +277,9 @@ describe('ScanCoordinator failure handling', () => {
     first.emit({
       type: 'batch',
       batch: {
-        dirOpens: [open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })],
+        dirOpens: [
+          open(join(ROOT, 'a'), false, [], { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 }),
+        ],
         markers: [],
         submits: [],
         progress: null,

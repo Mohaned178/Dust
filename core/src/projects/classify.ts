@@ -78,7 +78,11 @@ function classifyUnit(
     recency,
     restorability,
     offered:
-      !pinned && !external && !globalInstallRoot && restorability.grade !== 'not-offered' && unit.nodeModules.length > 0,
+      !pinned &&
+      !external &&
+      !globalInstallRoot &&
+      restorability.grade !== 'not-offered' &&
+      unit.nodeModules.length > 0,
     evidence,
   };
 }
@@ -137,7 +141,11 @@ function resolveManager(unit: DiscoveredUnit): ManagerResolution {
     if (parsed && ['npm', 'yarn', 'pnpm', 'bun'].includes(parsed.name)) {
       const manager = parsed.name as PackageManager;
       if (manager === 'yarn' && parsed.major !== null && parsed.major >= 2) {
-        return { manager, label: `yarn ${parsed.major} (Berry)`, unsupportedReason: `yarn ${parsed.major} (Berry) is not supported — Phase 2` };
+        return {
+          manager,
+          label: `yarn ${parsed.major} (Berry)`,
+          unsupportedReason: `yarn ${parsed.major} (Berry) is not supported — Phase 2`,
+        };
       }
       if (manager === 'pnpm') {
         return { manager, label: 'pnpm', unsupportedReason: 'pnpm is not supported — Phase 2' };

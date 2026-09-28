@@ -69,7 +69,13 @@ describe('buildDashboardState', () => {
   });
 
   it('reports missing and corrupt snapshots', () => {
-    const missing = buildDashboardState({ volumes, usage, snapshot: { kind: 'missing' }, scan: null, systemRoot: 'C:\\' });
+    const missing = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'missing' },
+      scan: null,
+      systemRoot: 'C:\\',
+    });
     expect(missing.snapshot).toMatchObject({ status: 'missing', reclaimableBytes: null, rulesStale: false });
     expect(missing.volumes.every((volume) => volume.lastAnalyzedAt === null)).toBe(true);
 

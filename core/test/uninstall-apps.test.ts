@@ -19,18 +19,20 @@ describe('appId', () => {
 describe('isUninstallableApp', () => {
   it('keeps ordinary installed applications', () => {
     expect(
-      isUninstallableApp(
-        makeInstalledApp({ displayName: 'Spotify', uninstallString: '"C:\\Spotify\\uninstall.exe"' }),
-      ),
+      isUninstallableApp(makeInstalledApp({ displayName: 'Spotify', uninstallString: '"C:\\Spotify\\uninstall.exe"' })),
     ).toBe(true);
     expect(
-      isUninstallableApp(makeInstalledApp({ displayName: 'Discord', windowsInstaller: true, uninstallString: 'MsiExec.exe /X{GUID}' })),
+      isUninstallableApp(
+        makeInstalledApp({ displayName: 'Discord', windowsInstaller: true, uninstallString: 'MsiExec.exe /X{GUID}' }),
+      ),
     ).toBe(true);
   });
 
   it('keeps apps without an uninstall string when an install location exists', () => {
     expect(
-      isUninstallableApp(makeInstalledApp({ displayName: 'NoUninstaller', installLocation: 'C:\\Apps\\NoUninstaller' })),
+      isUninstallableApp(
+        makeInstalledApp({ displayName: 'NoUninstaller', installLocation: 'C:\\Apps\\NoUninstaller' }),
+      ),
     ).toBe(true);
   });
 

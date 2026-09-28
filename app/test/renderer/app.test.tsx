@@ -175,9 +175,7 @@ describe('App', () => {
 
   it('opens Dev Cleanup from the results category strip', async () => {
     const categories = makeCategories().map((row) =>
-      row.category === 'npm-projects'
-        ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] }
-        : row,
+      row.category === 'npm-projects' ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] } : row,
     );
     const api = makeApi({ getResults: async (root) => makeResultsState({ root, categories }) });
     render(<App api={api} />);

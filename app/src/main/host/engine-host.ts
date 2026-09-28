@@ -285,12 +285,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   };
   const uninstallService: UninstallService =
     deps.uninstall ??
-    (deps.uninstallDeps === undefined
-      ? unavailableUninstall
-      : createUninstallService({ ...deps.uninstallDeps, lock }));
-  const cleaner =
-    deps.createCleaner?.() ??
-    new Cleaner({ guard, now });
+    (deps.uninstallDeps === undefined ? unavailableUninstall : createUninstallService({ ...deps.uninstallDeps, lock }));
+  const cleaner = deps.createCleaner?.() ?? new Cleaner({ guard, now });
 
   function onSystemDrive(path: string): boolean {
     const volume = volumeRootOf(path);
@@ -523,10 +519,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
 
     lastRun = null;
-    return summarizeCategories(subtractCategories(baseCategories, report)).reduce(
-      (sum, row) => sum + row.bytes,
-      0,
-    );
+    return summarizeCategories(subtractCategories(baseCategories, report)).reduce((sum, row) => sum + row.bytes, 0);
   }
 
   function recordRecentlyCleaned(pending: PendingPlan, report: CleanReport): void {
@@ -697,8 +690,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
-    const volumeList =
-      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
+    const volumeList = requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
@@ -727,9 +719,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
     const liveMarkers: Marker[] = [];
-    const installsPromise = installsSource().catch(
-      (): InstalledAppsSnapshot => ({ apps: [], trusted: false }),
-    );
+    const installsPromise = installsSource().catch((): InstalledAppsSnapshot => ({ apps: [], trusted: false }));
     let installsReady: InstalledAppsSnapshot | undefined;
     void installsPromise.then((snapshot) => {
       installsReady = snapshot;
@@ -887,8 +877,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function startBrowse(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
-    const volumeList =
-      requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
+    const volumeList = requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
     const target =
       requestedRoot === null
         ? undefined
@@ -1129,24 +1118,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       projects: analysis.projects,
       installs,
     };
-    const curatedMatches = await instrumentAsync('finalize.collectRuleMatches', () =>
-      collectRuleMatches(rules, ctx),
-    );
+    const curatedMatches = await instrumentAsync('finalize.collectRuleMatches', () => collectRuleMatches(rules, ctx));
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'detection' });
     const detected = instrument('finalize.discovery', () => discoverCaches(ctx, env));
-    const curatedKeys = new Set(
-      curatedMatches.map((match) => match.path.replace(/[\\/]+$/, '').toLowerCase()),
-    );
+    const curatedKeys = new Set(curatedMatches.map((match) => match.path.replace(/[\\/]+$/, '').toLowerCase()));
     const discoveryMatches: RuleMatchWithRule[] = detected.matches
       .filter((match) => !curatedKeys.has(match.path.replace(/[\\/]+$/, '').toLowerCase()))
       .map((match) => ({ ...match, ruleId: DISCOVERY_RULE_ID, category: 'app-caches' as const }));
     const matches: RuleMatchWithRule[] = [...curatedMatches, ...discoveryMatches];
-    const findings: CacheFinding[] = [
-      ...curatedCacheFindings(ctx, env),
-      ...detected.findings,
-    ];
+    const findings: CacheFinding[] = [...curatedCacheFindings(ctx, env), ...detected.findings];
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'rows' });
@@ -1180,9 +1162,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'snapshot' });
-    const usage = instrument('finalize.volumes', () =>
-      getVolumeUsageFn(volumeList.map((volume) => volume.root)),
-    );
+    const usage = instrument('finalize.volumes', () => getVolumeUsageFn(volumeList.map((volume) => volume.root)));
     const snapshot = instrument('finalize.buildSnapshot', () =>
       buildSnapshot({
         root: result.root,
@@ -1192,27 +1172,23 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         tree: result.tree,
         projects: analysis.projects,
         categories: ruleCategories,
-        matches: matches.map(
-          (match): SnapshotMatch => ({
-            path: match.path,
-            ruleId: match.ruleId,
-            category: match.category,
-            bytes: match.bytes,
-            grade: match.grade,
-            evidence: match.evidence,
-            origin: match.origin,
-          }),
-        ),
-        findings: findings.map(
-          (finding): SnapshotFinding => ({
-            path: finding.path,
-            bytes: finding.bytes,
-            kind: finding.kind,
-            grade: finding.grade,
-            label: finding.label,
-            reason: finding.reason,
-          }),
-        ),
+        matches: matches.map((match): SnapshotMatch => ({
+          path: match.path,
+          ruleId: match.ruleId,
+          category: match.category,
+          bytes: match.bytes,
+          grade: match.grade,
+          evidence: match.evidence,
+          origin: match.origin,
+        })),
+        findings: findings.map((finding): SnapshotFinding => ({
+          path: finding.path,
+          bytes: finding.bytes,
+          kind: finding.kind,
+          grade: finding.grade,
+          label: finding.label,
+          reason: finding.reason,
+        })),
         disks: usage.map((entry) => ({
           volume: entry.volume,
           totalBytes: entry.totalBytes,

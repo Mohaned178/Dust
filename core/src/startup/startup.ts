@@ -3,21 +3,8 @@ import type { StartupBackupEnvelope } from './envelope';
 import type { FolderStore } from './folders';
 import { isProtectedStartupEntry } from './protected';
 import type { RegistryStore } from './registry';
-import {
-  entryId,
-  FOLDER_SOURCES,
-  isFolderSource,
-  isRunSource,
-  requiresAdministrator,
-  RUN_SOURCES,
-} from './types';
-import type {
-  FolderSource,
-  RunSource,
-  StartupEntryRecord,
-  StartupShortcut,
-  StartupToggleResult,
-} from './types';
+import { entryId, FOLDER_SOURCES, isFolderSource, isRunSource, requiresAdministrator, RUN_SOURCES } from './types';
+import type { FolderSource, RunSource, StartupEntryRecord, StartupShortcut, StartupToggleResult } from './types';
 
 export interface StartupStore {
   registry: RegistryStore;
@@ -171,9 +158,7 @@ function messageOf(error: unknown): string {
 }
 
 function isAccessDenied(error: unknown): boolean {
-  return /access is denied|unauthorized|requested registry access is not allowed|EPERM|EACCES/i.test(
-    messageOf(error),
-  );
+  return /access is denied|unauthorized|requested registry access is not allowed|EPERM|EACCES/i.test(messageOf(error));
 }
 
 function failure(entry: StartupEntryRecord, error: unknown): StartupToggleResult {

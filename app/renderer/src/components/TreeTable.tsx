@@ -13,8 +13,7 @@ import { ArrowDownIcon, ArrowUpIcon, ChevronRightIcon, FolderIcon } from './icon
 
 const GRID_ANALYZE =
   'grid grid-cols-[minmax(12rem,2.4fr)_84px_118px_108px_128px_128px_92px] items-center gap-1 min-w-[54rem]';
-const GRID_BROWSE =
-  'grid grid-cols-[minmax(12rem,2.4fr)_84px_150px_116px_170px] items-center gap-1 min-w-[46rem]';
+const GRID_BROWSE = 'grid grid-cols-[minmax(12rem,2.4fr)_84px_150px_116px_170px] items-center gap-1 min-w-[46rem]';
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
 
 const RIGHT_ALIGNED = new Set(['size', 'allocated', 'items', 'percent', 'action']);
@@ -94,9 +93,7 @@ export function TreeTable({
     const overflowing = element.scrollWidth - element.clientWidth > 1;
     const atEnd = element.scrollLeft + element.clientWidth >= element.scrollWidth - 1;
     setScrollState((current) =>
-      current.overflowing === overflowing && current.atEnd === atEnd
-        ? current
-        : { overflowing, atEnd },
+      current.overflowing === overflowing && current.atEnd === atEnd ? current : { overflowing, atEnd },
     );
   }, []);
 
@@ -285,11 +282,7 @@ export function TreeTable({
         cell: (info) => {
           const row = info.row.original.row as ResultRow;
           const protectedRow = row.grade === 'danger';
-          return (
-            <div className="flex justify-end gap-1">
-              {!protectedRow && exploreButton(row.path, row.name)}
-            </div>
-          );
+          return <div className="flex justify-end gap-1">{!protectedRow && exploreButton(row.path, row.name)}</div>;
         },
       }),
     ];
@@ -324,11 +317,7 @@ export function TreeTable({
         tabIndex={0}
         className="h-[560px] overflow-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
       >
-        <div
-          role="row"
-          aria-rowindex={1}
-          className={`${grid} sticky top-0 z-10 border-b border-hairline bg-surface`}
-        >
+        <div role="row" aria-rowindex={1} className={`${grid} sticky top-0 z-10 border-b border-hairline bg-surface`}>
           {headers.map((header) => {
             const sortKey = sortable[header.id] ?? null;
             const active = sortKey !== null && sort.key === sortKey;
@@ -337,9 +326,7 @@ export function TreeTable({
               <div
                 key={header.id}
                 role="columnheader"
-                aria-sort={
-                  sortKey === null ? undefined : active ? (sort.desc ? 'descending' : 'ascending') : 'none'
-                }
+                aria-sort={sortKey === null ? undefined : active ? (sort.desc ? 'descending' : 'ascending') : 'none'}
                 className={`whitespace-nowrap px-2 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted ${align}`}
               >
                 {sortKey === null ? (
@@ -353,7 +340,11 @@ export function TreeTable({
                     {flexRender(header.column.columnDef.header, header.getContext())}
                     {active && (
                       <span aria-hidden="true" className="ml-1 inline-flex">
-                        {sort.desc ? <ArrowDownIcon className="h-3.5 w-3.5" /> : <ArrowUpIcon className="h-3.5 w-3.5" />}
+                        {sort.desc ? (
+                          <ArrowDownIcon className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowUpIcon className="h-3.5 w-3.5" />
+                        )}
                       </span>
                     )}
                   </button>
@@ -367,44 +358,44 @@ export function TreeTable({
             <div role="cell">{empty}</div>
           </div>
         ) : (
-        <div role="rowgroup" style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
-          {virtualItems.map((item) => {
-            const flat = data[item.index];
-            const tableRow = table.getRowModel().rows[item.index];
-            if (!flat || !tableRow) return null;
-            const row = flat.row;
-            const protectedRow = 'grade' in row && row.grade === 'danger';
-            const open = selectedKey !== null && selectedKey === pathKey(row.path);
-            return (
-              <div
-                key={item.key}
-                role="row"
-                aria-rowindex={item.index + 2}
-                data-index={item.index}
-                ref={virtualizer.measureElement}
-                className={`${grid} absolute left-0 top-0 w-full border-b border-hairline text-sm transition-colors duration-150 ${EASE} ${
-                  open ? 'bg-accent-soft/50' : protectedRow ? 'bg-canvas/50' : 'hover:bg-canvas/60'
-                }`}
-                style={{ transform: `translateY(${item.start}px)` }}
-              >
-                {tableRow.getVisibleCells().map((cell) => (
-                  <div
-                    key={cell.id}
-                    role="cell"
-                    className={`min-w-0 truncate px-2 py-2 ${RIGHT_ALIGNED.has(cell.column.id) ? 'text-right' : ''}`}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </div>
-                ))}
-                {open && !browse && (
-                  <div role="cell" style={{ gridColumn: '1 / -1' }} className="min-w-0">
-                    <GradeDisclosure row={row as ResultRow} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+          <div role="rowgroup" style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+            {virtualItems.map((item) => {
+              const flat = data[item.index];
+              const tableRow = table.getRowModel().rows[item.index];
+              if (!flat || !tableRow) return null;
+              const row = flat.row;
+              const protectedRow = 'grade' in row && row.grade === 'danger';
+              const open = selectedKey !== null && selectedKey === pathKey(row.path);
+              return (
+                <div
+                  key={item.key}
+                  role="row"
+                  aria-rowindex={item.index + 2}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                  className={`${grid} absolute left-0 top-0 w-full border-b border-hairline text-sm transition-colors duration-150 ${EASE} ${
+                    open ? 'bg-accent-soft/50' : protectedRow ? 'bg-canvas/50' : 'hover:bg-canvas/60'
+                  }`}
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  {tableRow.getVisibleCells().map((cell) => (
+                    <div
+                      key={cell.id}
+                      role="cell"
+                      className={`min-w-0 truncate px-2 py-2 ${RIGHT_ALIGNED.has(cell.column.id) ? 'text-right' : ''}`}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </div>
+                  ))}
+                  {open && !browse && (
+                    <div role="cell" style={{ gridColumn: '1 / -1' }} className="min-w-0">
+                      <GradeDisclosure row={row as ResultRow} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
       {scrollState.overflowing && !scrollState.atEnd && (

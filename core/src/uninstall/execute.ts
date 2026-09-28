@@ -75,10 +75,7 @@ export interface RemovalExecutionDeps {
   createBackup?: (candidates: readonly RegistryCandidate[], appId: string) => Promise<BackupResult>;
   runUninstaller?: UninstallerRunner;
   checkAppKeyPresent?: () => Promise<boolean>;
-  waitForRemoval?: (options: {
-    check: () => Promise<boolean>;
-    shouldStop: () => boolean;
-  }) => Promise<VerifyResult>;
+  waitForRemoval?: (options: { check: () => Promise<boolean>; shouldStop: () => boolean }) => Promise<VerifyResult>;
   removeFile?: FileRemover;
   deleteRegistryKey?: (fullKeyPath: string) => Promise<boolean>;
   startup?: StartupActions;
@@ -236,11 +233,7 @@ export async function executeRemoval(
       /* observers must never break a removal run */
     }
   };
-  const phase = (
-    name: UninstallPhase,
-    status: 'started' | 'done' | 'failed' | 'skipped',
-    note?: string,
-  ): void => {
+  const phase = (name: UninstallPhase, status: 'started' | 'done' | 'failed' | 'skipped', note?: string): void => {
     emit(note === undefined ? { type: 'phase', phase: name, status } : { type: 'phase', phase: name, status, note });
     deps.journal.append('phase', note === undefined ? { phase: name, status } : { phase: name, status, note });
   };
@@ -273,9 +266,7 @@ export async function executeRemoval(
     }
     return true;
   });
-  const selectedStartup = plan.startup.filter(
-    (item) => selection.has(item.entryId) && item.action !== 'none',
-  );
+  const selectedStartup = plan.startup.filter((item) => selection.has(item.entryId) && item.action !== 'none');
 
   const uninstaller = plan.uninstaller;
   const uninstallerSelected = request.runUninstaller && uninstaller !== null;
@@ -518,9 +509,7 @@ export async function executeRemoval(
     } else {
       phase('registry', 'started');
       const allowed = new Set(backup.exportedKeys);
-      const ordered = [...selectedRegistry].sort(
-        (a, b) => SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope],
-      );
+      const ordered = [...selectedRegistry].sort((a, b) => SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope]);
       const removeKey = deps.deleteRegistryKey ?? defaultDeleteRegistryKey;
       for (const item of ordered) {
         const full = fullRegistryPath(item.hive, item.path);

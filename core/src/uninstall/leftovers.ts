@@ -4,11 +4,7 @@ import { defaultProtectedPaths } from '../cleaner/guard';
 import { vendorKey } from '../system/installed-apps';
 import type { InstalledApp } from '../system/installed-apps';
 import { matchAppName } from './apps';
-import {
-  assertUninstallTarget,
-  defaultUninstallParents,
-  normalizePlanPath,
-} from './path-policy';
+import { assertUninstallTarget, defaultUninstallParents, normalizePlanPath } from './path-policy';
 import type { UninstallTargetDenial } from './path-policy';
 import { uninstallItemId } from './types';
 import type { KeptItem, LeftoverCandidate, LeftoverClass, UninstallGrade } from './types';
@@ -213,9 +209,7 @@ export function discoverLeftovers(
     programData: options.roots.programData,
     userProfile: options.home,
   }).map(canonical);
-  const rootKeys = ROOT_CLASSES.map((spec) => canonical(options.roots[spec.key])).filter(
-    (key) => key.length > 0,
-  );
+  const rootKeys = ROOT_CLASSES.map((spec) => canonical(options.roots[spec.key])).filter((key) => key.length > 0);
 
   function requiresAdmin(path: string): boolean {
     if (underRoot(path, options.roots.programData)) return true;

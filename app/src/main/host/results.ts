@@ -163,10 +163,7 @@ export function applyMatchesToRows(rows: ResultRow[], matches: ResultMatch[]): R
   return rows;
 }
 
-export function applyFindingsToRows(
-  rows: ResultRow[],
-  findings: ReadonlyArray<CacheFinding>,
-): ResultRow[] {
+export function applyFindingsToRows(rows: ResultRow[], findings: ReadonlyArray<CacheFinding>): ResultRow[] {
   if (findings.length === 0) return rows;
   const byKey = new Map<string, CacheFinding>();
   for (const finding of findings) byKey.set(pathKey(finding.path), finding);

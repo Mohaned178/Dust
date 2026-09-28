@@ -173,8 +173,7 @@ function buildCandidates(
       if (vendorKeyName.length === 0 || EXCLUDED_VENDOR_KEYS.has(vendorKeyName)) continue;
       const strength = matchAppName(vendor.name, app);
       if (strength === null) continue;
-      const shared =
-        others.some((other) => matchAppName(vendor.name, other) !== null) === true;
+      const shared = others.some((other) => matchAppName(vendor.name, other) !== null) === true;
       out.push(
         candidate(
           hiveKeys.hive,
@@ -187,8 +186,7 @@ function buildCandidates(
       for (const child of vendor.children) {
         const childStrength = matchAppName(child, app);
         if (childStrength === null) continue;
-        const childShared =
-          others.some((other) => matchAppName(child, other) !== null) === true;
+        const childShared = others.some((other) => matchAppName(child, other) !== null) === true;
         out.push(
           candidate(
             hiveKeys.hive,

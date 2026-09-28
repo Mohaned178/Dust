@@ -45,11 +45,7 @@ export interface BuildPlanOptions {
   makeId?: () => string;
 }
 
-export async function buildPlan(
-  rules: Rule[],
-  ctx: RuleContext,
-  options: BuildPlanOptions = {},
-): Promise<CleanupPlan> {
+export async function buildPlan(rules: Rule[], ctx: RuleContext, options: BuildPlanOptions = {}): Promise<CleanupPlan> {
   validateRules(rules);
 
   const items: PlanItem[] = [];

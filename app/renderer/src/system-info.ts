@@ -103,10 +103,7 @@ export function formatBios(bios: SystemInfoBios): string | null {
   return bios.version ?? bios.date;
 }
 
-export function formatSystemInfoText(
-  snapshot: SystemInfoStatic,
-  live: SystemInfoLive | null,
-): string {
+export function formatSystemInfoText(snapshot: SystemInfoStatic, live: SystemInfoLive | null): string {
   const blocks: string[][] = [['Dust System Info', `Captured: ${formatCapturedAt(snapshot.capturedAt)}`]];
 
   const system: string[] = [];
@@ -135,8 +132,7 @@ export function formatSystemInfoText(
   }
 
   const firmware: string[] = [];
-  const board =
-    snapshot.board === null ? null : joinBoard(snapshot.board.manufacturer, snapshot.board.product);
+  const board = snapshot.board === null ? null : joinBoard(snapshot.board.manufacturer, snapshot.board.product);
   if (board !== null) firmware.push(`Motherboard: ${board}`);
   const bios = snapshot.bios === null ? null : formatBios(snapshot.bios);
   if (bios !== null) firmware.push(`BIOS: ${bios}`);

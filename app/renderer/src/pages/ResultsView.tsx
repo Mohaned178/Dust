@@ -172,7 +172,6 @@ export function ResultsView({
     );
   }, [announce, live.finished, liveMode]);
 
-
   const allContributors = useMemo(() => {
     const startedAt = performance.now();
     const out: Contributor[] = [];
@@ -197,9 +196,7 @@ export function ResultsView({
     const scope = reviewToo ? allContributors : safe;
     const visible = scope.filter((row) => !kept.has(pathKey(row.path)));
     if (query === '') return visible;
-    return visible.filter(
-      (row) => row.path.toLowerCase().includes(query) || row.name.toLowerCase().includes(query),
-    );
+    return visible.filter((row) => row.path.toLowerCase().includes(query) || row.name.toLowerCase().includes(query));
   }, [allContributors, safe, reviewToo, kept, query]);
   const visibleContributors = useMemo(() => listed.slice(0, CONTRIBUTOR_CAP), [listed]);
 
@@ -270,13 +267,7 @@ export function ResultsView({
   const flatRows = useMemo(() => {
     if (!treeOpen) return [];
     const startedAt = performance.now();
-    const next = flattenVisible(
-      store,
-      treeExpanded,
-      sort,
-      treeFilter,
-      query === '' ? matchSet : null,
-    );
+    const next = flattenVisible(store, treeExpanded, sort, treeFilter, query === '' ? matchSet : null);
     recordRendererSample('results.flattenVisible', performance.now() - startedAt);
     return next;
   }, [version, treeExpanded, sort, treeFilter, matchSet, query, treeOpen, store]);
@@ -303,7 +294,7 @@ export function ResultsView({
   }, [flatRows, showDanger, version, root, store]);
   const totalBytes = useMemo(() => store.nodes.get(pathKey(root))?.bytes ?? 0, [version, root, store]);
 
-  const categories = useLive ? live.categories : state?.categories ?? [];
+  const categories = useLive ? live.categories : (state?.categories ?? []);
   const stripCategories = useMemo(
     () => (onOpenDevCleanup !== undefined ? categories : categories.filter((row) => row.category !== 'npm-projects')),
     [categories, onOpenDevCleanup],

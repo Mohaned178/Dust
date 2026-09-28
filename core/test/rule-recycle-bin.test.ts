@@ -17,7 +17,9 @@ describe('recycleBinRule', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]).toMatchObject({ path: 'C:\\$Recycle.Bin', grade: 'review', bytes: 4096 });
     expect(matches[0]!.recovery).toEqual({ kind: 'junk', reason: 'Emptied items are permanently gone' });
-    expect(matches[0]!.evidence).toBe('12 items, 4096 bytes on C: for the current user, dated 1970-01-01 to 1970-01-01');
+    expect(matches[0]!.evidence).toBe(
+      '12 items, 4096 bytes on C: for the current user, dated 1970-01-01 to 1970-01-01',
+    );
     expect(rule.action).toEqual({ kind: 'empty-recycle-bin' });
   });
 

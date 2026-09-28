@@ -55,7 +55,11 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
 
   function flush(): void {
     if (disposed && itemCount() === 0) return;
-    const progressChanged = filesSeen !== flushedFiles || bytesSeen !== flushedBytes || errors !== flushedErrors || currentPath !== flushedPath;
+    const progressChanged =
+      filesSeen !== flushedFiles ||
+      bytesSeen !== flushedBytes ||
+      errors !== flushedErrors ||
+      currentPath !== flushedPath;
     if (itemCount() === 0 && !progressChanged) return;
 
     const progress = progressChanged
@@ -81,8 +85,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
   }
 
   function pendingItemCount(): number {
-    const progressItems =
-      filesSeen - flushedFiles + (bytesSeen !== flushedBytes ? 1 : 0) + (errors - flushedErrors);
+    const progressItems = filesSeen - flushedFiles + (bytesSeen !== flushedBytes ? 1 : 0) + (errors - flushedErrors);
     return dirOpens.length + markers.length + submits.length + progressItems;
   }
 

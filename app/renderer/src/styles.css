@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme static {
   --color-canvas: #f4f5f7;
@@ -28,7 +28,7 @@
   --color-scrollbar-hover: #b3bac4;
   --color-window: #0a0a0b;
   --color-window-ink: #e5e5e5;
-  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 16px 40px -20px rgba(16, 24, 40, 0.22);
   --shadow-pop: 0 1px 2px rgba(16, 24, 40, 0.06), 0 24px 60px -24px rgba(16, 24, 40, 0.3);
 }
@@ -42,7 +42,11 @@ body,
 body {
   background-color: var(--color-window);
   color: var(--color-window-ink);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
 }
 
 .dust-dashboard,

@@ -2,12 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest';
 import type { DustApi, UninstallEvent, UninstallExecuteRequest, UninstallLaunchHint } from '../../src/shared/ipc';
 import { UninstallView } from '../../renderer/src/pages/UninstallView';
-import {
-  makeApi,
-  makeRemovalReport,
-  makeUninstallApp,
-  makeUninstallPreview,
-} from './fakes';
+import { makeApi, makeRemovalReport, makeUninstallApp, makeUninstallPreview } from './fakes';
 
 function renderView(api: DustApi, hint: UninstallLaunchHint | null = null) {
   const onHintShown = vi.fn();
@@ -110,9 +105,7 @@ describe('UninstallView', () => {
       runUninstaller: true,
       quiet: false,
     });
-    expect(calls[0]!.selection).toEqual(
-      expect.arrayContaining(['file-local', 'reg-vendor', 'reg-uninstall']),
-    );
+    expect(calls[0]!.selection).toEqual(expect.arrayContaining(['file-local', 'reg-vendor', 'reg-uninstall']));
     expect(calls[0]!.selection).not.toContain('file-roaming');
     expect(calls[0]!.acknowledge).toEqual(['reg-vendor']);
 

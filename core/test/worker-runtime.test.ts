@@ -111,7 +111,10 @@ describe('worker runtime', () => {
 
     const batches = events.filter((e) => e.type === 'batch');
     expect(batches.length).toBeGreaterThan(1);
-    const totalProgress = batches.reduce((sum, e) => (e.type === 'batch' && e.batch.progress ? sum + e.batch.progress.filesSeen : sum), 0);
+    const totalProgress = batches.reduce(
+      (sum, e) => (e.type === 'batch' && e.batch.progress ? sum + e.batch.progress.filesSeen : sum),
+      0,
+    );
     expect(totalProgress).toBe(6);
   });
 

@@ -39,7 +39,11 @@ function countsFor(entries: StartupEntry[]): StartupListState['counts'] {
 function moveEntry(state: StartupListState, id: string, next: boolean): StartupListState {
   const entries = state.entries.map((entry) =>
     entry.id === id
-      ? { ...entry, state: next ? ('enabled' as const) : ('disabled' as const), disabledKind: next ? null : ('dust' as const) }
+      ? {
+          ...entry,
+          state: next ? ('enabled' as const) : ('disabled' as const),
+          disabledKind: next ? null : ('dust' as const),
+        }
       : entry,
   );
   return { ...state, entries, counts: countsFor(entries) };
@@ -81,13 +85,10 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
     load();
   }, [load]);
 
-  const showToast = useCallback(
-    (message: string, durationMs: number, action?: { label: string; run: () => void }) => {
-      toastKey.current += 1;
-      setToast({ key: toastKey.current, message, durationMs, action });
-    },
-    [],
-  );
+  const showToast = useCallback((message: string, durationMs: number, action?: { label: string; run: () => void }) => {
+    toastKey.current += 1;
+    setToast({ key: toastKey.current, message, durationMs, action });
+  }, []);
 
   const undo = useCallback(
     async (entry: StartupEntry) => {
@@ -236,9 +237,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
       await api.relaunchElevated(adminEntry.id);
     } catch {
       setAdminBusy(false);
-      setAdminError(
-        'Could not relaunch with administrator rights. Try again, or turn the entry off in Task Manager.',
-      );
+      setAdminError('Could not relaunch with administrator rights. Try again, or turn the entry off in Task Manager.');
     }
   }, [adminEntry, api]);
 
@@ -309,11 +308,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
           key={toast.key}
           message={toast.message}
           durationMs={toast.durationMs}
-          action={
-            toast.action === undefined
-              ? undefined
-              : { label: toast.action.label, onClick: toast.action.run }
-          }
+          action={toast.action === undefined ? undefined : { label: toast.action.label, onClick: toast.action.run }}
           onDismiss={() => setToast(null)}
         />
       )}

@@ -9,9 +9,7 @@ import { makeRule } from './rule-fixtures';
 
 describe('validateRules', () => {
   it('accepts distinct, non-empty rules', () => {
-    expect(() =>
-      validateRules([makeRule({ id: 'a', matches: [] }), makeRule({ id: 'b', matches: [] })]),
-    ).not.toThrow();
+    expect(() => validateRules([makeRule({ id: 'a', matches: [] }), makeRule({ id: 'b', matches: [] })])).not.toThrow();
   });
 
   it('rejects duplicate ids', () => {

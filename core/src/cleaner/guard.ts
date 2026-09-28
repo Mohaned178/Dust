@@ -61,10 +61,7 @@ export function canonicalizePath(target: string): string {
   return normalized.slice(0, end);
 }
 
-export function checkDeletable(
-  target: string,
-  options: GuardOptions & { exemptExact?: string[] } = {},
-): GuardResult {
+export function checkDeletable(target: string, options: GuardOptions & { exemptExact?: string[] } = {}): GuardResult {
   const candidate = canonicalizePath(target);
   const lowerCandidate = candidate.toLowerCase();
   const childSep = sep.toLowerCase();

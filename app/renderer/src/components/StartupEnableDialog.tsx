@@ -25,8 +25,7 @@ export function StartupEnableDialog({ entry, busy, error, onCancel, onConfirm }:
     <CleanDialog label="Turn on startup entry" onClose={onCancel} dismissible={!busy}>
       <h2 className="text-xl font-semibold tracking-tight text-ink">Turn on {entry.name}?</h2>
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-        This entry is currently turned off in Windows startup settings. Turning it on will make it run when you
-        sign in.
+        This entry is currently turned off in Windows startup settings. Turning it on will make it run when you sign in.
       </p>
       {entry.requiresAdmin && (
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">This requires administrator rights.</p>

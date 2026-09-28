@@ -5,11 +5,7 @@ import { canonicalizePath } from './guard';
 import { executeItem } from './executor';
 import type { ItemResult } from './executor';
 
-export type PlanTokenErrorCode =
-  | 'unknown-plan'
-  | 'consumed-plan'
-  | 'unacknowledged-review'
-  | 'rule-not-in-plan';
+export type PlanTokenErrorCode = 'unknown-plan' | 'consumed-plan' | 'unacknowledged-review' | 'rule-not-in-plan';
 
 export class PlanTokenError extends Error {
   constructor(

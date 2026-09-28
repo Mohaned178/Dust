@@ -114,9 +114,7 @@ describe('Dashboard', () => {
       .mockResolvedValueOnce(makeResultsState());
     renderDashboard({ api: makeApi({ getResults }) });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "Couldn't load category details: EIO: i/o error",
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load category details: EIO: i/o error");
     expect(screen.queryByRole('button', { name: /reclaimable/ })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Developer cleanup' })).toBeNull();
 
@@ -299,7 +297,11 @@ describe('Dashboard', () => {
   });
 
   it('shows a banner when the scan cannot start', async () => {
-    const onAnalyze = vi.fn(async () => ({ ok: false as const, reason: 'start-failed' as const, message: 'no worker' }));
+    const onAnalyze = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'start-failed' as const,
+      message: 'no worker',
+    }));
     renderDashboard({ onAnalyze });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Re-analyze C:\\' }));
@@ -317,7 +319,11 @@ describe('Dashboard', () => {
   });
 
   it('sets the scan start error in monospace', async () => {
-    const onAnalyze = vi.fn(async () => ({ ok: false as const, reason: 'start-failed' as const, message: 'no worker' }));
+    const onAnalyze = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'start-failed' as const,
+      message: 'no worker',
+    }));
     renderDashboard({ onAnalyze });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Re-analyze C:\\' }));
@@ -327,8 +333,7 @@ describe('Dashboard', () => {
   it('sets the running scan drive path in monospace', async () => {
     renderDashboard({
       api: makeApi({
-        getDashboard: async () =>
-          makeDashboardState({ scan: { kind: 'analyze', root: 'C:\\', startedAt: 1 } }),
+        getDashboard: async () => makeDashboardState({ scan: { kind: 'analyze', root: 'C:\\', startedAt: 1 } }),
       }),
     });
 

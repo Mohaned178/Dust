@@ -88,9 +88,9 @@ describe('checkDeletable', () => {
       allowed: false,
       reason: 'inside-protected',
     });
-    expect(
-      checkDeletable('C:\\Windows\\Temp\\', { ...env, exemptExact: ['C:\\Windows\\Temp\\'] }),
-    ).toEqual({ allowed: true });
+    expect(checkDeletable('C:\\Windows\\Temp\\', { ...env, exemptExact: ['C:\\Windows\\Temp\\'] })).toEqual({
+      allowed: true,
+    });
   });
 
   it('refuses every trailing-separator/case/dot-dot variant of a protected root without an exemption', () => {

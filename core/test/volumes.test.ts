@@ -21,7 +21,12 @@ describe('getVolumeUsage', () => {
       return;
     }
     const [usage] = getVolumeUsage(['\\\\?\\Volume{00000000-0000-0000-0000-000000000000}\\']);
-    expect(usage).toEqual({ volume: '\\\\?\\Volume{00000000-0000-0000-0000-000000000000}\\', label: null, totalBytes: null, freeBytes: null });
+    expect(usage).toEqual({
+      volume: '\\\\?\\Volume{00000000-0000-0000-0000-000000000000}\\',
+      label: null,
+      totalBytes: null,
+      freeBytes: null,
+    });
   });
 
   it('falls through to nulls for an unmounted drive letter on every platform', () => {

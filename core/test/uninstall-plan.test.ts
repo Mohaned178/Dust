@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import {
-  buildRemovalPlan,
-  defaultSelection,
-  missingAcknowledgements,
-  planRequiresAdmin,
-} from '../src/uninstall/plan';
+import { buildRemovalPlan, defaultSelection, missingAcknowledgements, planRequiresAdmin } from '../src/uninstall/plan';
 import type { RemovalPlanEnv } from '../src/uninstall/plan';
 import type { StartupEntryRecord } from '../src/startup/types';
 import { Fixture } from './fixtures';
@@ -52,9 +47,7 @@ function registryQuery(
     ]);
 }
 
-function startupEntry(
-  overrides: Partial<StartupEntryRecord> & { name: string; command: string },
-): StartupEntryRecord {
+function startupEntry(overrides: Partial<StartupEntryRecord> & { name: string; command: string }): StartupEntryRecord {
   return {
     id: 'entry-id',
     source: 'hkcu-run',
@@ -101,11 +94,7 @@ describe('buildRemovalPlan', () => {
       command: { kind: 'exe', launchable: false, blockReason: 'not-absolute' },
     });
     expect(plan.leftovers).toHaveLength(1);
-    expect(plan.registry.map((candidate) => candidate.scope)).toEqual([
-      'vendor-root',
-      'product',
-      'uninstall-key',
-    ]);
+    expect(plan.registry.map((candidate) => candidate.scope)).toEqual(['vendor-root', 'product', 'uninstall-key']);
     expect(plan.startup).toHaveLength(1);
     expect(plan.startup[0]).toMatchObject({ action: 'disable', protected: false });
     expect(plan.totals).toEqual({
@@ -248,9 +237,7 @@ describe('buildRemovalPlan', () => {
       app,
       env,
       registryRead: registryQuery([]),
-      startup: [
-        startupEntry({ id: 'other', name: 'Unrelated', command: 'C:\\Program Files\\Other\\thing.exe' }),
-      ],
+      startup: [startupEntry({ id: 'other', name: 'Unrelated', command: 'C:\\Program Files\\Other\\thing.exe' })],
     });
     expect(plan.startup).toEqual([]);
   });

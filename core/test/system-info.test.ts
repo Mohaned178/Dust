@@ -75,9 +75,7 @@ describe('parseSystemInfoJson', () => {
     );
     expect(parsed?.cpuModel).toBe('CPU');
     expect(parsed?.architecture).toBe(0);
-    expect(parsed?.gpus).toEqual([
-      { name: 'Adapter', driverVersion: null, vramBytes: null, vramUncertain: false },
-    ]);
+    expect(parsed?.gpus).toEqual([{ name: 'Adapter', driverVersion: null, vramBytes: null, vramUncertain: false }]);
   });
 
   it('falls back to AdapterRAM with the uncertain flag when the registry has no entry', () => {
@@ -93,16 +91,12 @@ describe('parseSystemInfoJson', () => {
         vram: [],
       }),
     );
-    expect(parsed?.gpus).toEqual([
-      { name: 'GPU', driverVersion: null, vramBytes: 4293918720, vramUncertain: true },
-    ]);
+    expect(parsed?.gpus).toEqual([{ name: 'GPU', driverVersion: null, vramBytes: 4293918720, vramUncertain: true }]);
   });
 
   it('omits VRAM when neither the registry nor AdapterRAM reports it', () => {
     const parsed = parseSystemInfoJson(JSON.stringify({ gpus: [{ Name: 'GPU' }] }));
-    expect(parsed?.gpus).toEqual([
-      { name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
-    ]);
+    expect(parsed?.gpus).toEqual([{ name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false }]);
   });
 
   it('matches registry entries per adapter for multi-GPU machines', () => {
@@ -140,9 +134,7 @@ describe('parseSystemInfoJson', () => {
         vram: [{ matchingDeviceId: 'PCI\\VEN_8086&DEV_9999', qwMemorySize: 8589934592 }],
       }),
     );
-    expect(parsed?.gpus).toEqual([
-      { name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
-    ]);
+    expect(parsed?.gpus).toEqual([{ name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false }]);
   });
 
   it('sums cores across sockets and drops empty GPU entries', () => {
@@ -157,9 +149,7 @@ describe('parseSystemInfoJson', () => {
     );
     expect(parsed?.physicalCores).toBe(16);
     expect(parsed?.logicalThreads).toBe(32);
-    expect(parsed?.gpus).toEqual([
-      { name: 'Real GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
-    ]);
+    expect(parsed?.gpus).toEqual([{ name: 'Real GPU', driverVersion: null, vramBytes: null, vramUncertain: false }]);
   });
 
   it('returns nulls for missing sections instead of inventing values', () => {
@@ -240,7 +230,7 @@ describe('getSystemInfoStatic', () => {
       hardwareAvailable: true,
       os: { name: 'Windows 11 Pro', version: '25H2', build: '26200.9457', arch: 'x64' },
       hostname: 'dev-machine',
-      uptimeMs: ((2 * 24 + 4) * 3600) * 1000,
+      uptimeMs: (2 * 24 + 4) * 3600 * 1000,
       cpu: { model: 'AMD Ryzen 5 5500', physicalCores: 6, logicalThreads: 12 },
       gpus: [
         {

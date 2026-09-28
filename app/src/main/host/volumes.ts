@@ -5,11 +5,7 @@ export interface VolumeCache {
   invalidate(): void;
 }
 
-export function createVolumeCache(
-  load: () => Promise<VolumeInfo[]>,
-  ttlMs: number,
-  now: () => number,
-): VolumeCache {
+export function createVolumeCache(load: () => Promise<VolumeInfo[]>, ttlMs: number, now: () => number): VolumeCache {
   let cached: { at: number; volumes: VolumeInfo[] } | null = null;
   let inflight: Promise<VolumeInfo[]> | null = null;
 

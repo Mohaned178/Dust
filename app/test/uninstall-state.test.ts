@@ -12,7 +12,9 @@ import {
 } from '../renderer/src/uninstall';
 import type { UninstallItemPreview } from '../src/shared/ipc';
 
-function item(overrides: Partial<UninstallItemPreview> & { id: string; kind: UninstallItemPreview['kind'] }): UninstallItemPreview {
+function item(
+  overrides: Partial<UninstallItemPreview> & { id: string; kind: UninstallItemPreview['kind'] },
+): UninstallItemPreview {
   return {
     target: overrides.id,
     label: overrides.id,

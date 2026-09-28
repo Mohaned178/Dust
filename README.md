@@ -105,16 +105,16 @@ Look-up material for day-to-day development.
 
 ### Scripts
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev:app` | Launch the Electron app with a hot-reloading renderer |
-| `npm run build:app` | Production build (renderer + main/preload/worker bundles) |
-| `npm start -w app` | Run the built app |
-| `npm test` | Vitest across both workspaces |
-| `npm test -w core` | Engine tests (plain Node) |
-| `npm test -w app` | Host and renderer tests (Node + jsdom) |
-| `npm run typecheck` | TypeScript checks across both workspaces |
-| `npm run bench -w core` | Scan throughput benchmarks |
+| Command                 | What it does                                              |
+| ----------------------- | --------------------------------------------------------- |
+| `npm run dev:app`       | Launch the Electron app with a hot-reloading renderer     |
+| `npm run build:app`     | Production build (renderer + main/preload/worker bundles) |
+| `npm start -w app`      | Run the built app                                         |
+| `npm test`              | Vitest across both workspaces                             |
+| `npm test -w core`      | Engine tests (plain Node)                                 |
+| `npm test -w app`       | Host and renderer tests (Node + jsdom)                    |
+| `npm run typecheck`     | TypeScript checks across both workspaces                  |
+| `npm run bench -w core` | Scan throughput benchmarks                                |
 
 ### Project structure
 
@@ -184,17 +184,17 @@ DUST_PERF=1 npm test -w core
 
 Environment variables used by development and benchmark tooling — not needed for normal use.
 
-| Flag | Effect |
-| --- | --- |
-| `DUST_PERF=1` | Enables the gated 200k-file throughput test in `core` |
-| `DUST_SYSTEM_INFO_SMOKE=1` | Runs the real Windows system-info query smoke test in `core` |
-| `DUST_TIMING=1` | Logs IPC timing to `userData/perf.log` |
-| `DUST_INSTRUMENT=1` | Collects host-process timing samples |
-| `DUST_BENCH_ROOT=<path>` | Runs the benchmark harness against a drive and writes `bench-report.json` |
-| `DUST_BENCH_MODE=browse` | Benchmarks a browse scan instead of an analyze |
-| `DUST_BENCH_REPORT=<path>` | Overrides the bench report output path |
-| `DUST_AUTO=1` | Runs a scripted navigation pass (UI timing) |
-| `DUST_DEV_SERVER_URL` | Points the main process at an existing Vite server |
+| Flag                       | Effect                                                                    |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `DUST_PERF=1`              | Enables the gated 200k-file throughput test in `core`                     |
+| `DUST_SYSTEM_INFO_SMOKE=1` | Runs the real Windows system-info query smoke test in `core`              |
+| `DUST_TIMING=1`            | Logs IPC timing to `userData/perf.log`                                    |
+| `DUST_INSTRUMENT=1`        | Collects host-process timing samples                                      |
+| `DUST_BENCH_ROOT=<path>`   | Runs the benchmark harness against a drive and writes `bench-report.json` |
+| `DUST_BENCH_MODE=browse`   | Benchmarks a browse scan instead of an analyze                            |
+| `DUST_BENCH_REPORT=<path>` | Overrides the bench report output path                                    |
+| `DUST_AUTO=1`              | Runs a scripted navigation pass (UI timing)                               |
+| `DUST_DEV_SERVER_URL`      | Points the main process at an existing Vite server                        |
 
 ### Troubleshooting
 

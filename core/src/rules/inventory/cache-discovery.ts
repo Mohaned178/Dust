@@ -22,14 +22,7 @@ const GPU_CACHE_NAMES = new Set([
   'gpu_cache',
 ]);
 
-const STRONG_CACHE_NAMES = new Set([
-  'cache',
-  'cache_data',
-  'code cache',
-  'gpucache',
-  'cachestorage',
-  '.cache',
-]);
+const STRONG_CACHE_NAMES = new Set(['cache', 'cache_data', 'code cache', 'gpucache', 'cachestorage', '.cache']);
 
 const WEAK_CACHE_NAMES = new Set(['storage', 'cacheddata']);
 
@@ -135,12 +128,7 @@ interface Discovered {
   finding: CacheFinding | null;
 }
 
-function place(
-  out: Map<string, Discovered>,
-  entry: Discovered,
-  rank: number,
-  key: string,
-): void {
+function place(out: Map<string, Discovered>, entry: Discovered, rank: number, key: string): void {
   const existing = out.get(key);
   if (existing !== undefined && existing.rank >= rank) return;
   out.set(key, entry);
@@ -190,8 +178,7 @@ function classify(
     return;
   }
 
-  const owner: InstalledAppMatch | null =
-    trusted && vendor.length > 0 ? matchInstalledApp(vendor, apps) : null;
+  const owner: InstalledAppMatch | null = trusted && vendor.length > 0 ? matchInstalledApp(vendor, apps) : null;
   if (owner !== null) {
     const label = owner.strength === 'product' ? owner.app.displayName : vendor;
     const reason =

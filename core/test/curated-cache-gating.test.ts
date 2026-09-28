@@ -72,9 +72,7 @@ describe('curated cache gating', () => {
     expect(await discordCacheRule(env).match(ctx)).toEqual([]);
 
     const findings = curatedCacheFindings(ctx, env);
-    expect(findings.map((finding) => finding.path).sort()).toEqual(
-      [cache, `${env.appData}\\discord\\Cache`].sort(),
-    );
+    expect(findings.map((finding) => finding.path).sort()).toEqual([cache, `${env.appData}\\discord\\Cache`].sort());
     expect(findings.every((finding) => finding.grade === 'review')).toBe(true);
     expect(findings.every((finding) => finding.kind === 'curated-leftover')).toBe(true);
     expect(findings.map((finding) => finding.label).sort()).toEqual(['Chrome', 'Discord']);

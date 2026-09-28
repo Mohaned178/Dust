@@ -7,7 +7,11 @@ import { makeApi } from './fakes';
 function browseRow(path: string, bytes: number, parent: string | null, overrides: Partial<BrowseRow> = {}): BrowseRow {
   return {
     path,
-    name: path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path,
+    name:
+      path
+        .replace(/[\\/]+$/, '')
+        .split(/[\\/]/)
+        .pop() ?? path,
     parent,
     bytes,
     allocatedBytes: bytes,

@@ -61,7 +61,10 @@ function open(path: string, isRoot: boolean, overrides: Partial<DirOpen> = {}): 
   };
 }
 
-function batch(dirOpens: DirOpen[], extra: Partial<{ submits: string[]; markers: Array<{ kind: 'package-json'; path: string }> }> = {}): WorkerEvent {
+function batch(
+  dirOpens: DirOpen[],
+  extra: Partial<{ submits: string[]; markers: Array<{ kind: 'package-json'; path: string }> }> = {},
+): WorkerEvent {
   return {
     type: 'batch',
     batch: { dirOpens, markers: extra.markers ?? [], submits: extra.submits ?? [], progress: null },
@@ -129,8 +132,19 @@ describe('ScanCoordinator', () => {
     const t = h.transports[0]!;
     t.emit({ type: 'ready' });
     t.emit(batch([open(ROOT, true, { childDirs: [join(ROOT, 'a')], directBytes: 1, directAllocatedBytes: 4096 })]));
-    t.emit(batch([open(join(ROOT, 'a'), false, { directBytes: 5, directAllocatedBytes: 4096, directFileCount: 1, childDirs: [join(ROOT, 'a', 'b')] })]));
-    t.emit(batch([open(join(ROOT, 'a', 'b'), false, { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })]));
+    t.emit(
+      batch([
+        open(join(ROOT, 'a'), false, {
+          directBytes: 5,
+          directAllocatedBytes: 4096,
+          directFileCount: 1,
+          childDirs: [join(ROOT, 'a', 'b')],
+        }),
+      ]),
+    );
+    t.emit(
+      batch([open(join(ROOT, 'a', 'b'), false, { directBytes: 7, directAllocatedBytes: 4096, directFileCount: 1 })]),
+    );
 
     const result = await run;
     expect(order).toEqual([join(ROOT, 'a', 'b'), join(ROOT, 'a')]);
@@ -201,7 +215,11 @@ describe('ScanCoordinator', () => {
     const run = coordinator.run();
     const [w0, w1] = h.transports;
     w0!.emit({ type: 'ready' });
-    w0!.emit(batch([open(ROOT, true, { childDirs: [join(ROOT, 'a'), join(ROOT, 'b')] })], { submits: [join(ROOT, 'a'), join(ROOT, 'b')] }));
+    w0!.emit(
+      batch([open(ROOT, true, { childDirs: [join(ROOT, 'a'), join(ROOT, 'b')] })], {
+        submits: [join(ROOT, 'a'), join(ROOT, 'b')],
+      }),
+    );
     // w0 stays busy with the root task; the idle w1 claims the first queued task.
     w1!.emit({ type: 'ready' });
     expect(w1!.lastTask()?.path).toBe(join(ROOT, 'a'));

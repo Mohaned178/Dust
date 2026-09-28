@@ -28,7 +28,11 @@ describe('buildElevationCommand', () => {
 
 describe('buildElevationLaunchCommand', () => {
   it('launches elevated, waits for the ready signal, and reports real outcomes', () => {
-    const script = buildElevationLaunchCommand('C:\\Dust.exe', ["C:\\app's path", '--dust-elevated'], "C:\\Data\\elevated.ready");
+    const script = buildElevationLaunchCommand(
+      'C:\\Dust.exe',
+      ["C:\\app's path", '--dust-elevated'],
+      'C:\\Data\\elevated.ready',
+    );
     expect(script).toContain("Start-Process -FilePath 'C:\\Dust.exe'");
     expect(script).toContain("-ArgumentList 'C:\\app''s path','--dust-elevated' -Verb RunAs -PassThru");
     expect(script).toContain("$ack = 'C:\\Data\\elevated.ready'");
@@ -41,14 +45,14 @@ describe('buildElevationLaunchCommand', () => {
 
   it('omits the argument list when there is nothing to pass', () => {
     const script = buildElevationLaunchCommand('C:\\Dust.exe', [], 'C:\\a.ready');
-    expect(script).toContain("-Verb RunAs -PassThru");
+    expect(script).toContain('-Verb RunAs -PassThru');
     expect(script).not.toContain('-ArgumentList');
   });
 });
 
 describe('elevation flags and args', () => {
   it('encodes scripts for -EncodedCommand without quoting hazards', () => {
-    const script = "$a = \"x\"; [Console]::Error.WriteLine('ok')\n";
+    const script = '$a = "x"; [Console]::Error.WriteLine(\'ok\')\n';
     const encoded = encodePowerShellCommand(script);
     expect(Buffer.from(encoded, 'base64').toString('utf16le')).toBe(script);
   });

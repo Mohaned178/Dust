@@ -77,7 +77,10 @@ describe('classifyProjects', () => {
       restorability: { grade: 'green', reasons: [], restoreCommand: 'npm ci' },
     });
     expect(project.activity).toEqual({ ms: NOW - 200 * DAY, source: 'files' });
-    expect(project.nodeModules).toEqual({ paths: [{ path: join(fixture.root, 'app', 'node_modules'), bytes: 900 }], bytes: 900 });
+    expect(project.nodeModules).toEqual({
+      paths: [{ path: join(fixture.root, 'app', 'node_modules'), bytes: 900 }],
+      bytes: 900,
+    });
   });
 
   it('grades missing lockfiles and patches yellow with best-effort commands', () => {
@@ -141,7 +144,9 @@ describe('classifyProjects', () => {
     fixture.file('private/package.json', '{}');
     fixture.file(
       'private/package-lock.json',
-      JSON.stringify({ packages: { 'node_modules/secret': { resolved: 'https://npm.internal.example/secret/-/secret-2.0.0.tgz' } } }),
+      JSON.stringify({
+        packages: { 'node_modules/secret': { resolved: 'https://npm.internal.example/secret/-/secret-2.0.0.tgz' } },
+      }),
     );
     fixture.dir('private/node_modules');
     const analysis = classifyProjects({

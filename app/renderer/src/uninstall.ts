@@ -1,13 +1,7 @@
 import type { RemovalReport, UninstallItemPreview } from '../../src/shared/ipc';
 
 export type UninstallSectionId =
-  | 'install-dir'
-  | 'app-data'
-  | 'program-data'
-  | 'user-data'
-  | 'temp'
-  | 'registry'
-  | 'startup';
+  'install-dir' | 'app-data' | 'program-data' | 'user-data' | 'temp' | 'registry' | 'startup';
 
 export interface UninstallSection {
   id: UninstallSectionId;
@@ -40,11 +34,7 @@ export function groupUninstallItems(items: readonly UninstallItemPreview[]): Uni
   const buckets = new Map<UninstallSectionId, UninstallItemPreview[]>();
   for (const item of items) {
     const section =
-      item.kind === 'registry'
-        ? 'registry'
-        : item.kind === 'startup'
-          ? 'startup'
-          : (item.dataClass ?? 'app-data');
+      item.kind === 'registry' ? 'registry' : item.kind === 'startup' ? 'startup' : (item.dataClass ?? 'app-data');
     const list = buckets.get(section) ?? [];
     list.push(item);
     buckets.set(section, list);

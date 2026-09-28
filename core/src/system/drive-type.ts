@@ -71,9 +71,7 @@ export function parseVolumesJson(raw: string): VolumeInfo[] {
     const root = typeof record.root === 'string' ? record.root : '';
     if (!/^[A-Za-z]:\\$/.test(root)) continue;
     const label =
-      typeof record.FileSystemLabel === 'string' && record.FileSystemLabel.length > 0
-        ? record.FileSystemLabel
-        : null;
+      typeof record.FileSystemLabel === 'string' && record.FileSystemLabel.length > 0 ? record.FileSystemLabel : null;
     volumes.push({
       root: `${root.slice(0, 1).toUpperCase()}:\\`,
       label,

@@ -61,10 +61,7 @@ describe('RowStore', () => {
 
   it('merges the real parent record in place and sorts siblings', () => {
     const store = createRowStore('C:\\');
-    upsertRows(store, [
-      row('C:\\small', 'C:\\', { bytes: 1 }),
-      row('C:\\big', 'C:\\', { bytes: 100 }),
-    ]);
+    upsertRows(store, [row('C:\\small', 'C:\\', { bytes: 1 }), row('C:\\big', 'C:\\', { bytes: 100 })]);
     upsertRows(store, [row('C:\\big', 'C:\\', { bytes: 100, complete: true, childCount: 0 })]);
 
     const flat = flattenVisible(store, new Set(), { key: 'size', desc: true }, null);
@@ -103,8 +100,22 @@ describe('isRowVisible', () => {
 
 describe('compareRows', () => {
   it('orders by every supported key', () => {
-    const a = row('C:\\a', 'C:\\', { name: 'a', bytes: 2, allocatedBytes: 1, fileCount: 1, grade: 'safe', newestMtimeMs: 5 });
-    const b = row('C:\\b', 'C:\\', { name: 'b', bytes: 1, allocatedBytes: 2, fileCount: 4, grade: 'danger', newestMtimeMs: 9 });
+    const a = row('C:\\a', 'C:\\', {
+      name: 'a',
+      bytes: 2,
+      allocatedBytes: 1,
+      fileCount: 1,
+      grade: 'safe',
+      newestMtimeMs: 5,
+    });
+    const b = row('C:\\b', 'C:\\', {
+      name: 'b',
+      bytes: 1,
+      allocatedBytes: 2,
+      fileCount: 4,
+      grade: 'danger',
+      newestMtimeMs: 9,
+    });
     expect(compareRows(a, b, 'name')).toBeLessThan(0);
     expect(compareRows(a, b, 'size')).toBeGreaterThan(0);
     expect(compareRows(a, b, 'allocated')).toBeLessThan(0);

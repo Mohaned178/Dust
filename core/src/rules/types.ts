@@ -8,13 +8,9 @@ export type CategoryId = 'temp' | 'recycle-bin' | 'npm-cache' | 'app-caches' | '
 
 export type ActionGrade = 'safe' | 'review';
 
-export type Recovery =
-  | { kind: 'regenerate'; command: string }
-  | { kind: 'junk'; reason: string };
+export type Recovery = { kind: 'regenerate'; command: string } | { kind: 'junk'; reason: string };
 
-export type Action =
-  | { kind: 'delete-path' }
-  | { kind: 'empty-recycle-bin' };
+export type Action = { kind: 'delete-path' } | { kind: 'empty-recycle-bin' };
 
 export interface RuleMatch {
   path: string;

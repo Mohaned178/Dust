@@ -30,10 +30,7 @@ function cleanupPath(value: string): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
-export function executableFromCommand(
-  command: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
+export function executableFromCommand(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
   const expanded = command
     .replace(/%([^%]+)%/g, (match, name: string) => {
       const value = env[name] ?? env[name.toUpperCase()] ?? env[name.toLowerCase()];

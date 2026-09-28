@@ -102,11 +102,7 @@ describe('buildRowsFromTree', () => {
 
     const rows = buildRowsFromTree(tree, root, matches, ENV);
 
-    expect(rows.map((row) => row.path)).toEqual([
-      root,
-      join(root, 'proj'),
-      join(root, 'proj', 'node_modules'),
-    ]);
+    expect(rows.map((row) => row.path)).toEqual([root, join(root, 'proj'), join(root, 'proj', 'node_modules')]);
     expect(rows[2]!.action).toMatchObject({ ruleId: 'npm-project-modules', category: 'npm-projects' });
     expect(rows[0]!.parent).toBeNull();
     expect(rows[1]!.parent).toBe(root);
@@ -137,9 +133,45 @@ describe('buildRowsFromSnapshot', () => {
         },
       ],
       folders: [
-        { path: 'C:\\', name: 'C:\\', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 2, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: 'C:\\deep', name: 'deep', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: 'C:\\deep\\a\\b', name: 'b', bytes: 5, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 0 },
+        {
+          path: 'C:\\',
+          name: 'C:\\',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 2,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: 'C:\\deep',
+          name: 'deep',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: 'C:\\deep\\a\\b',
+          name: 'b',
+          bytes: 5,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 0,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 0,
+        },
       ],
     };
 
@@ -176,8 +208,32 @@ describe('buildRowsFromSnapshot', () => {
         },
       ],
       folders: [
-        { path: 'C:\\', name: 'C:\\', bytes: 10, allocatedBytes: 4096, fileCount: 1, folderCount: 1, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 1 },
-        { path: 'C:\\leftover', name: 'leftover', bytes: 5, allocatedBytes: 4096, fileCount: 1, folderCount: 0, newestMtimeMs: 0, errorCount: 0, partial: false, complete: true, childCount: 0 },
+        {
+          path: 'C:\\',
+          name: 'C:\\',
+          bytes: 10,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 1,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 1,
+        },
+        {
+          path: 'C:\\leftover',
+          name: 'leftover',
+          bytes: 5,
+          allocatedBytes: 4096,
+          fileCount: 1,
+          folderCount: 0,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+          complete: true,
+          childCount: 0,
+        },
       ],
     };
 
@@ -285,15 +341,14 @@ describe('summarizeCategories', () => {
       { ruleId: 'mystery', category: 'nonsense', bytes: 99, items: 9 },
     ]);
 
-    expect(rows.map((row) => row.category)).toEqual([
-      'temp',
-      'recycle-bin',
-      'npm-cache',
-      'app-caches',
-      'npm-projects',
-    ]);
+    expect(rows.map((row) => row.category)).toEqual(['temp', 'recycle-bin', 'npm-cache', 'app-caches', 'npm-projects']);
     expect(rows[0]).toMatchObject({ label: 'Temp', bytes: 7, items: 1 });
-    expect(rows[3]).toMatchObject({ label: 'App caches', bytes: 15, items: 3, ruleIds: ['cache-chrome', 'cache-edge'] });
+    expect(rows[3]).toMatchObject({
+      label: 'App caches',
+      bytes: 15,
+      items: 3,
+      ruleIds: ['cache-chrome', 'cache-edge'],
+    });
     expect(rows[1]).toMatchObject({ bytes: 0, items: 0 });
   });
 });

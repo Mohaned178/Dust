@@ -17,7 +17,9 @@ describe('QuickCleanView', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Quick Clean' })).toBeInTheDocument();
     expect(
-      screen.getByText('Quick Clean covers Temp, Recycle Bin, npm cache, and App caches — it never includes npm projects.'),
+      screen.getByText(
+        'Quick Clean covers Temp, Recycle Bin, npm cache, and App caches — it never includes npm projects.',
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Temp, 9.8 KB, Junk by default' }));
     expect(screen.getByText('C:\\Users\\x\\AppData\\Local\\Temp')).toBeInTheDocument();

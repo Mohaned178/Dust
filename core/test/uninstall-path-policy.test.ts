@@ -52,7 +52,10 @@ describe('assertUninstallTarget', () => {
   it('accepts paths strictly inside an allowed parent', () => {
     expect(check('C:\\Program Files\\App')).toEqual({ ok: true, path: 'C:\\Program Files\\App' });
     expect(check('C:\\ProgramData\\Vendor\\App')).toEqual({ ok: true, path: 'C:\\ProgramData\\Vendor\\App' });
-    expect(check('C:\\Users\\bob\\AppData\\Roaming\\App')).toEqual({ ok: true, path: 'C:\\Users\\bob\\AppData\\Roaming\\App' });
+    expect(check('C:\\Users\\bob\\AppData\\Roaming\\App')).toEqual({
+      ok: true,
+      path: 'C:\\Users\\bob\\AppData\\Roaming\\App',
+    });
   });
 
   it('is case insensitive and accepts forward slashes after normalization', () => {

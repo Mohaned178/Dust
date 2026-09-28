@@ -21,7 +21,12 @@ const npmCacheRow: ResultRow = {
   childCount: 0,
   grade: 'safe',
   gradeReason: 'Download cache',
-  action: { ruleId: 'npm-cache', category: 'npm-cache', grade: 'safe', evidence: 'Download cache - re-downloaded on next install' },
+  action: {
+    ruleId: 'npm-cache',
+    category: 'npm-cache',
+    grade: 'safe',
+    evidence: 'Download cache - re-downloaded on next install',
+  },
 };
 
 function withNpmCache(bytes = 1024): CategorySummaryRow[] {
@@ -351,9 +356,7 @@ describe('ResultsView', () => {
     expect(await screen.findByText('Couldn’t load recovery details.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(
-      await screen.findByText('Temporary files are recreated by the apps that need them'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Temporary files are recreated by the apps that need them')).toBeInTheDocument();
     expect(calls).toBe(2);
   });
 

@@ -44,13 +44,7 @@ export const IPC = {
   relaunchElevatedUninstall: 'dust:app:relaunch-elevated-uninstall',
 } as const;
 
-export type {
-  BrowseDeleteResult,
-  RemovalReport,
-  StartupSource,
-  SystemInfoLive,
-  SystemInfoStatic,
-};
+export type { BrowseDeleteResult, RemovalReport, StartupSource, SystemInfoLive, SystemInfoStatic };
 
 export type ScanKind = 'analyze' | 'quick-clean' | 'browse' | 'uninstall';
 
@@ -377,21 +371,13 @@ export interface StartupListState {
   loadedAt: number;
 }
 
-export type StartupListResult =
-  | { ok: true; state: StartupListState }
-  | { ok: false; message: string };
+export type StartupListResult = { ok: true; state: StartupListState } | { ok: false; message: string };
 
 export type StartupToggleRefusal =
-  | 'not-found'
-  | 'protected'
-  | 'needs-admin'
-  | 'conflict'
-  | 'windows-disabled'
-  | 'failed';
+  'not-found' | 'protected' | 'needs-admin' | 'conflict' | 'windows-disabled' | 'failed';
 
 export type StartupToggleResult =
-  | { ok: true; state: StartupListState }
-  | { ok: false; reason: StartupToggleRefusal; message: string };
+  { ok: true; state: StartupListState } | { ok: false; reason: StartupToggleRefusal; message: string };
 
 export interface StartupNotice {
   entryId: string;
@@ -479,12 +465,7 @@ export type UninstallExecuteResult =
   | { ok: false; reason: 'busy'; running: ScanKind }
   | {
       ok: false;
-      reason:
-        | 'unknown-plan'
-        | 'consumed-plan'
-        | 'unacknowledged-review'
-        | 'no-selection'
-        | 'failed';
+      reason: 'unknown-plan' | 'consumed-plan' | 'unacknowledged-review' | 'no-selection' | 'failed';
       message?: string;
     };
 

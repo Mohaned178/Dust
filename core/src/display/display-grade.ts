@@ -39,9 +39,7 @@ export function createDisplayGrader(
     if (profileRoot !== '' && lower === profileRoot) {
       return { grade: 'danger', reason: 'System-critical — read-only' };
     }
-    const insideCritical = subtreeCritical.some(
-      (entry) => lower === entry || lower.startsWith(entry + childSep),
-    );
+    const insideCritical = subtreeCritical.some((entry) => lower === entry || lower.startsWith(entry + childSep));
     if (insideCritical) {
       return { grade: 'danger', reason: 'System-critical — read-only' };
     }
@@ -58,9 +56,6 @@ export function createDisplayGrader(
   };
 }
 
-export function classifyDisplayGrade(
-  path: string,
-  options: { env?: Partial<GuardOptions> } = {},
-): DisplayGradeReason {
+export function classifyDisplayGrade(path: string, options: { env?: Partial<GuardOptions> } = {}): DisplayGradeReason {
   return createDisplayGrader(options)(path);
 }

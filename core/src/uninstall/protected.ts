@@ -50,7 +50,9 @@ const PROTECTED_NAME_PHRASES = [
 ];
 
 function canonical(value: string): string {
-  return normalize(value).replace(/[\\/]+$/, '').toLowerCase();
+  return normalize(value)
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
 }
 
 function underRoot(target: string, root: string): boolean {
@@ -73,10 +75,7 @@ function defaultProgramFiles(): string[] {
   );
 }
 
-export function protectedAppReason(
-  app: ProtectedAppInput,
-  options: ProtectedAppOptions = {},
-): string | null {
+export function protectedAppReason(app: ProtectedAppInput, options: ProtectedAppOptions = {}): string | null {
   const location = app.installLocation;
   const dustInstallPath = options.dustInstallPath;
   if (dustInstallPath !== undefined && underRoot(location, dustInstallPath)) return 'dust-app';
@@ -106,9 +105,6 @@ export function protectedAppReason(
   return null;
 }
 
-export function isProtectedApp(
-  app: ProtectedAppInput,
-  options: ProtectedAppOptions = {},
-): boolean {
+export function isProtectedApp(app: ProtectedAppInput, options: ProtectedAppOptions = {}): boolean {
   return protectedAppReason(app, options) !== null;
 }

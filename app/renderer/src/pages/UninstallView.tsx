@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  DustApi,
-  UninstallAppSummary,
-  UninstallLaunchHint,
-  UninstallListResult,
-} from '../../../src/shared/ipc';
+import type { DustApi, UninstallAppSummary, UninstallLaunchHint, UninstallListResult } from '../../../src/shared/ipc';
 import { StartupToast } from '../components/StartupToast';
 import { UninstallFlow } from '../components/UninstallFlow';
 import { formatBytes } from '../format';
@@ -106,7 +101,10 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
 
       <div className="mx-auto w-full max-w-4xl px-6 pb-24 pt-8 sm:px-8">
         {error !== null && (
-          <p role="alert" className="mb-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
+          <p
+            role="alert"
+            className="mb-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
+          >
             {error}
           </p>
         )}

@@ -25,16 +25,10 @@ export interface StartupEntryRecord {
 }
 
 export type StartupToggleRefusal =
-  | 'not-found'
-  | 'protected'
-  | 'needs-admin'
-  | 'conflict'
-  | 'windows-disabled'
-  | 'failed';
+  'not-found' | 'protected' | 'needs-admin' | 'conflict' | 'windows-disabled' | 'failed';
 
 export type StartupToggleResult =
-  | { ok: true; entries: StartupEntryRecord[] }
-  | { ok: false; reason: StartupToggleRefusal; message: string };
+  { ok: true; entries: StartupEntryRecord[] } | { ok: false; reason: StartupToggleRefusal; message: string };
 
 export interface RunValue {
   name: string;

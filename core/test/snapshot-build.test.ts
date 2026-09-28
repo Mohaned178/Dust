@@ -84,7 +84,16 @@ describe('buildSnapshot', () => {
       tree: result.tree,
       projects: [],
       categories: [{ ruleId: 'system-temp', category: 'temp', bytes: 10, items: 1 }],
-      matches: [{ path: join(fixture.root, 'a'), ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'fixture' }],
+      matches: [
+        {
+          path: join(fixture.root, 'a'),
+          ruleId: 'system-temp',
+          category: 'temp',
+          bytes: 10,
+          grade: 'safe',
+          evidence: 'fixture',
+        },
+      ],
       disks: [{ volume: 'F:\\', totalBytes: 100, freeBytes: 40 }],
       priorCleanedAt: 1500,
     });

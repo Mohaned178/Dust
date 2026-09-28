@@ -36,9 +36,7 @@ describe('scanTree', () => {
     const stats = run(fixture.root, { onFolder: (r) => records.push(r) });
 
     const order = records.map((r) => r.path);
-    expect(order.indexOf(join(fixture.root, 'sub', 'deep'))).toBeLessThan(
-      order.indexOf(join(fixture.root, 'sub')),
-    );
+    expect(order.indexOf(join(fixture.root, 'sub', 'deep'))).toBeLessThan(order.indexOf(join(fixture.root, 'sub')));
 
     const sub = records.find((r) => r.path === join(fixture.root, 'sub'));
     expect(sub).toMatchObject({ bytes: 18, fileCount: 2, folderCount: 1 });

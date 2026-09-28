@@ -98,7 +98,9 @@ describe('registerIpcHandlers', () => {
     expect(await cancelled).toBe(true);
     await Promise.resolve();
 
-    const forwarded = sent.filter((entry) => entry.channel === IPC.scanEvent).map((entry) => entry.payload as ScanEvent);
+    const forwarded = sent
+      .filter((entry) => entry.channel === IPC.scanEvent)
+      .map((entry) => entry.payload as ScanEvent);
     expect(forwarded.some((event) => event.type === 'started')).toBe(true);
     expect(forwarded.some((event) => event.type === 'finished')).toBe(true);
 

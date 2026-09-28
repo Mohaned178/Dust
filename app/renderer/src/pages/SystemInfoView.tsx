@@ -146,8 +146,7 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
             value: snapshot.cpu.logicalThreads === null ? null : String(snapshot.cpu.logicalThreads),
           },
         ];
-  const board =
-    snapshot.board === null ? null : joinBoard(snapshot.board.manufacturer, snapshot.board.product);
+  const board = snapshot.board === null ? null : joinBoard(snapshot.board.manufacturer, snapshot.board.product);
   const bios = snapshot.bios === null ? null : formatBios(snapshot.bios);
   const firmwareRows: Array<{ label: string; value: string | null }> = [];
   if (board !== null) firmwareRows.push({ label: 'Motherboard', value: board });
@@ -198,9 +197,7 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
           </LiveTile>
           <LiveTile label="Memory usage">
             <p className="mt-2 font-mono text-sm tabular-nums text-ink">
-              {live === null
-                ? '—'
-                : `${formatMemory(live.memUsedBytes)} used of ${formatMemory(live.memTotalBytes)}`}
+              {live === null ? '—' : `${formatMemory(live.memUsedBytes)} used of ${formatMemory(live.memTotalBytes)}`}
             </p>
             <div className="mt-2">
               <UsageBar
@@ -252,11 +249,7 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
                           <>
                             {vram}
                             {gpu.vramUncertain && (
-                              <span
-                                className="cursor-help"
-                                title={VRAM_CAVEAT}
-                                aria-label={VRAM_CAVEAT}
-                              >
+                              <span className="cursor-help" title={VRAM_CAVEAT} aria-label={VRAM_CAVEAT}>
                                 *
                               </span>
                             )}
@@ -281,12 +274,7 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
       </div>
 
       {toastKey > 0 && (
-        <StartupToast
-          key={toastKey}
-          message="System info copied."
-          durationMs={3000}
-          onDismiss={() => setToastKey(0)}
-        />
+        <StartupToast key={toastKey} message="System info copied." durationMs={3000} onDismiss={() => setToastKey(0)} />
       )}
     </main>
   );

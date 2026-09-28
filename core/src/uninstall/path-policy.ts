@@ -2,16 +2,9 @@ import { join, normalize, parse, sep } from 'node:path';
 import { DEFAULT_USER_FOLDERS, canonicalizePath, checkDeletable } from '../cleaner/guard';
 
 export type UninstallTargetDenial =
-  | 'invalid-path'
-  | 'protected'
-  | 'root-itself'
-  | 'too-broad'
-  | 'outside-allowed-roots'
-  | 'blocked';
+  'invalid-path' | 'protected' | 'root-itself' | 'too-broad' | 'outside-allowed-roots' | 'blocked';
 
-export type UninstallTargetResult =
-  | { ok: true; path: string }
-  | { ok: false; reason: UninstallTargetDenial };
+export type UninstallTargetResult = { ok: true; path: string } | { ok: false; reason: UninstallTargetDenial };
 
 export interface UninstallTargetOptions {
   roots: readonly string[];

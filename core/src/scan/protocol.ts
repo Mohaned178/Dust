@@ -38,12 +38,7 @@ export interface WorkerBatch {
   progress: { filesSeen: number; bytesSeen: number; errors: number; currentPath: string } | null;
 }
 
-export type WorkerCommand =
-  | { type: 'task'; path: string; isRoot: boolean }
-  | { type: 'abort' }
-  | { type: 'stop' };
+export type WorkerCommand = { type: 'task'; path: string; isRoot: boolean } | { type: 'abort' } | { type: 'stop' };
 
 export type WorkerEvent =
-  | { type: 'ready' }
-  | { type: 'batch'; batch: WorkerBatch }
-  | { type: 'fatal'; message: string };
+  { type: 'ready' } | { type: 'batch'; batch: WorkerBatch } | { type: 'fatal'; message: string };

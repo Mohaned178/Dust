@@ -110,11 +110,7 @@ function planUninstaller(
   };
 }
 
-function startupMatch(
-  entry: StartupEntryRecord,
-  app: InstalledApp,
-  installLocation: string,
-): 'path' | 'name' | null {
+function startupMatch(entry: StartupEntryRecord, app: InstalledApp, installLocation: string): 'path' | 'name' | null {
   const parsed = parseUninstallCommand(entry.command, { exists: () => true });
   if (parsed.executable.length > 0) {
     if (
@@ -269,9 +265,7 @@ export function planRequiresAdmin(plan: RemovalPlan): boolean {
 export function defaultSelection(plan: RemovalPlan): string[] {
   return [
     ...plan.leftovers.filter((candidate) => candidate.defaultSelected).map((candidate) => candidate.id),
-    ...plan.registry
-      .filter((candidate) => candidate.grade === 'safe')
-      .map((candidate) => candidate.id),
+    ...plan.registry.filter((candidate) => candidate.grade === 'safe').map((candidate) => candidate.id),
     ...plan.startup
       .filter((candidate) => candidate.action !== 'none' && candidate.match === 'path')
       .map((candidate) => candidate.entryId),

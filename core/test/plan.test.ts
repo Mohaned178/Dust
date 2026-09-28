@@ -32,7 +32,12 @@ describe('buildPlan', () => {
         id: 'temp',
         matches: [
           makeMatch({ path: 'F:\\junk\\a', bytes: 5, grade: 'safe' }),
-          makeMatch({ path: 'F:\\junk\\b', bytes: 7, grade: 'review', recovery: { kind: 'regenerate', command: 'npm ci' } }),
+          makeMatch({
+            path: 'F:\\junk\\b',
+            bytes: 7,
+            grade: 'review',
+            recovery: { kind: 'regenerate', command: 'npm ci' },
+          }),
         ],
       }),
     ]);
@@ -72,10 +77,7 @@ describe('buildPlan', () => {
     const plan = await build([
       makeRule({
         id: 'bad',
-        matches: [
-          makeMatch({ path: 'C:\\Windows', bytes: 1 }),
-          makeMatch({ path: 'C:\\Users', bytes: 1 }),
-        ],
+        matches: [makeMatch({ path: 'C:\\Windows', bytes: 1 }), makeMatch({ path: 'C:\\Users', bytes: 1 })],
       }),
     ]);
 

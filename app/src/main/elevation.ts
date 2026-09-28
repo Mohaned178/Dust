@@ -9,11 +9,7 @@ export function buildElevationCommand(execPath: string, args: string[]): string 
   return `Start-Process -FilePath ${file} -ArgumentList ${args.map(quote).join(',')} -Verb RunAs`;
 }
 
-export function buildElevationLaunchCommand(
-  execPath: string,
-  args: string[],
-  ackPath: string,
-): string {
+export function buildElevationLaunchCommand(execPath: string, args: string[], ackPath: string): string {
   const quote = (value: string) => `'${value.replace(/'/g, "''")}'`;
   const argList = args.length === 0 ? '' : ` -ArgumentList ${args.map(quote).join(',')}`;
   const note = (text: string): string => `[Console]::Error.WriteLine(${quote(text)})`;
@@ -56,14 +52,8 @@ export function encodePowerShellCommand(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64');
 }
 
-export function elevationArgs(input: {
-  packaged: boolean;
-  appPath: string;
-  argv: readonly string[];
-}): string[] {
-  const forwarded = (input.packaged ? input.argv.slice(1) : input.argv.slice(2)).filter(
-    (arg) => arg !== ELEVATED_FLAG,
-  );
+export function elevationArgs(input: { packaged: boolean; appPath: string; argv: readonly string[] }): string[] {
+  const forwarded = (input.packaged ? input.argv.slice(1) : input.argv.slice(2)).filter((arg) => arg !== ELEVATED_FLAG);
   const base = input.packaged ? [] : [input.appPath];
   return [...base, ...forwarded, ELEVATED_FLAG];
 }
@@ -95,9 +85,7 @@ export interface AwaitElevatedStartupInput {
 
 export type ElevatedStartupOutcome = 'ready' | 'declined' | 'failed';
 
-export async function awaitElevatedStartup(
-  input: AwaitElevatedStartupInput,
-): Promise<ElevatedStartupOutcome> {
+export async function awaitElevatedStartup(input: AwaitElevatedStartupInput): Promise<ElevatedStartupOutcome> {
   const now = input.now ?? Date.now;
   const pollMs = input.pollMs ?? 250;
   const timeoutMs = input.timeoutMs ?? 300_000;

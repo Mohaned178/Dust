@@ -2,10 +2,7 @@ import { join } from 'node:path';
 import type { Rule, RuleContext, RuleMatch } from '../types';
 import type { RuleEnv } from '../paths';
 
-export function npmCacheRule(
-  env: Pick<RuleEnv, 'localAppData'>,
-  options: { npmCacheDir?: string | null } = {},
-): Rule {
+export function npmCacheRule(env: Pick<RuleEnv, 'localAppData'>, options: { npmCacheDir?: string | null } = {}): Rule {
   return {
     id: 'npm-cache',
     category: 'npm-cache',

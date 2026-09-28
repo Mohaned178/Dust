@@ -49,9 +49,7 @@ export function rendererReport(): RendererSample[] {
 }
 
 export function rendererMemory(): { usedJsHeapMb: number; totalJsHeapMb: number } | null {
-  const memory = (
-    performance as unknown as { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
-  ).memory;
+  const memory = (performance as unknown as { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }).memory;
   if (!memory) return null;
   return {
     usedJsHeapMb: Math.round(memory.usedJSHeapSize / 1024 / 1024),

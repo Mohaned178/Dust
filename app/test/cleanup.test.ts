@@ -1,13 +1,5 @@
 import { AggregateTree, createNodeFsProbe } from '@dust/core';
-import type {
-  CleanupPlan,
-  PlanItem,
-  ProjectRecord,
-  Rule,
-  RuleContext,
-  RuleMatch,
-  SnapshotData,
-} from '@dust/core';
+import type { CleanupPlan, PlanItem, ProjectRecord, Rule, RuleContext, RuleMatch, SnapshotData } from '@dust/core';
 import { describe, expect, it } from 'vitest';
 import {
   isUnderAny,
@@ -144,8 +136,22 @@ describe('snapshotRules', () => {
     const base = snapshot({
       matches: [
         { path: 'C:\\Temp', ruleId: 'system-temp', category: 'temp', bytes: 10, grade: 'safe', evidence: 'temp' },
-        { path: 'C:\\$Recycle.Bin', ruleId: 'recycle-bin', category: 'recycle-bin', bytes: 5, grade: 'review', evidence: 'bin' },
-        { path: `${app}\\node_modules`, ruleId: 'npm-project-modules', category: 'npm-projects', bytes: 10, grade: 'safe', evidence: 'project' },
+        {
+          path: 'C:\\$Recycle.Bin',
+          ruleId: 'recycle-bin',
+          category: 'recycle-bin',
+          bytes: 5,
+          grade: 'review',
+          evidence: 'bin',
+        },
+        {
+          path: `${app}\\node_modules`,
+          ruleId: 'npm-project-modules',
+          category: 'npm-projects',
+          bytes: 10,
+          grade: 'safe',
+          evidence: 'project',
+        },
       ],
       projects: [project(app, `${app}\\node_modules`)],
     });
@@ -170,13 +176,22 @@ describe('snapshotRules', () => {
     const nodeModules = `${app}\\node_modules`;
     const base = snapshot({
       matches: [
-        { path: nodeModules, ruleId: 'npm-project-modules', category: 'npm-projects', bytes: 10, grade: 'safe', evidence: 'project' },
+        {
+          path: nodeModules,
+          ruleId: 'npm-project-modules',
+          category: 'npm-projects',
+          bytes: 10,
+          grade: 'safe',
+          evidence: 'project',
+        },
       ],
       projects: [project(app, nodeModules)],
     });
 
     expect(snapshotRules(base, [app])).toEqual([]);
-    expect(snapshotRules(snapshot({ ...base, projects: [project(app, nodeModules, { offered: false })] }), [])).toEqual([]);
+    expect(snapshotRules(snapshot({ ...base, projects: [project(app, nodeModules, { offered: false })] }), [])).toEqual(
+      [],
+    );
   });
 });
 
@@ -241,8 +256,26 @@ describe('toCleanReport and subtractCategories', () => {
         startedAt: 1,
         finishedAt: 2,
         items: [
-          { ruleId: 'system-temp', path: 'C:\\Temp', action: 'delete-path', status: 'done', plannedBytes: 10, deletedBytes: 10, skippedLocked: 0, errors: [] },
-          { ruleId: 'npm-project-modules', path: 'C:\\dev\\app\\node_modules', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 4, skippedLocked: 1, errors: [] },
+          {
+            ruleId: 'system-temp',
+            path: 'C:\\Temp',
+            action: 'delete-path',
+            status: 'done',
+            plannedBytes: 10,
+            deletedBytes: 10,
+            skippedLocked: 0,
+            errors: [],
+          },
+          {
+            ruleId: 'npm-project-modules',
+            path: 'C:\\dev\\app\\node_modules',
+            action: 'delete-path',
+            status: 'partial',
+            plannedBytes: 10,
+            deletedBytes: 4,
+            skippedLocked: 1,
+            errors: [],
+          },
         ],
         deletedBytes: 14,
         skippedLocked: 1,
@@ -264,8 +297,30 @@ describe('toCleanReport and subtractCategories', () => {
       startedAt: 1,
       finishedAt: 2,
       items: [
-        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'done', plannedBytes: 10, deletedBytes: 10, skippedLocked: 0, errorCount: 0, restoreCommand: null },
-        { ruleId: 'system-temp', path: 'C:\\Temp2', category: 'temp', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 4, skippedLocked: 1, errorCount: 0, restoreCommand: null },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'done',
+          plannedBytes: 10,
+          deletedBytes: 10,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: null,
+        },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp2',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'partial',
+          plannedBytes: 10,
+          deletedBytes: 4,
+          skippedLocked: 1,
+          errorCount: 0,
+          restoreCommand: null,
+        },
       ],
       deletedBytes: 14,
       skippedLocked: 1,
@@ -294,7 +349,18 @@ describe('toCleanReport and subtractCategories', () => {
       startedAt: 1,
       finishedAt: 2,
       items: [
-        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'already-gone', plannedBytes: 10, deletedBytes: 0, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'already-gone',
+          plannedBytes: 10,
+          deletedBytes: 0,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: null,
+        },
       ],
       deletedBytes: 0,
       skippedLocked: 0,
@@ -303,10 +369,7 @@ describe('toCleanReport and subtractCategories', () => {
       cleanedAt: 2,
     };
 
-    const updated = subtractCategories(
-      [{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }],
-      coreReport,
-    );
+    const updated = subtractCategories([{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }], coreReport);
 
     expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 20, items: 2 });
   });
@@ -319,8 +382,30 @@ describe('toCleanReport and subtractCategories', () => {
       startedAt: 1,
       finishedAt: 2,
       items: [
-        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'done', plannedBytes: 20, deletedBytes: 8, skippedLocked: 0, errorCount: 0, restoreCommand: null },
-        { ruleId: 'system-temp', path: 'C:\\Temp2', category: 'temp', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 5, skippedLocked: 1, errorCount: 0, restoreCommand: null },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'done',
+          plannedBytes: 20,
+          deletedBytes: 8,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: null,
+        },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp2',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'partial',
+          plannedBytes: 10,
+          deletedBytes: 5,
+          skippedLocked: 1,
+          errorCount: 0,
+          restoreCommand: null,
+        },
       ],
       deletedBytes: 13,
       skippedLocked: 1,
@@ -329,10 +414,7 @@ describe('toCleanReport and subtractCategories', () => {
       cleanedAt: 2,
     };
 
-    const updated = subtractCategories(
-      [{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }],
-      coreReport,
-    );
+    const updated = subtractCategories([{ ruleId: 'system-temp', category: 'temp', bytes: 30, items: 3 }], coreReport);
 
     expect(updated[0]).toEqual({ ruleId: 'system-temp', category: 'temp', bytes: 17, items: 2 });
   });
@@ -345,9 +427,42 @@ describe('toCleanReport and subtractCategories', () => {
       startedAt: 1,
       finishedAt: 2,
       items: [
-        { ruleId: 'system-temp', path: 'C:\\Temp', category: 'temp', action: 'delete-path', status: 'done', plannedBytes: 10, deletedBytes: 10, skippedLocked: 0, errorCount: 0, restoreCommand: null },
-        { ruleId: 'system-temp', path: 'C:\\Temp2', category: 'temp', action: 'delete-path', status: 'partial', plannedBytes: 10, deletedBytes: 4, skippedLocked: 1, errorCount: 0, restoreCommand: null },
-        { ruleId: 'npm-cache', path: 'C:\\npm-cache\\x', category: 'npm-cache', action: 'delete-path', status: 'already-gone', plannedBytes: 7, deletedBytes: 0, skippedLocked: 0, errorCount: 0, restoreCommand: null },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'done',
+          plannedBytes: 10,
+          deletedBytes: 10,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: null,
+        },
+        {
+          ruleId: 'system-temp',
+          path: 'C:\\Temp2',
+          category: 'temp',
+          action: 'delete-path',
+          status: 'partial',
+          plannedBytes: 10,
+          deletedBytes: 4,
+          skippedLocked: 1,
+          errorCount: 0,
+          restoreCommand: null,
+        },
+        {
+          ruleId: 'npm-cache',
+          path: 'C:\\npm-cache\\x',
+          category: 'npm-cache',
+          action: 'delete-path',
+          status: 'already-gone',
+          plannedBytes: 7,
+          deletedBytes: 0,
+          skippedLocked: 0,
+          errorCount: 0,
+          restoreCommand: null,
+        },
       ],
       deletedBytes: 14,
       skippedLocked: 1,

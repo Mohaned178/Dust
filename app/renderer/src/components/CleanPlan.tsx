@@ -65,9 +65,7 @@ export function CleanPlan({
         {formatBytes(preview.totals.bytes)}
       </p>
       <p className="mt-2 text-center text-sm text-ink-muted">will be freed</p>
-      {scopeNote !== null && (
-        <p className="mt-1.5 text-center text-xs text-ink-muted">{scopeNote}</p>
-      )}
+      {scopeNote !== null && <p className="mt-1.5 text-center text-xs text-ink-muted">{scopeNote}</p>}
 
       <div className="mt-6 h-px w-full bg-hairline" aria-hidden="true" />
 

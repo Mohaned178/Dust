@@ -127,11 +127,7 @@ describe('parseInstalledApps', () => {
 
   it('deduplicates entries with the same compact name when no key identity is present', () => {
     const apps = parseInstalledApps(
-      JSON.stringify([
-        { DisplayName: 'Google Chrome' },
-        { DisplayName: 'google chrome' },
-        { DisplayName: 'Chrome' },
-      ]),
+      JSON.stringify([{ DisplayName: 'Google Chrome' }, { DisplayName: 'google chrome' }, { DisplayName: 'Chrome' }]),
     );
     expect(apps?.map((app) => app.displayName)).toEqual(['Google Chrome', 'Chrome']);
   });

@@ -109,10 +109,7 @@ export function vendorKey(value: string): string {
 }
 
 export function appId(hive: UninstallHive, keyName: string): string {
-  return createHash('sha1')
-    .update(`${hive}\u0000${keyName.trim().toLowerCase()}`)
-    .digest('hex')
-    .slice(0, 16);
+  return createHash('sha1').update(`${hive}\u0000${keyName.trim().toLowerCase()}`).digest('hex').slice(0, 16);
 }
 
 function wordTokens(value: string, minimumLength: number): string[] {
@@ -141,10 +138,7 @@ export function appMatchesTokens(app: InstalledApp, tokens: readonly string[]): 
   return tokens.some((token) => available.has(vendorKey(token)));
 }
 
-export function matchInstalledApp(
-  vendor: string,
-  apps: readonly InstalledApp[],
-): InstalledAppMatch | null {
+export function matchInstalledApp(vendor: string, apps: readonly InstalledApp[]): InstalledAppMatch | null {
   const key = vendorKey(vendor);
   if (key.length === 0) return null;
   let publisherMatch: InstalledAppMatch | null = null;
@@ -271,9 +265,7 @@ async function load(query: () => Promise<string>): Promise<InstalledAppsSnapshot
   }
 }
 
-export async function listInstalledApps(
-  options: InstalledAppsOptions = {},
-): Promise<InstalledAppsSnapshot> {
+export async function listInstalledApps(options: InstalledAppsOptions = {}): Promise<InstalledAppsSnapshot> {
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? INSTALLED_APPS_TTL_MS;
   if (cache !== null && now() - cache.at < ttlMs) return cache.snapshot;

@@ -11,10 +11,7 @@ export interface ManifestInfo {
 export const LOCKFILE_NAMES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb'] as const;
 export type LockfileName = (typeof LOCKFILE_NAMES)[number];
 
-export const PUBLIC_REGISTRY_HOSTS: ReadonlySet<string> = new Set([
-  'registry.npmjs.org',
-  'registry.yarnpkg.com',
-]);
+export const PUBLIC_REGISTRY_HOSTS: ReadonlySet<string> = new Set(['registry.npmjs.org', 'registry.yarnpkg.com']);
 
 export function readManifest(dir: string, probe: FsProbe): ManifestInfo | null {
   const raw = probe.readFile(join(dir, 'package.json'));
@@ -32,9 +29,8 @@ export function readManifest(dir: string, probe: FsProbe): ManifestInfo | null {
 
   const object = parsed as Record<string, unknown>;
   const name = typeof object.name === 'string' && object.name.trim() !== '' ? object.name : null;
-  const packageManagerField = typeof object.packageManager === 'string' && object.packageManager.trim() !== ''
-    ? object.packageManager
-    : null;
+  const packageManagerField =
+    typeof object.packageManager === 'string' && object.packageManager.trim() !== '' ? object.packageManager : null;
 
   return { name, workspaces: detectWorkspaces(object), packageManagerField, valid: true };
 }

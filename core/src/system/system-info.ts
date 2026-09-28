@@ -83,7 +83,7 @@ export const SYSTEM_INFO_SCRIPT = [
   '}',
   '$board = Get-CimInstance -ClassName Win32_BaseBoard | Select-Object Manufacturer, Product | Select-Object -First 1',
   "$bios = Get-CimInstance -ClassName Win32_BIOS | Select-Object SMBIOSBIOSVersion, @{n='ReleaseDate';e={ if ($_.ReleaseDate) { $_.ReleaseDate.ToString('yyyy-MM-dd') } }} | Select-Object -First 1",
-  "ConvertTo-Json -InputObject ([pscustomobject]@{ os = $os; cpu = $cpu; gpus = $gpus; vram = $vram; board = $board; bios = $bios }) -Compress -Depth 4",
+  'ConvertTo-Json -InputObject ([pscustomobject]@{ os = $os; cpu = $cpu; gpus = $gpus; vram = $vram; board = $board; bios = $bios }) -Compress -Depth 4',
 ].join('\n');
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -110,11 +110,7 @@ function cleanString(value: unknown): string | null {
 
 function toInt(value: unknown): number | null {
   const numeric =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number.parseInt(value, 10)
-        : Number.NaN;
+    typeof value === 'number' ? value : typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
   return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
 }
 
@@ -156,9 +152,7 @@ export function parseSystemInfoJson(raw: string): ParsedSystemInfo | null {
   const cpuEntries = asArray(record.cpu)
     .map(asRecord)
     .filter((entry): entry is Record<string, unknown> => entry !== null);
-  const cpuNames = cpuEntries
-    .map((entry) => cleanString(entry.Name))
-    .filter((name): name is string => name !== null);
+  const cpuNames = cpuEntries.map((entry) => cleanString(entry.Name)).filter((name): name is string => name !== null);
   const coreCounts = cpuEntries
     .map((entry) => toPositiveInt(entry.NumberOfCores))
     .filter((count): count is number => count !== null);
@@ -287,9 +281,7 @@ function querySystemInfoJson(): Promise<string> {
   });
 }
 
-export async function getSystemInfoStatic(
-  options: SystemInfoStaticOptions = {},
-): Promise<SystemInfoStatic> {
+export async function getSystemInfoStatic(options: SystemInfoStaticOptions = {}): Promise<SystemInfoStatic> {
   const now = options.now ?? Date.now;
   const info = options.osInfo ?? defaultOsInfo;
   const platform = options.platform ?? process.platform;
@@ -348,9 +340,7 @@ export function readCpuTimes(): CpuTimesSample {
   return { idle, total };
 }
 
-export function createCpuUsageSampler(
-  readTimes: () => CpuTimesSample = readCpuTimes,
-): () => number | null {
+export function createCpuUsageSampler(readTimes: () => CpuTimesSample = readCpuTimes): () => number | null {
   let previous: CpuTimesSample | null = null;
   return () => {
     const current = readTimes();

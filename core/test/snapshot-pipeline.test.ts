@@ -43,14 +43,25 @@ describe('snapshot pipeline (scan, classify, rule, clean, persist)', () => {
         enumerate: () => ({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null }),
       },
     });
-    const matches = (await Promise.all(rules.map((rule) => rule.match({
-      root: fixture.root,
-      tree: scan.tree,
-      markers: scan.markers,
-      probe: core.createNodeFsProbe(),
-    })))).flat();
+    const matches = (
+      await Promise.all(
+        rules.map((rule) =>
+          rule.match({
+            root: fixture.root,
+            tree: scan.tree,
+            markers: scan.markers,
+            probe: core.createNodeFsProbe(),
+          }),
+        ),
+      )
+    ).flat();
     const tempMatches = matches.filter((match) => match.path === env.temp);
-    const categories = tempMatches.map((match) => ({ ruleId: 'system-temp', category: 'temp', bytes: match.bytes, items: 1 }));
+    const categories = tempMatches.map((match) => ({
+      ruleId: 'system-temp',
+      category: 'temp',
+      bytes: match.bytes,
+      items: 1,
+    }));
 
     const disks = core.getVolumeUsage([fixture.root]);
     expect(disks[0]!.totalBytes).not.toBeNull();
