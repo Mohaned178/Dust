@@ -1,6 +1,16 @@
+<div align="center">
+  <img src="app/resources/icon.png" width="96" alt="Dust icon">
+
 # Dust
 
 **Find what is safe to delete.**
+
+[![CI](https://img.shields.io/github/actions/workflow/status/Mohaned178/Dust/ci.yml?label=CI&logo=github&style=flat-square)](https://github.com/Mohaned178/Dust/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Mohaned178/Dust?label=release&style=flat-square)](https://github.com/Mohaned178/Dust/releases)
+[![License](https://img.shields.io/github/license/Mohaned178/Dust?style=flat-square)](LICENSE)
+[![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d6?logo=windows&style=flat-square)](#install)
+[![Node](https://img.shields.io/badge/node-%5E20.19%20%7C%7C%20%3E%3D22.12-339933?logo=node.js&logoColor=white&style=flat-square)](package.json)
+</div>
 
 Dust is a Windows-first disk-cleanup tool for developers. It scans a drive, shows where the space went, and removes the junk development work accumulates — `node_modules` in abandoned projects, the npm download cache, temp files, and browser/app caches — while explaining why each item is safe (or not) to delete.
 
