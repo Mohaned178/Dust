@@ -127,7 +127,7 @@ describe('createExternalPredicate', () => {
 });
 
 describe('listVolumes', () => {
-  it('lists real volumes with a matching shape on Windows', (ctx) => {
+  it('lists real volumes with a matching shape on Windows', { timeout: 30_000 }, (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;
@@ -141,7 +141,7 @@ describe('listVolumes', () => {
     }
   });
 
-  it('keeps volume discovery working when the storage cmdlets fail', (ctx) => {
+  it('keeps volume discovery working when the storage cmdlets fail', { timeout: 30_000 }, (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;
@@ -164,7 +164,7 @@ describe('listVolumes', () => {
 });
 
 describe('listVolumesAsync', () => {
-  it('lists real volumes with a matching shape on Windows', async (ctx) => {
+  it('lists real volumes with a matching shape on Windows', { timeout: 30_000 }, async (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;

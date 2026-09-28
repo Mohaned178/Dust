@@ -28,6 +28,7 @@ function setup(overrides: Partial<RemovalPlanEnv> = {}): Setup {
       programData: fixture.dir('program-data'),
       temp: fixture.dir('temp'),
     },
+    installParents: [fixture.root],
     home: fixture.dir('profile'),
     programFiles: [],
     systemRoot: 'C:\\Windows',
