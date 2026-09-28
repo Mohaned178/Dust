@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { UNINSTALL_BACKUP_TTL_MS } from './types';
 import type { RegistryCandidate, UninstallHive } from './types';
@@ -104,7 +104,11 @@ export async function createRegistryBackup(
   const now = env.now ?? Date.now;
   const runReg = env.runReg ?? defaultRunReg;
   mkdirSync(env.backupDir, { recursive: true });
-  const finalPath = join(env.backupDir, backupFileName(appId, new Date(now())));
+  const base = backupFileName(appId, new Date(now())).replace(/\.reg$/, '');
+  let finalPath = join(env.backupDir, `${base}.reg`);
+  for (let suffix = 1; existsSync(finalPath) && suffix < 100; suffix += 1) {
+    finalPath = join(env.backupDir, `${base}-${suffix}.reg`);
+  }
   const tempFiles: string[] = [];
   const exportedKeys: string[] = [];
   const parts: string[] = [];

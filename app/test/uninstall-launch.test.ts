@@ -82,6 +82,7 @@ describe('pending uninstall persistence', () => {
       const job = makeJob();
       expect(writePendingUninstall(path, job)).toBe(true);
       expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(job);
+      expect(() => readFileSync(`${path}.tmp`, 'utf8')).toThrow();
       expect(readPendingUninstall(path, { now: () => 200 })).toEqual(job);
       expect(pendingUninstallPath(tree.root)).toBe(join(tree.root, 'pending-removal.json'));
     } finally {
@@ -100,6 +101,7 @@ describe('pending uninstall persistence', () => {
 
       writePendingUninstall(path, makeJob());
       expect(readPendingUninstall(path, { now: () => 100 + 15 * 60_000 + 1 })).toBeNull();
+      expect(readPendingUninstall(path, { now: () => 100 - 5 * 60_000 - 1 })).toBeNull();
 
       tree.file(
         'pending-removal.json',

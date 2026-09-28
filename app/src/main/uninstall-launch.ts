@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { UNINSTALL_PENDING_TTL_MS } from '@dust/core';
 import type { RemovalPlan } from '@dust/core';
 import type { UninstallExecuteRequest } from '../shared/ipc';
 
 export const PENDING_UNINSTALL_PREFIX = '--dust-uninstall=';
+const FUTURE_SKEW_MS = 5 * 60_000;
 
 export interface PendingUninstallJob {
   v: 1;
@@ -26,11 +27,18 @@ export function parsePendingUninstallArg(argv: readonly string[]): string | null
 }
 
 export function writePendingUninstall(path: string, job: PendingUninstallJob): boolean {
+  const tempPath = `${path}.tmp`;
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(job), 'utf8');
+    writeFileSync(tempPath, JSON.stringify(job), 'utf8');
+    renameSync(tempPath, path);
     return true;
   } catch {
+    try {
+      rmSync(tempPath, { force: true });
+    } catch {
+      /* best effort */
+    }
     return false;
   }
 }
@@ -56,7 +64,8 @@ export function readPendingUninstall(
   if (job.request.planId !== job.plan.id || job.request.jobId !== job.jobId) return null;
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? UNINSTALL_PENDING_TTL_MS;
-  if (now() - job.createdAt >= ttlMs) return null;
+  const age = now() - job.createdAt;
+  if (age < -FUTURE_SKEW_MS || age >= ttlMs) return null;
   return job as PendingUninstallJob;
 }
 

@@ -199,6 +199,27 @@ describe('createRegistryBackup', () => {
     expect(failed).toMatchObject({ ok: false, reason: 'export-failed' });
   });
 
+  it('produces distinct archives for backups created at the same timestamp', async () => {
+    const fixture = new Fixture();
+    fixtures.push(fixture);
+    const backupDir = fixture.dir('backups');
+    const candidates = [registryCandidate('hkcu', 'Software\\Bar')];
+    const env = {
+      backupDir,
+      now: () => Date.UTC(2026, 0, 2, 3, 4, 5),
+      runReg: fakeReg({ 'HKCU\\Software\\Bar': EXPORT_TEMPLATE('HKEY_CURRENT_USER\\Software\\Bar') }),
+    };
+    const first = await createRegistryBackup(candidates, 'abc123', env);
+    const second = await createRegistryBackup(candidates, 'abc123', env);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.path).not.toBe(second.path);
+    expect(readFileSync(first.path).length).toBeGreaterThan(0);
+    expect(readFileSync(second.path).length).toBeGreaterThan(0);
+  });
+
   it('returns no-keys when there is nothing to export', async () => {
     const fixture = new Fixture();
     fixtures.push(fixture);

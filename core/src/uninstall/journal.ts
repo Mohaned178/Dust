@@ -10,6 +10,8 @@ export type JournalKind =
   | 'verify'
   | 'phase'
   | 'files'
+  | 'files-started'
+  | 'file-item'
   | 'registry'
   | 'startup'
   | 'finished'
@@ -61,8 +63,8 @@ export class Journal {
     }
   }
 
-  append(kind: JournalKind, details: Record<string, unknown> = {}): void {
-    if (this.failed) return;
+  append(kind: JournalKind, details: Record<string, unknown> = {}): boolean {
+    if (this.failed) return false;
     const line = JSON.stringify({
       v: UNINSTALL_JOURNAL_VERSION,
       ts: this.now(),
@@ -73,8 +75,10 @@ export class Journal {
     });
     try {
       this.write(`${line}\n`);
+      return true;
     } catch {
       this.failed = true;
+      return false;
     }
   }
 }

@@ -1,10 +1,13 @@
 import { execFile, spawn } from 'node:child_process';
+import { lstatSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { deletePathTree } from '../cleaner/executor';
 import { stageToRecycleBin } from '../cleaner/recycle';
 import { createRegistryBackup, fullRegistryPath } from './backup';
 import type { BackupResult } from './backup';
 import type { Journal } from './journal';
+import { assertUninstallTarget, defaultUninstallParents } from './path-policy';
+import type { UninstallTargetOptions } from './path-policy';
 import { missingAcknowledgements } from './plan';
 import type { VerifyResult } from './verify';
 import { waitForRemoval } from './verify';
@@ -67,6 +70,7 @@ export interface RemovalExecutionDeps {
   backupDir: string;
   journalPath: string;
   journal: Pick<Journal, 'append'>;
+  pathPolicy?: Omit<UninstallTargetOptions, 'extraBlocked'>;
   now?: () => number;
   createBackup?: (candidates: readonly RegistryCandidate[], appId: string) => Promise<BackupResult>;
   runUninstaller?: UninstallerRunner;
@@ -136,8 +140,17 @@ function defaultDeleteRegistryKey(fullKeyPath: string): Promise<boolean> {
   );
 }
 
-function defaultFileRemover(): FileRemover {
+export function defaultFileRemover(): FileRemover {
   return async (path, mode) => {
+    try {
+      if (lstatSync(path).isSymbolicLink()) {
+        return { status: 'kept', bytes: 0, skippedLocked: 0, code: 'reparse-point' };
+      }
+    } catch (error) {
+      const code = codeOf(error);
+      if (code === 'ENOENT') return { status: 'already-gone', bytes: 0, skippedLocked: 0 };
+      return { status: 'failed', bytes: 0, skippedLocked: 0, code };
+    }
     if (mode === 'recycle') {
       const staged = await stageToRecycleBin(path);
       return staged.ok
@@ -166,6 +179,14 @@ function defaultFileRemover(): FileRemover {
         };
     }
   };
+}
+
+function codeOf(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return 'UNKNOWN';
 }
 
 function cwdFor(executable: string): string | undefined {
@@ -287,6 +308,7 @@ export async function executeRemoval(
     recycledBytes: 0,
     deletedItems: 0,
     recycledItems: 0,
+    alreadyGone: 0,
     skippedLocked: 0,
     errors: [],
     kept: fileKept,
@@ -404,10 +426,24 @@ export async function executeRemoval(
     phase('verify', 'skipped');
   }
 
-  if (selectedLeftovers.length > 0) {
+  const stoppedForUninstaller = uninstallerReport.ran && uninstallerReport.skippedWaiting;
+
+  if (selectedLeftovers.length > 0 && !stoppedForUninstaller) {
     phase('files', 'started');
+    const policy: UninstallTargetOptions = deps.pathPolicy ?? {
+      roots: defaultUninstallParents(),
+      systemRoot: process.env.SystemRoot,
+      userProfile: process.env.USERPROFILE,
+    };
     const remove = deps.removeFile ?? defaultFileRemover();
-    for (const item of selectedLeftovers) {
+    const journalReady = deps.journal.append('files-started', { items: selectedLeftovers.length });
+    if (!journalReady) {
+      for (const item of selectedLeftovers) {
+        fileKept.push({ target: item.path, reason: 'journal-unavailable' });
+      }
+      phase('files', 'failed', 'journal-unavailable');
+    }
+    for (const item of journalReady ? selectedLeftovers : []) {
       if (item.link !== null) {
         fileKept.push({ target: item.path, reason: 'reparse-point' });
         emit({ type: 'item', itemId: item.id, status: 'kept', bytes: 0 });
@@ -418,10 +454,21 @@ export async function executeRemoval(
         emit({ type: 'item', itemId: item.id, status: 'kept', bytes: 0 });
         continue;
       }
-      const mode: FileRemoveMode = item.grade === 'review' ? 'recycle' : 'delete';
+      const target = assertUninstallTarget(item.path, policy);
+      if (!target.ok) {
+        fileKept.push({ target: item.path, reason: `unsafe-path:${target.reason}` });
+        emit({ type: 'item', itemId: item.id, status: 'kept', bytes: 0 });
+        continue;
+      }
+      const mode: FileRemoveMode = item.grade === 'review' || item.class === 'user-data' ? 'recycle' : 'delete';
+      if (!deps.journal.append('file-item', { path: target.path, mode })) {
+        fileKept.push({ target: item.path, reason: 'journal-unavailable' });
+        emit({ type: 'item', itemId: item.id, status: 'kept', bytes: 0 });
+        continue;
+      }
       let outcome: FileRemoveOutcome;
       try {
-        outcome = await remove(item.path, mode);
+        outcome = await remove(target.path, mode);
       } catch {
         outcome = { status: 'failed', bytes: 0, skippedLocked: 0, code: 'UNKNOWN' };
       }
@@ -435,7 +482,7 @@ export async function executeRemoval(
           filesReport.recycledBytes += outcome.bytes;
           break;
         case 'already-gone':
-          filesReport.deletedItems += 1;
+          filesReport.alreadyGone += 1;
           break;
         case 'partial':
           filesReport.deletedBytes += outcome.bytes;
@@ -462,10 +509,10 @@ export async function executeRemoval(
     });
     phase('files', 'done');
   } else {
-    phase('files', 'skipped');
+    phase('files', 'skipped', stoppedForUninstaller ? 'uninstaller-running' : undefined);
   }
 
-  if (selectedRegistry.length > 0) {
+  if (selectedRegistry.length > 0 && !stoppedForUninstaller) {
     if (backup === null || !backup.ok) {
       phase('registry', 'skipped', 'no-backup');
     } else {
@@ -498,10 +545,10 @@ export async function executeRemoval(
       phase('registry', 'done');
     }
   } else {
-    phase('registry', 'skipped');
+    phase('registry', 'skipped', stoppedForUninstaller ? 'uninstaller-running' : undefined);
   }
 
-  if (selectedStartup.length > 0) {
+  if (selectedStartup.length > 0 && !stoppedForUninstaller) {
     if (deps.startup === undefined) {
       startupReport.failed.push(...selectedStartup.map((item) => item.name));
       phase('startup', 'failed', 'unavailable');
@@ -527,7 +574,7 @@ export async function executeRemoval(
       phase('startup', 'done');
     }
   } else {
-    phase('startup', 'skipped');
+    phase('startup', 'skipped', stoppedForUninstaller ? 'uninstaller-running' : undefined);
   }
 
   const allRegistryFailures = [...registryFailures, ...degradedRegistry];
@@ -538,6 +585,7 @@ export async function executeRemoval(
     startupReport.failed.length > 0 ||
     (backup !== null && !backup.ok) ||
     uninstallerReport.skippedReason !== null ||
+    stoppedForUninstaller ||
     (uninstallerReport.ran && !uninstallerReport.verifiedGone);
   const removedSomething =
     filesReport.deletedItems + filesReport.recycledItems > 0 ||

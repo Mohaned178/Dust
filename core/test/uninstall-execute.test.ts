@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { toRemovalApp } from '../src/uninstall/apps';
 import { fullRegistryPath } from '../src/uninstall/backup';
-import { executeRemoval } from '../src/uninstall/execute';
+import { defaultFileRemover, executeRemoval } from '../src/uninstall/execute';
 import type {
   FileRemoveMode,
   RemovalEvent,
@@ -17,6 +19,7 @@ import type {
   StartupCandidate,
   UninstallCommand,
 } from '../src/uninstall/types';
+import { Fixture } from './fixtures';
 import { makeInstalledApp } from './installed-app-fixtures';
 
 const COMMAND: UninstallCommand = {
@@ -127,7 +130,13 @@ function createHarness(overrides: Partial<RemovalExecutionDeps> = {}): {
   const deps: RemovalExecutionDeps = {
     backupDir: 'C:\\Backups',
     journalPath: 'C:\\Dust\\uninstall-history.log',
-    journal: { append: (kind, details = {}) => harness.journal.push({ kind, details }) },
+    pathPolicy: { roots: ['C:\\Leftovers'], systemRoot: 'C:\\Windows', userProfile: 'C:\\Users\\Test' },
+    journal: {
+      append: (kind, details = {}) => {
+        harness.journal.push({ kind, details });
+        return true;
+      },
+    },
     now: () => 1000,
     createBackup: async (candidates) => ({
       ok: true,
@@ -399,7 +408,7 @@ describe('executeRemoval', () => {
     expect(result.report.outcome).toBe('partial');
   });
 
-  it('does a single verification check when the user stops waiting', async () => {
+  it('does a single verification check and stops before deleting when the user stops waiting', async () => {
     const { run, harness } = createHarness({
       runUninstaller: async (input) => {
         harness.runnerInputs.push(input);
@@ -420,7 +429,8 @@ describe('executeRemoval', () => {
     if (!result.ok) return;
     expect(result.report.uninstaller.skippedWaiting).toBe(true);
     expect(harness.checks).toBe(1);
-    expect(harness.removed).toHaveLength(1);
+    expect(harness.removed).toHaveLength(0);
+    expect(phases(harness)).toContainEqual(['files', 'skipped']);
   });
 
   it('skips registry deletion when the backup fails, and only deletes backed-up keys', async () => {
@@ -622,5 +632,80 @@ describe('executeRemoval', () => {
     if (!result.ok) return;
     expect(result.report.startup).toEqual({ disabled: [], purgedEnvelopes: ['Foo Helper'], failed: ['Foo Updater'] });
     expect(result.report.outcome).toBe('partial');
+  });
+});
+
+describe('executeRemoval safety', () => {
+  const request = {
+    includeUserData: false,
+    runUninstaller: false,
+    quiet: false,
+    degraded: false,
+    elevated: false,
+  };
+
+  it('refuses plan items outside the execution path policy', async () => {
+    const { run, harness } = createHarness({
+      pathPolicy: { roots: ['C:\\Allowed'], systemRoot: 'C:\\Windows', userProfile: 'C:\\Users\\Test' },
+    });
+    const plan = makePlan({ leftovers: [leftover({ id: 'evil', path: 'C:\\Windows\\System32\\evil' })] });
+    const result = await run(plan, { ...request, selection: ['evil'] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(harness.removed).toHaveLength(0);
+    expect(result.report.files.kept).toContainEqual({
+      target: 'C:\\Windows\\System32\\evil',
+      reason: 'unsafe-path:protected',
+    });
+  });
+
+  it('recycles user-data items even when they are graded safe', async () => {
+    const { run, harness } = createHarness();
+    const plan = makePlan({ leftovers: [leftover({ id: 'data', class: 'user-data', grade: 'safe' })] });
+    const result = await run(plan, { ...request, selection: ['data'], includeUserData: true });
+    expect(result.ok).toBe(true);
+    expect(harness.removed).toEqual([{ path: 'C:\\Leftovers\\data', mode: 'recycle' }]);
+  });
+
+  it('does not delete when the write-ahead journal fails', async () => {
+    const { run, harness } = createHarness({ journal: { append: () => false } });
+    const plan = makePlan({ leftovers: [leftover({ id: 'file-1' })] });
+    const result = await run(plan, { ...request, selection: ['file-1'] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(harness.removed).toHaveLength(0);
+    expect(result.report.files.kept).toContainEqual({
+      target: 'C:\\Leftovers\\file-1',
+      reason: 'journal-unavailable',
+    });
+    expect(result.report.files.deletedItems).toBe(0);
+  });
+
+  it('refuses to remove a reparse point at execution time', async () => {
+    const fixture = new Fixture();
+    try {
+      fixture.dir('target');
+      fixture.file('target/data.bin', 'x');
+      const link = fixture.link('link', join(fixture.root, 'target'));
+      const remove = defaultFileRemover();
+      const permanent = await remove(link, 'delete');
+      const recycled = await remove(link, 'recycle');
+      expect(permanent).toMatchObject({ status: 'kept', code: 'reparse-point' });
+      expect(recycled).toMatchObject({ status: 'kept', code: 'reparse-point' });
+      expect(existsSync(join(fixture.root, 'target', 'data.bin'))).toBe(true);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('counts already-gone items separately from deleted items', async () => {
+    const { run } = createHarness({
+      removeFile: async () => ({ status: 'already-gone', bytes: 0, skippedLocked: 0 }),
+    });
+    const plan = makePlan({ leftovers: [leftover({ id: 'file-1' })] });
+    const result = await run(plan, { ...request, selection: ['file-1'] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.report.files).toMatchObject({ deletedItems: 0, alreadyGone: 1 });
   });
 });

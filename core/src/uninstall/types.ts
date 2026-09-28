@@ -153,6 +153,7 @@ export interface FileRemovalReport {
   recycledBytes: number;
   deletedItems: number;
   recycledItems: number;
+  alreadyGone: number;
   skippedLocked: number;
   errors: DeleteError[];
   kept: KeptItem[];

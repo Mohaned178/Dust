@@ -18,6 +18,11 @@ export interface DeleteOutcome {
   errors: DeleteError[];
 }
 
+export interface DeleteTreeDeps {
+  readdir?: typeof readdirSync;
+  lstat?: typeof lstatSync;
+}
+
 export interface ItemResult extends DeleteOutcome {
   ruleId: string;
   path: string;
@@ -61,7 +66,9 @@ export function defaultEmptyRecycleBin(): EmptyRecycleBinResult {
 
 const FILE_LOCKED_CODES = new Set(['EBUSY', 'EPERM']);
 
-export function deletePathTree(target: string): DeleteOutcome {
+export function deletePathTree(target: string, deps: DeleteTreeDeps = {}): DeleteOutcome {
+  const readdir = deps.readdir ?? readdirSync;
+  const lstat = deps.lstat ?? lstatSync;
   const outcome: DeleteOutcome = { status: 'done', deletedBytes: 0, skippedLocked: 0, errors: [] };
 
   if (!isAbsolute(target)) {
@@ -72,7 +79,7 @@ export function deletePathTree(target: string): DeleteOutcome {
 
   let rootStat;
   try {
-    rootStat = lstatSync(normalize(target));
+    rootStat = lstat(normalize(target));
   } catch (error) {
     if (codeOf(error) === 'ENOENT') {
       return { status: 'already-gone', deletedBytes: 0, skippedLocked: 0, errors: [] };
@@ -89,7 +96,7 @@ export function deletePathTree(target: string): DeleteOutcome {
   }
 
   if (rootStat.isDirectory()) {
-    walkDirectory(normalize(target), outcome);
+    walkDirectory(normalize(target), outcome, { readdir, lstat });
     try {
       rmdirSync(normalize(target));
     } catch (error) {
@@ -170,10 +177,10 @@ function baseResult(item: PlanItem): Pick<ItemResult, 'ruleId' | 'path' | 'plann
   return { ruleId: item.ruleId, path: item.path, plannedBytes: item.bytes };
 }
 
-function walkDirectory(dir: string, outcome: DeleteOutcome): void {
+function walkDirectory(dir: string, outcome: DeleteOutcome, deps: Required<DeleteTreeDeps>): void {
   let dirents;
   try {
-    dirents = readdirSync(dir, { withFileTypes: true });
+    dirents = deps.readdir(dir, { withFileTypes: true });
   } catch (error) {
     outcome.errors.push({ path: dir, code: codeOf(error) });
     return;
@@ -188,7 +195,18 @@ function walkDirectory(dir: string, outcome: DeleteOutcome): void {
     }
 
     if (dirent.isDirectory()) {
-      walkDirectory(abs, outcome);
+      let childStat;
+      try {
+        childStat = deps.lstat(abs);
+      } catch (error) {
+        outcome.errors.push({ path: abs, code: codeOf(error) });
+        continue;
+      }
+      if (childStat.isSymbolicLink()) {
+        outcome.errors.push({ path: abs, code: 'ELINK' });
+        continue;
+      }
+      walkDirectory(abs, outcome, deps);
       try {
         rmdirSync(abs);
       } catch (error) {
@@ -202,7 +220,7 @@ function walkDirectory(dir: string, outcome: DeleteOutcome): void {
 
     let size = 0;
     try {
-      size = lstatSync(abs).size;
+      size = deps.lstat(abs).size;
     } catch (error) {
       outcome.errors.push({ path: abs, code: codeOf(error) });
       continue;

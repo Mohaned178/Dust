@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { deletePathTree, executeItem } from '../src/cleaner/executor';
@@ -111,6 +111,45 @@ describe('deletePathTree', () => {
     expect(outcome.errors.some((error) => error.code === 'ELINK')).toBe(true);
     expect(existsSync(real)).toBe(true);
     expect(existsSync(join(fixture.root, 'real', 'data.bin'))).toBe(true);
+  });
+
+  it('re-checks reparse points before descending, even when the entry looked like a directory', (ctx) => {
+    fixture.file('real/data.bin', '1234567890');
+    fixture.file('junk/keep.txt', 'xx');
+    let alias: string;
+    try {
+      alias = fixture.link('junk/alias', join(fixture.root, 'real'));
+    } catch {
+      ctx.skip();
+      return;
+    }
+
+    const root = join(fixture.root, 'junk');
+    const readdir = ((dir: string, options: { withFileTypes: true }) => {
+      const entries = readdirSync(dir, options);
+      if (dir !== root) return entries;
+      return entries.map((entry) =>
+        entry.name === 'alias'
+          ? ({
+              name: entry.name,
+              isDirectory: () => true,
+              isSymbolicLink: () => false,
+              isFile: () => false,
+              isBlockDevice: () => false,
+              isCharacterDevice: () => false,
+              isFIFO: () => false,
+              isSocket: () => false,
+              parentPath: dir,
+              path: dir,
+            } as unknown as (typeof entries)[number])
+          : entry,
+      );
+    }) as unknown as typeof readdirSync;
+
+    const outcome = deletePathTree(root, { readdir });
+    expect(outcome.errors.some((error) => error.code === 'ELINK')).toBe(true);
+    expect(existsSync(join(fixture.root, 'real', 'data.bin'))).toBe(true);
+    expect(existsSync(alias)).toBe(true);
   });
 
   it('reports already-gone for missing paths', () => {
