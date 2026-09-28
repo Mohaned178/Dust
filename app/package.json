@@ -2,7 +2,8 @@
   "name": "@dust/app",
   "productName": "Dust",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "license": "MIT",
   "type": "module",
   "main": "dist/main/main.cjs",
   "scripts": {

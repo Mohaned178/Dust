@@ -1,6 +1,7 @@
 {
   "name": "dust",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "workspaces": ["core", "app"],
   "engines": { "node": "^20.19.0 || >=22.12.0" },
