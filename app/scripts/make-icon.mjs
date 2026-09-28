@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { crc32, deflateSync } from 'node:zlib';
 
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
 const SUPERSAMPLE = 4;
@@ -108,16 +109,64 @@ export function encodeIco(entries) {
   return out;
 }
 
+function pngChunk(type, data) {
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  chunk.write(type, 4, 'ascii');
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(chunk.subarray(4, 8 + data.length)) >>> 0, 8 + data.length);
+  return chunk;
+}
+
+export function encodePng(size, pixels) {
+  const stride = 1 + size * 4;
+  const raw = Buffer.alloc(size * stride);
+  for (let row = 0; row < size; row += 1) {
+    const sourceRow = size - 1 - row;
+    const rowOffset = row * stride;
+    for (let x = 0; x < size; x += 1) {
+      const source = (sourceRow * size + x) * 4;
+      const target = rowOffset + 1 + x * 4;
+      raw[target] = pixels[source + 2];
+      raw[target + 1] = pixels[source + 1];
+      raw[target + 2] = pixels[source];
+      raw[target + 3] = pixels[source + 3];
+    }
+  }
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.writeUInt8(8, 8);
+  header.writeUInt8(6, 9);
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
 export function buildIcon() {
   return encodeIco(SIZES.map((size) => ({ size, pixels: renderIcon(size) })));
+}
+
+export function buildIconPng() {
+  const size = 256;
+  return encodePng(size, renderIcon(size));
 }
 
 const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (invokedDirectly) {
   const appRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-  const target = join(appRoot, 'resources', 'icon.ico');
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, buildIcon());
-  console.log(`wrote ${target}`);
+  const resources = join(appRoot, 'resources');
+  mkdirSync(resources, { recursive: true });
+  const ico = join(resources, 'icon.ico');
+  const png = join(resources, 'icon.png');
+  writeFileSync(ico, buildIcon());
+  writeFileSync(png, buildIconPng());
+  console.log(`wrote ${ico}`);
+  console.log(`wrote ${png}`);
 }
