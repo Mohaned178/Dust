@@ -1,0 +1,36 @@
+appId: com.mohaned178.dust
+productName: Dust
+copyright: Copyright © 2026 Mohaned178
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**
+  - package.json
+
+asar: true
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+  # Signing is intentionally unset for 1.0.0. When a certificate exists, add:
+  #   certificateFile: <path or env>
+  #   certificatePassword: ${env.CSC_KEY_PASSWORD}
+  # or an Azure Trusted Signing block.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dust
+  uninstallDisplayName: Dust
+  artifactName: ${productName}-Setup-${version}.${ext}
