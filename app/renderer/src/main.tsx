@@ -1,6 +1,7 @@
 import { Profiler, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { bumpRendererCount, recordRendererSample } from './instrument';
 import './styles.css';
 
@@ -14,8 +15,10 @@ const container = document.getElementById('root');
 if (!container) throw new Error('root element missing');
 createRoot(container).render(
   <StrictMode>
-    <Profiler id="app" onRender={onRender}>
-      <App api={window.dust} />
-    </Profiler>
+    <ErrorBoundary>
+      <Profiler id="app" onRender={onRender}>
+        <App api={window.dust} />
+      </Profiler>
+    </ErrorBoundary>
   </StrictMode>,
 );

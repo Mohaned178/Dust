@@ -7,7 +7,7 @@ import {
   listVolumes,
   pruneRegistryBackups,
 } from '@dust/core';
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, session, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,6 +28,7 @@ import { createEngineHost } from './host/engine-host';
 import { reportSamples } from './host/instrument';
 import { createFilePublisherLoader, createStartupService } from './host/startup';
 import { createStorePaths, resolveWorkerPath } from './paths';
+import { hardenWebContents, installSessionSecurity } from './security';
 import {
   applyPendingStartupToggle,
   parsePendingStartupToggle,
@@ -225,14 +226,47 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
   app.quit();
 }
 
+function logMainError(userDataDir: string, scope: string, error: unknown): void {
+  try {
+    appendFileSync(
+      join(userDataDir, 'error.log'),
+      `${new Date().toISOString()} [${scope}] ${String(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
+      'utf8',
+    );
+  } catch {
+    /* logging must never break the app */
+  }
+}
+
+function installCrashLogging(userDataDir: string): void {
+  process.on('uncaughtException', (error) => {
+    logMainError(userDataDir, 'uncaughtException', error);
+    app.quit();
+  });
+  process.on('unhandledRejection', (reason) => {
+    logMainError(userDataDir, 'unhandledRejection', reason);
+  });
+  app.on('render-process-gone', (_event, _contents, details) => {
+    logMainError(userDataDir, 'render-process-gone', details);
+  });
+  app.on('child-process-gone', (_event, details) => {
+    logMainError(userDataDir, 'child-process-gone', details);
+  });
+}
+
 void app
   .whenReady()
   .then(async () => {
-    const benchRoot = process.env.DUST_BENCH_ROOT;
+    app.setAppUserModelId('com.mohaned178.dust');
+    const benchRoot = app.isPackaged ? undefined : process.env.DUST_BENCH_ROOT;
     if (benchRoot) {
       app.setPath('userData', join(tmpdir(), 'dust-bench-userdata'));
     }
     const userDataDir = app.getPath('userData');
+    installCrashLogging(userDataDir);
+    installSessionSecurity(session.defaultSession, {
+      dev: process.env.DUST_DEV_SERVER_URL !== undefined,
+    });
     const ackPath = elevationAckPath(userDataDir);
     const launchedViaElevation = hasElevatedFlag(process.argv);
     let elevated = launchedViaElevation || (await isRunningElevated());
@@ -463,6 +497,10 @@ void app
       /* volume warm-up is best effort */
     }
     await loadRenderer(window);
+    hardenWebContents(window.webContents, {
+      appUrl: window.webContents.getURL(),
+      devServerUrl: process.env.DUST_DEV_SERVER_URL,
+    });
     if (launchedViaElevation) {
       try {
         writeFileSync(ackPath, `${Date.now()}`, 'utf8');
@@ -470,20 +508,12 @@ void app
         /* the parent falls back to its timeout */
       }
     }
-    if (process.env.DUST_AUTO === '1') await runAutoNav(window);
+    if (process.env.DUST_AUTO === '1' && !app.isPackaged) await runAutoNav(window);
     if (benchRoot) await runBench(host, window, benchRoot);
   })
   .catch((error: unknown) => {
     console.error('Dust failed to start', error);
-    try {
-      appendFileSync(
-        join(app.getPath('userData'), 'startup-error.log'),
-        `${new Date().toISOString()} ${String(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
-        'utf8',
-      );
-    } catch {
-      /* best effort */
-    }
+    logMainError(app.getPath('userData'), 'startup', error);
     app.quit();
   });
 
