@@ -1,11 +1,28 @@
 import { execFile } from 'node:child_process';
-import { basename } from 'node:path';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
+import type { UninstallHive } from '../uninstall/types';
 
 export interface InstalledApp {
+  id: string;
+  hive: UninstallHive;
+  keyName: string;
   displayName: string;
   publisher: string;
   installLocation: string;
+  version: string;
+  installDate: string;
+  estimatedSizeKb: number | null;
+  uninstallString: string;
+  quietUninstallString: string;
+  displayIcon: string;
+  windowsInstaller: boolean;
+  systemComponent: boolean;
+  noRemove: boolean;
+  uninstallable: boolean;
+  parentKeyName: string;
+  releaseType: string;
 }
 
 export interface InstalledAppMatch {
@@ -30,15 +47,36 @@ const QUERY_TIMEOUT_MS = 15_000;
 
 const QUERY_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
-  '$keys = @(',
-  "  'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',",
-  "  'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',",
-  "  'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'",
+  '$roots = @(',
+  "  [pscustomobject]@{ hive = 'hklm'; path = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' },",
+  "  [pscustomobject]@{ hive = 'hklm-wow64'; path = 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' },",
+  "  [pscustomobject]@{ hive = 'hkcu'; path = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' }",
   ')',
-  '$items = foreach ($key in $keys) {',
-  '  Get-ItemProperty -Path $key | Where-Object { $_.DisplayName } | Select-Object DisplayName, Publisher, InstallLocation',
+  '$items = foreach ($root in $roots) {',
+  '  $keys = Get-ItemProperty -Path $root.path | Where-Object { $_.DisplayName }',
+  '  foreach ($key in @($keys)) {',
+  '    [pscustomobject]@{',
+  '      hive = $root.hive',
+  '      keyName = [string]$key.PSChildName',
+  '      DisplayName = [string]$key.DisplayName',
+  '      Publisher = [string]$key.Publisher',
+  '      InstallLocation = [string]$key.InstallLocation',
+  '      DisplayVersion = [string]$key.DisplayVersion',
+  '      InstallDate = [string]$key.InstallDate',
+  '      EstimatedSize = $key.EstimatedSize',
+  '      UninstallString = [string]$key.UninstallString',
+  '      QuietUninstallString = [string]$key.QuietUninstallString',
+  '      DisplayIcon = [string]$key.DisplayIcon',
+  '      WindowsInstaller = [bool]$key.WindowsInstaller',
+  '      SystemComponent = [bool]$key.SystemComponent',
+  '      NoRemove = [bool]$key.NoRemove',
+  '      Uninstallable = [bool]($key.Uninstallable -ne 0)',
+  '      ParentKeyName = [string]$key.ParentKeyName',
+  '      ReleaseType = [string]$key.ReleaseType',
+  '    }',
+  '  }',
   '}',
-  "ConvertTo-Json -InputObject @($items) -Compress -Depth 3",
+  'ConvertTo-Json -InputObject @($items) -Compress -Depth 3',
 ].join('\n');
 
 const PUBLISHER_STOPWORDS = new Set([
@@ -68,6 +106,13 @@ const PUBLISHER_STOPWORDS = new Set([
 
 export function vendorKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+export function appId(hive: UninstallHive, keyName: string): string {
+  return createHash('sha1')
+    .update(`${hive}\u0000${keyName.trim().toLowerCase()}`)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function wordTokens(value: string, minimumLength: number): string[] {
@@ -112,6 +157,35 @@ export function matchInstalledApp(
   return publisherMatch;
 }
 
+function readString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function readBool(record: Record<string, unknown>, key: string, fallback: boolean): boolean {
+  const value = record[key];
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  return fallback;
+}
+
+function readEstimatedSize(record: Record<string, unknown>): number | null {
+  const value = record.EstimatedSize;
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return Math.round(value);
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.round(parsed);
+  }
+  return null;
+}
+
+function readHive(record: Record<string, unknown>): UninstallHive {
+  const value = readString(record, 'hive').toLowerCase();
+  if (value === 'hkcu') return 'hkcu';
+  if (value === 'hklm-wow64') return 'hklm-wow64';
+  return 'hklm';
+}
+
 export function parseInstalledApps(raw: string): InstalledApp[] | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0 || trimmed === 'null') return [];
@@ -128,15 +202,33 @@ export function parseInstalledApps(raw: string): InstalledApp[] | null {
   for (const entry of list) {
     if (typeof entry !== 'object' || entry === null) continue;
     const record = entry as Record<string, unknown>;
-    const displayName = typeof record.DisplayName === 'string' ? record.DisplayName.trim() : '';
+    const displayName = readString(record, 'DisplayName');
     if (displayName.length === 0) continue;
-    const key = vendorKey(displayName);
-    if (key.length === 0 || seen.has(key)) continue;
-    seen.add(key);
+    const hive = readHive(record);
+    const rawKey = readString(record, 'keyName');
+    const keyName = rawKey.length > 0 ? rawKey : vendorKey(displayName);
+    const identity = `${hive}\u0000${keyName.toLowerCase()}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
     out.push({
+      id: appId(hive, keyName),
+      hive,
+      keyName,
       displayName,
-      publisher: typeof record.Publisher === 'string' ? record.Publisher.trim() : '',
-      installLocation: typeof record.InstallLocation === 'string' ? record.InstallLocation.trim() : '',
+      publisher: readString(record, 'Publisher'),
+      installLocation: readString(record, 'InstallLocation'),
+      version: readString(record, 'DisplayVersion'),
+      installDate: readString(record, 'InstallDate'),
+      estimatedSizeKb: readEstimatedSize(record),
+      uninstallString: readString(record, 'UninstallString'),
+      quietUninstallString: readString(record, 'QuietUninstallString'),
+      displayIcon: readString(record, 'DisplayIcon'),
+      windowsInstaller: readBool(record, 'WindowsInstaller', false),
+      systemComponent: readBool(record, 'SystemComponent', false),
+      noRemove: readBool(record, 'NoRemove', false),
+      uninstallable: readBool(record, 'Uninstallable', true),
+      parentKeyName: readString(record, 'ParentKeyName'),
+      releaseType: readString(record, 'ReleaseType'),
     });
   }
   return out;

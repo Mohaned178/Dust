@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SystemInfoView } from '../../renderer/src/pages/SystemInfoView';
+import { VRAM_CAVEAT } from '../../renderer/src/system-info';
 import { makeApi, makeSystemInfo, makeSystemInfoLive } from './fakes';
 
 async function flush(): Promise<void> {
@@ -35,6 +36,8 @@ describe('SystemInfoView', () => {
     const graphics = screen.getByRole('region', { name: 'Graphics' });
     expect(within(graphics).getByText('NVIDIA GeForce RTX 4070')).toBeInTheDocument();
     expect(within(graphics).getByText('560.94')).toBeInTheDocument();
+    expect(within(graphics).getByText('8 GB')).toBeInTheDocument();
+    expect(within(graphics).queryByTitle(VRAM_CAVEAT)).toBeNull();
 
     const firmware = screen.getByRole('region', { name: 'Firmware' });
     expect(
@@ -88,6 +91,58 @@ describe('SystemInfoView', () => {
 
     expect(screen.queryByRole('region', { name: 'This PC' })).toBeNull();
     expect(screen.queryByText('Unknown')).toBeNull();
+  });
+
+  it('marks uncertain VRAM with an asterisk and the caveat tooltip', async () => {
+    render(
+      <SystemInfoView
+        api={makeApi({
+          getSystemInfo: async () =>
+            makeSystemInfo({
+              gpus: [
+                {
+                  name: 'AMD Radeon Graphics',
+                  driverVersion: '31.0.21914.1001',
+                  vramBytes: 4293918720,
+                  vramUncertain: true,
+                },
+              ],
+            }),
+        })}
+      />,
+    );
+    await flush();
+
+    const graphics = screen.getByRole('region', { name: 'Graphics' });
+    expect(within(graphics).getByText('4 GB')).toBeInTheDocument();
+    const asterisk = within(graphics).getByTitle(VRAM_CAVEAT);
+    expect(asterisk).toHaveTextContent('*');
+  });
+
+  it('omits the VRAM row when no source reports it', async () => {
+    render(
+      <SystemInfoView
+        api={makeApi({
+          getSystemInfo: async () =>
+            makeSystemInfo({
+              gpus: [
+                {
+                  name: 'Microsoft Basic Display Adapter',
+                  driverVersion: null,
+                  vramBytes: null,
+                  vramUncertain: false,
+                },
+              ],
+            }),
+        })}
+      />,
+    );
+    await flush();
+
+    const graphics = screen.getByRole('region', { name: 'Graphics' });
+    expect(within(graphics).getByText('Microsoft Basic Display Adapter')).toBeInTheDocument();
+    expect(within(graphics).queryByText('VRAM')).toBeNull();
+    expect(within(graphics).queryByTitle(VRAM_CAVEAT)).toBeNull();
   });
 
   it('polls live values while mounted and stops on unmount', async () => {
@@ -148,7 +203,7 @@ describe('SystemInfoView', () => {
     expect(text).toContain('OS: Windows 11 Pro 25H2 (Build 26200.9457)');
     expect(text).toContain('CPU: AMD Ryzen 7 5800X (8 cores / 16 threads)');
     expect(text).toContain('RAM: 32 GB total · 18.4 GB used');
-    expect(text).toContain('GPU: NVIDIA GeForce RTX 4070 (Driver 560.94)');
+    expect(text).toContain('GPU: NVIDIA GeForce RTX 4070 (Driver 560.94, VRAM 8 GB)');
     expect(screen.getByRole('status')).toHaveTextContent('System info copied.');
   });
 });

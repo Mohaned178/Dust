@@ -14,6 +14,7 @@ export interface DashboardInput {
   snapshot: SnapshotLoadResult;
   scan: ScanState | null;
   systemRoot: string;
+  appsChangedAt?: number | null;
   live?: DashboardLiveResult | null;
 }
 
@@ -61,10 +62,10 @@ export function buildDashboardState(input: DashboardInput): DashboardState {
     };
   });
 
-  return { volumes, scan: input.scan, snapshot: describeSnapshot(input.snapshot) };
+  return { volumes, scan: input.scan, snapshot: describeSnapshot(input.snapshot, input.appsChangedAt ?? null) };
 }
 
-function describeSnapshot(result: SnapshotLoadResult): DashboardSnapshotInfo {
+function describeSnapshot(result: SnapshotLoadResult, appsChangedAt: number | null): DashboardSnapshotInfo {
   const base = {
     root: null,
     finishedAt: null,
@@ -72,6 +73,7 @@ function describeSnapshot(result: SnapshotLoadResult): DashboardSnapshotInfo {
     reclaimableBytes: null,
     cleanedAt: null,
     rulesStale: false,
+    installedAppsStale: false,
   } as const;
   if (result.kind === 'missing') return { status: 'missing', ...base };
   if (result.kind === 'corrupt') return { status: 'corrupt', reason: result.reason, ...base };
@@ -83,6 +85,7 @@ function describeSnapshot(result: SnapshotLoadResult): DashboardSnapshotInfo {
     reclaimableBytes: sumBytes(result.snapshot.categories),
     cleanedAt: result.snapshot.cleanedAt,
     rulesStale: result.snapshot.rulesVersion !== RULES_VERSION,
+    installedAppsStale: appsChangedAt !== null && result.snapshot.finishedAt < appsChangedAt,
   };
 }
 

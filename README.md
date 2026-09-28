@@ -73,7 +73,7 @@ Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/c
 
 ### System Info
 
-A read-only view of the machine: OS name, version, build, and architecture; hostname and uptime; CPU model with physical cores and logical threads; every reported display adapter with its driver version; and motherboard/BIOS when Windows reports them. CPU and memory usage update live while the page is open; everything else is captured once and refreshed on demand. **Copy system info** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
+A read-only view of the machine: OS name, version, build, and architecture; hostname and uptime; CPU model with physical cores and logical threads; every reported display adapter with its driver version and VRAM when Windows reports it; and motherboard/BIOS when Windows reports them. CPU and memory usage update live while the page is open; everything else is captured once and refreshed on demand. **Copy system info** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
 
 ### Browse-only volumes
 
@@ -174,7 +174,7 @@ DUST_PERF=1 npm test -w core
 
 ### System Info smoke checklist
 
-1. `npm run dev:app`, open **System Info**: the page shows a captured timestamp, OS/build/architecture, hostname, uptime, CPU model with cores and threads, every reported display adapter with its driver version, and motherboard/BIOS when the machine reports them.
+1. `npm run dev:app`, open **System Info**: the page shows a captured timestamp, OS/build/architecture, hostname, uptime, CPU model with cores and threads, every reported display adapter with its driver version and VRAM (an asterisk marks a value Windows may under-report), and motherboard/BIOS when the machine reports them.
 2. CPU and memory figures update every ~1.5 seconds while the page is open; leaving the page stops the polling.
 3. **Refresh** re-queries the machine and updates the captured timestamp.
 4. **Copy system info** copies the formatted block and shows the "System info copied." toast; the block contains no serial numbers, MAC addresses, or IP addresses.

@@ -8,9 +8,10 @@ import {
   PackageIcon,
   PanelLeftIcon,
   PowerIcon,
+  UninstallIcon,
 } from './icons';
 
-export type NavKey = 'dashboard' | 'dev-cleanup' | 'startup' | 'drives' | 'system-info';
+export type NavKey = 'dashboard' | 'dev-cleanup' | 'uninstall' | 'startup' | 'drives' | 'system-info';
 
 export interface SidebarProps {
   active: NavKey;
@@ -21,8 +22,6 @@ export interface SidebarProps {
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const COLLAPSE_KEY = 'dust.sidebar.collapsed';
-
-const COMING_SOON = ['Deep Uninstall'];
 
 function readCollapsed(): boolean {
   try {
@@ -120,6 +119,13 @@ export function Sidebar({ active, devCleanupDisabled, onNavigate, onOpenSettings
           onClick={() => onNavigate('dev-cleanup')}
         />
         <NavButton
+          icon={UninstallIcon}
+          label="Deep Uninstall"
+          collapsed={collapsed}
+          active={active === 'uninstall'}
+          onClick={() => onNavigate('uninstall')}
+        />
+        <NavButton
           icon={PowerIcon}
           label="Startup Manager"
           collapsed={collapsed}
@@ -142,33 +148,6 @@ export function Sidebar({ active, devCleanupDisabled, onNavigate, onOpenSettings
         />
         <NavButton icon={GearIcon} label="Settings" collapsed={collapsed} onClick={onOpenSettings} />
       </nav>
-
-      <div className="mt-auto border-t border-hairline px-3 py-4">
-        {collapsed ? (
-          <p
-            title="Coming soon"
-            className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted"
-          >
-            Soon
-          </p>
-        ) : (
-          <>
-            <p className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
-              Coming soon
-            </p>
-            <ul className="mt-2 space-y-1">
-              {COMING_SOON.map((label) => (
-                <li key={label} className="flex items-center justify-between gap-2 px-1">
-                  <span className="truncate text-sm text-ink-muted">{label}</span>
-                  <span className="shrink-0 rounded-full border border-hairline bg-canvas px-1.5 py-px text-xs font-medium tracking-wide text-ink-muted">
-                    Soon
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
     </aside>
   );
 }

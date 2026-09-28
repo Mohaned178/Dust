@@ -108,6 +108,26 @@ describe('SnapshotStore', () => {
     expect(store.getPins()).toEqual([]);
   });
 
+  it('tracks installed-app changes without clobbering pins', () => {
+    expect(store.getAppsChangedAt()).toBeNull();
+    expect(store.setPins(['C:\\dev\\old'])).toEqual({ ok: true });
+    expect(store.markAppsChanged(1234)).toEqual({ ok: true });
+
+    expect(store.getAppsChangedAt()).toBe(1234);
+    expect(store.getPins()).toEqual(['C:\\dev\\old']);
+
+    store.setPins(['C:\\dev\\new']);
+    expect(store.getAppsChangedAt()).toBe(1234);
+  });
+
+  it('ignores corrupt or missing app-change markers', () => {
+    expect(store.getAppsChangedAt()).toBeNull();
+    writeFileSync(join(dir, 'user.json'), JSON.stringify({ pins: [], appsChangedAt: 'later' }));
+    expect(store.getAppsChangedAt()).toBeNull();
+    writeFileSync(join(dir, 'user.json'), '{oops');
+    expect(store.getAppsChangedAt()).toBeNull();
+  });
+
   it('saves asynchronously and round-trips through load', async () => {
     const snapshot = {
       schemaVersion: 2 as const,

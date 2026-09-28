@@ -11,6 +11,7 @@ export interface StorePaths {
 
 export interface UserPreferences {
   pins: string[];
+  appsChangedAt?: number;
 }
 
 export interface SaveResult {
@@ -85,23 +86,46 @@ export class SnapshotStore {
   }
 
   getPins(): string[] {
-    try {
-      if (!existsSync(this.paths.userPath)) return [];
-      const parsed: unknown = JSON.parse(readFileSync(this.paths.userPath, 'utf8'));
-      if (typeof parsed !== 'object' || parsed === null) return [];
-      const pins = (parsed as { pins?: unknown }).pins;
-      if (!Array.isArray(pins)) return [];
-      return pins.filter((pin): pin is string => typeof pin === 'string');
-    } catch {
-      return [];
-    }
+    return this.readPreferences().pins;
   }
 
   setPins(pins: string[]): SaveResult {
+    return this.writePreferences({ ...this.readPreferences(), pins });
+  }
+
+  getAppsChangedAt(): number | null {
+    const value = this.readPreferences().appsChangedAt;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  markAppsChanged(at = Date.now()): SaveResult {
+    return this.writePreferences({ ...this.readPreferences(), appsChangedAt: at });
+  }
+
+  private readPreferences(): UserPreferences {
+    try {
+      if (!existsSync(this.paths.userPath)) return { pins: [] };
+      const parsed: unknown = JSON.parse(readFileSync(this.paths.userPath, 'utf8'));
+      if (typeof parsed !== 'object' || parsed === null) return { pins: [] };
+      const record = parsed as { pins?: unknown; appsChangedAt?: unknown };
+      const pins = Array.isArray(record.pins)
+        ? record.pins.filter((pin): pin is string => typeof pin === 'string')
+        : [];
+      const preferences: UserPreferences = { pins };
+      if (typeof record.appsChangedAt === 'number' && Number.isFinite(record.appsChangedAt)) {
+        preferences.appsChangedAt = record.appsChangedAt;
+      }
+      return preferences;
+    } catch {
+      return { pins: [] };
+    }
+  }
+
+  private writePreferences(preferences: UserPreferences): SaveResult {
     try {
       mkdirSync(dirname(this.paths.userPath), { recursive: true });
       const tmp = `${this.paths.userPath}.tmp`;
-      writeFileSync(tmp, JSON.stringify({ pins } satisfies UserPreferences));
+      writeFileSync(tmp, JSON.stringify(preferences));
       renameSync(tmp, this.paths.userPath);
       return { ok: true };
     } catch (error) {

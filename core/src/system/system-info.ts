@@ -5,6 +5,8 @@ import * as os from 'node:os';
 export interface SystemInfoGpu {
   name: string;
   driverVersion: string | null;
+  vramBytes: number | null;
+  vramUncertain: boolean;
 }
 
 export interface SystemInfoOs {
@@ -66,10 +68,22 @@ export const SYSTEM_INFO_SCRIPT = [
   '$os = $null',
   "try { $cv = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -ErrorAction Stop; $os = [pscustomobject]@{ displayVersion = $cv.DisplayVersion; currentBuild = [string]$cv.CurrentBuild; ubr = $cv.UBR } } catch {}",
   '$cpu = @(Get-CimInstance -ClassName Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, Architecture)',
-  '$gpus = @(Get-CimInstance -ClassName Win32_VideoController | Select-Object Name, DriverVersion)',
+  '$gpus = @(Get-CimInstance -ClassName Win32_VideoController | Select-Object Name, DriverVersion, PNPDeviceID, AdapterRAM)',
+  '$vram = @()',
+  "$base = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}'",
+  'foreach ($key in Get-ChildItem -Path $base -ErrorAction SilentlyContinue) {',
+  "  if ($key.PSChildName -notmatch '^\\d{4}$') { continue }",
+  '  try {',
+  '    $props = Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue',
+  "    $qw = $props.'HardwareInformation.qwMemorySize'",
+  '    $match = [string]$props.MatchingDeviceId',
+  '    if ($qw -is [byte[]]) { $qw = [System.BitConverter]::ToUInt64($qw, 0) }',
+  '    if ($qw -and $match) { $vram += [pscustomobject]@{ matchingDeviceId = $match; qwMemorySize = [long]$qw } }',
+  '  } catch {}',
+  '}',
   '$board = Get-CimInstance -ClassName Win32_BaseBoard | Select-Object Manufacturer, Product | Select-Object -First 1',
   "$bios = Get-CimInstance -ClassName Win32_BIOS | Select-Object SMBIOSBIOSVersion, @{n='ReleaseDate';e={ if ($_.ReleaseDate) { $_.ReleaseDate.ToString('yyyy-MM-dd') } }} | Select-Object -First 1",
-  "ConvertTo-Json -InputObject ([pscustomobject]@{ os = $os; cpu = $cpu; gpus = $gpus; board = $board; bios = $bios }) -Compress -Depth 4",
+  "ConvertTo-Json -InputObject ([pscustomobject]@{ os = $os; cpu = $cpu; gpus = $gpus; vram = $vram; board = $board; bios = $bios }) -Compress -Depth 4",
 ].join('\n');
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -109,6 +123,19 @@ function toPositiveInt(value: unknown): number | null {
   return numeric !== null && numeric > 0 ? numeric : null;
 }
 
+function matchVramBytes(
+  records: Array<{ matchingDeviceId: string; bytes: number }>,
+  pnpDeviceId: string | null,
+): number | null {
+  if (pnpDeviceId === null) return null;
+  const device = pnpDeviceId.toLowerCase();
+  for (const record of records) {
+    const match = record.matchingDeviceId.toLowerCase();
+    if (match.length > 0 && device.startsWith(match)) return record.bytes;
+  }
+  return null;
+}
+
 export function parseSystemInfoJson(raw: string): ParsedSystemInfo | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
@@ -140,12 +167,32 @@ export function parseSystemInfoJson(raw: string): ParsedSystemInfo | null {
     .filter((count): count is number => count !== null);
   const firstCpu = cpuEntries[0];
 
+  const vramRecords = asArray(record.vram)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => entry !== null)
+    .map((entry) => {
+      const matchingDeviceId = cleanString(entry.matchingDeviceId);
+      const bytes = toPositiveInt(entry.qwMemorySize);
+      return matchingDeviceId === null || bytes === null ? null : { matchingDeviceId, bytes };
+    })
+    .filter((entry): entry is { matchingDeviceId: string; bytes: number } => entry !== null);
+
   const gpus = asArray(record.gpus)
     .map(asRecord)
     .filter((entry): entry is Record<string, unknown> => entry !== null)
     .map((entry) => {
       const name = cleanString(entry.Name);
-      return name === null ? null : { name, driverVersion: cleanString(entry.DriverVersion) };
+      if (name === null) return null;
+      const driverVersion = cleanString(entry.DriverVersion);
+      const registryBytes = matchVramBytes(vramRecords, cleanString(entry.PNPDeviceID));
+      if (registryBytes !== null) {
+        return { name, driverVersion, vramBytes: registryBytes, vramUncertain: false };
+      }
+      const adapterRam = toPositiveInt(entry.AdapterRAM);
+      if (adapterRam !== null) {
+        return { name, driverVersion, vramBytes: adapterRam, vramUncertain: true };
+      }
+      return { name, driverVersion, vramBytes: null, vramUncertain: false };
     })
     .filter((gpu): gpu is SystemInfoGpu => gpu !== null);
 

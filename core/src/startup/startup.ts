@@ -242,6 +242,30 @@ export async function disableStartupEntry(id: string, store: StartupStore): Prom
   return { ok: true, entries: await listStartupEntries(store) };
 }
 
+export async function removeStartupBackup(id: string, store: StartupStore): Promise<StartupToggleResult> {
+  const entries = await listStartupEntries(store);
+  const entry = entries.find((candidate) => candidate.id === id);
+  if (entry === undefined) {
+    return { ok: false, reason: 'not-found', message: 'This startup entry no longer exists.' };
+  }
+  if (entry.protected) {
+    return { ok: false, reason: 'protected', message: 'Protected by Dust. This entry cannot be changed.' };
+  }
+  if (entry.disabledKind !== 'dust') {
+    return { ok: false, reason: 'conflict', message: 'This entry is not managed by Dust.' };
+  }
+  try {
+    if (isRunSource(entry.source)) {
+      await store.registry.deleteBackupValue(entry.source, entry.id);
+    } else {
+      await store.folders.deleteBackup(entry.id);
+    }
+  } catch (error) {
+    return failure(entry, error);
+  }
+  return { ok: true, entries: await listStartupEntries(store) };
+}
+
 export async function enableStartupEntry(id: string, store: StartupStore): Promise<StartupToggleResult> {
   const entries = await listStartupEntries(store);
   const entry = entries.find((candidate) => candidate.id === id);

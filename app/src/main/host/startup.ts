@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { disableStartupEntry, enableStartupEntry, listStartupEntries } from '@dust/core';
+import { disableStartupEntry, enableStartupEntry, listStartupEntries, removeStartupBackup } from '@dust/core';
 import type { StartupEntryRecord, StartupStore } from '@dust/core';
 import type { StartupEntry, StartupListResult, StartupListState, StartupToggleResult } from '../../shared/ipc';
 
@@ -10,6 +10,8 @@ export interface StartupService {
   list(): Promise<StartupListResult>;
   disable(id: string): Promise<StartupToggleResult>;
   enable(id: string): Promise<StartupToggleResult>;
+  removeBackup(id: string): Promise<StartupToggleResult>;
+  records(): Promise<StartupEntryRecord[]>;
 }
 
 export interface StartupServiceDeps {
@@ -168,6 +170,14 @@ export function createStartupService(deps: StartupServiceDeps): StartupService {
     list,
     disable: async (id) => apply(await disableStartupEntry(id, deps.store)),
     enable: async (id) => apply(await enableStartupEntry(id, deps.store)),
+    removeBackup: async (id) => apply(await removeStartupBackup(id, deps.store)),
+    records: async () => {
+      try {
+        return await listStartupEntries(deps.store);
+      } catch {
+        return [];
+      }
+    },
   };
 }
 

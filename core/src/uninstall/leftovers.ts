@@ -1,0 +1,301 @@
+import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { defaultProtectedPaths } from '../cleaner/guard';
+import { vendorKey } from '../system/installed-apps';
+import type { InstalledApp } from '../system/installed-apps';
+import { matchAppName } from './apps';
+import { uninstallItemId } from './types';
+import type { KeptItem, LeftoverCandidate, LeftoverClass, UninstallGrade } from './types';
+
+export const LEFTOVER_MAX_DEPTH = 1;
+
+export interface LeftoverRoots {
+  localAppData: string;
+  appData: string;
+  localLow: string;
+  programData: string;
+  temp: string;
+}
+
+export interface LeftoverDiscoveryOptions {
+  roots: LeftoverRoots;
+  installLocation?: string;
+  home?: string;
+  oneDrive?: string[];
+  programFiles?: string[];
+  systemRoot?: string;
+  dustInstallPath?: string;
+  measure?: (path: string) => number | null;
+  maxDepth?: number;
+}
+
+export interface LeftoversResult {
+  candidates: LeftoverCandidate[];
+  skipped: KeptItem[];
+}
+
+interface RootClass {
+  key: keyof LeftoverRoots;
+  class: LeftoverClass;
+}
+
+const ROOT_CLASSES: readonly RootClass[] = [
+  { key: 'localAppData', class: 'app-data' },
+  { key: 'localLow', class: 'app-data' },
+  { key: 'appData', class: 'user-data' },
+  { key: 'programData', class: 'program-data' },
+  { key: 'temp', class: 'temp' },
+];
+
+const USER_DATA_PATTERNS = ['saves', 'savegames', 'savedgames', 'profiles', 'userdata', 'chatlogs'];
+
+type MatchStrength = 'product' | 'publisher' | 'partial';
+
+interface DirMatch {
+  strength: MatchStrength;
+  evidence: string;
+}
+
+interface CandidateInput {
+  path: string;
+  class: LeftoverClass;
+  match: DirMatch;
+  sharedWith: string[];
+  syncRoot: boolean;
+  adminRequired: boolean;
+}
+
+function canonical(value: string): string {
+  return value.replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function underRoot(candidate: string, root: string): boolean {
+  const target = canonical(candidate);
+  const base = canonical(root);
+  if (target.length === 0 || base.length === 0) return false;
+  return target === base || target.startsWith(`${base}\\`) || target.startsWith(`${base}/`);
+}
+
+function defaultProgramFiles(): string[] {
+  return [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+}
+
+function defaultOneDrive(home: string | undefined): string[] {
+  const list = [process.env.OneDrive, process.env.OneDriveCommercial].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+  if (home !== undefined && home.length > 0) list.push(join(home, 'OneDrive'));
+  return list;
+}
+
+export function defaultDirectorySize(path: string): number | null {
+  if (!existsSync(path)) return null;
+  let total = 0;
+  let failed = false;
+  const stack: string[] = [path];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      failed = true;
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const child = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(child);
+        continue;
+      }
+      try {
+        total += statSync(child).size;
+      } catch {
+        failed = true;
+      }
+    }
+  }
+  return failed ? null : total;
+}
+
+function detectLink(path: string): 'junction' | 'symlink' | null {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      return process.platform === 'win32' ? 'junction' : 'symlink';
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function matchDirName(name: string, app: InstalledApp): DirMatch | null {
+  const strength = matchAppName(name, app);
+  if (strength === null) return null;
+  if (strength === 'publisher') {
+    return { strength, evidence: `Folder name matches publisher ${app.publisher}` };
+  }
+  if (strength === 'partial') {
+    return { strength, evidence: `Folder name partially matches ${app.displayName}` };
+  }
+  return { strength: 'product', evidence: `Folder name matches ${app.displayName}` };
+}
+
+function classify(rootClass: LeftoverClass, name: string): LeftoverClass {
+  const key = vendorKey(name);
+  if (USER_DATA_PATTERNS.some((pattern) => key.includes(pattern))) return 'user-data';
+  return rootClass;
+}
+
+function collectDirs(root: string, maxDepth: number): Array<{ path: string; name: string; link: boolean }> {
+  const out: Array<{ path: string; name: string; link: boolean }> = [];
+  const stack: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(current.path, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const link = entry.isSymbolicLink();
+      if (!entry.isDirectory() && !link) continue;
+      const child = join(current.path, entry.name);
+      const depth = current.depth + 1;
+      out.push({ path: child, name: entry.name, link });
+      if (!link && depth < maxDepth) stack.push({ path: child, depth });
+    }
+  }
+  return out;
+}
+
+export function discoverLeftovers(
+  app: InstalledApp,
+  apps: readonly InstalledApp[],
+  options: LeftoverDiscoveryOptions,
+): LeftoversResult {
+  const candidates: LeftoverCandidate[] = [];
+  const skipped: KeptItem[] = [];
+  const seen = new Set<string>();
+  const measure = options.measure ?? defaultDirectorySize;
+  const maxDepth = options.maxDepth ?? LEFTOVER_MAX_DEPTH;
+  const others = apps.filter((entry) => entry.id !== app.id);
+  const programFiles = options.programFiles ?? defaultProgramFiles();
+  const oneDrive = options.oneDrive ?? defaultOneDrive(options.home);
+  const protectedPaths = defaultProtectedPaths({
+    systemRoot: options.systemRoot,
+    programFiles,
+    programData: options.roots.programData,
+    userProfile: options.home,
+  }).map(canonical);
+  const rootKeys = ROOT_CLASSES.map((spec) => canonical(options.roots[spec.key])).filter(
+    (key) => key.length > 0,
+  );
+
+  function requiresAdmin(path: string): boolean {
+    if (underRoot(path, options.roots.programData)) return true;
+    if (programFiles.some((root) => underRoot(path, root))) return true;
+    if (options.systemRoot !== undefined && underRoot(path, options.systemRoot)) return true;
+    return false;
+  }
+
+  function makeCandidate(input: CandidateInput): LeftoverCandidate {
+    const link = detectLink(input.path);
+    const syncRoot = oneDrive.some((prefix) => underRoot(input.path, prefix));
+    let grade: UninstallGrade = input.match.strength === 'product' ? 'safe' : 'review';
+    if (input.sharedWith.length > 0 || syncRoot || link !== null) grade = 'review';
+    const evidence = [input.match.evidence];
+    if (input.sharedWith.length > 0) evidence.push(`Shared with ${input.sharedWith.join(', ')}`);
+    if (syncRoot) evidence.push('Inside a OneDrive-synced folder');
+    if (link !== null) evidence.push('Reparse point: not followed, never deleted');
+    return {
+      id: uninstallItemId('file', input.path),
+      path: input.path,
+      bytes: link === null ? measure(input.path) : null,
+      class: input.class,
+      grade,
+      evidence,
+      adminRequired: input.adminRequired,
+      defaultSelected: grade === 'safe' && input.class !== 'user-data',
+      syncRoot,
+      link,
+      sharedWith: input.sharedWith,
+    };
+  }
+
+  const installLocation = (options.installLocation ?? app.installLocation).trim();
+  if (installLocation.length > 0) {
+    const location = canonical(installLocation);
+    if (!existsSync(installLocation)) {
+      skipped.push({ target: installLocation, reason: 'missing-location' });
+    } else if (options.dustInstallPath !== undefined && underRoot(installLocation, options.dustInstallPath)) {
+      skipped.push({ target: installLocation, reason: 'dust-location' });
+    } else if (protectedPaths.includes(location)) {
+      skipped.push({ target: installLocation, reason: 'protected-location' });
+    } else if (
+      rootKeys.includes(location) ||
+      protectedPaths.some((root) => root.startsWith(`${location}\\`) || root.startsWith(`${location}/`))
+    ) {
+      skipped.push({ target: installLocation, reason: 'location-too-broad' });
+    } else if (
+      others.some((other) => {
+        const otherLocation = other.installLocation.trim();
+        if (otherLocation.length === 0) return false;
+        return underRoot(installLocation, otherLocation) || underRoot(otherLocation, installLocation);
+      })
+    ) {
+      skipped.push({ target: installLocation, reason: 'shared-install-location' });
+    } else {
+      candidates.push(
+        makeCandidate({
+          path: installLocation,
+          class: 'install-dir',
+          match: {
+            strength: 'product',
+            evidence: `Registered install location for ${app.displayName}`,
+          },
+          sharedWith: [],
+          syncRoot: false,
+          adminRequired: requiresAdmin(installLocation),
+        }),
+      );
+      seen.add(location);
+    }
+  }
+
+  for (const spec of ROOT_CLASSES) {
+    const root = options.roots[spec.key];
+    if (root.trim().length === 0 || !existsSync(root)) continue;
+    for (const entry of collectDirs(root, maxDepth)) {
+      const key = canonical(entry.path);
+      if (seen.has(key)) continue;
+      const match = matchDirName(entry.name, app);
+      if (match === null) continue;
+      seen.add(key);
+      if (options.dustInstallPath !== undefined && underRoot(entry.path, options.dustInstallPath)) {
+        skipped.push({ target: entry.path, reason: 'dust-location' });
+        continue;
+      }
+      const sharedWith = others
+        .filter((other) => matchDirName(entry.name, other) !== null)
+        .map((other) => other.displayName);
+      candidates.push(
+        makeCandidate({
+          path: entry.path,
+          class: classify(spec.class, entry.name),
+          match,
+          sharedWith,
+          syncRoot: false,
+          adminRequired: requiresAdmin(entry.path),
+        }),
+      );
+    }
+  }
+
+  candidates.sort((a, b) => a.path.localeCompare(b.path));
+  return { candidates, skipped };
+}

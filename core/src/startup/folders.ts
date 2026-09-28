@@ -196,6 +196,11 @@ export function createFsFolderStore(options: FsFolderStoreOptions = {}): FolderS
       } catch {
         /* best effort */
       }
+      try {
+        rmSync(backupFilePath(id), { force: true });
+      } catch {
+        /* best effort */
+      }
     },
   };
 }

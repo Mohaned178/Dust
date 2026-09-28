@@ -20,7 +20,20 @@ const FULL_FIXTURE = JSON.stringify({
       Architecture: 9,
     },
   ],
-  gpus: [{ Name: 'NVIDIA GeForce RTX 4060', DriverVersion: '32.0.16.1714' }],
+  gpus: [
+    {
+      Name: 'NVIDIA GeForce RTX 4060',
+      DriverVersion: '32.0.16.1714',
+      PNPDeviceID: 'PCI\\VEN_10DE&DEV_2504&SUBSYS_88881043&REV_A1\\4&2283f625&0&0019',
+      AdapterRAM: 4293918720,
+    },
+  ],
+  vram: [
+    {
+      matchingDeviceId: 'PCI\\VEN_10DE&DEV_2504&SUBSYS_88881043&REV_A1',
+      qwMemorySize: 8589934592,
+    },
+  ],
   board: {
     Manufacturer: 'Micro-Star International Co., Ltd.',
     Product: 'B450M-A PRO MAX II (MS-7C52)',
@@ -37,7 +50,14 @@ describe('parseSystemInfoJson', () => {
       cpuModel: 'AMD Ryzen 5 5500',
       physicalCores: 6,
       logicalThreads: 12,
-      gpus: [{ name: 'NVIDIA GeForce RTX 4060', driverVersion: '32.0.16.1714' }],
+      gpus: [
+        {
+          name: 'NVIDIA GeForce RTX 4060',
+          driverVersion: '32.0.16.1714',
+          vramBytes: 8589934592,
+          vramUncertain: false,
+        },
+      ],
       board: {
         manufacturer: 'Micro-Star International Co., Ltd.',
         product: 'B450M-A PRO MAX II (MS-7C52)',
@@ -55,7 +75,74 @@ describe('parseSystemInfoJson', () => {
     );
     expect(parsed?.cpuModel).toBe('CPU');
     expect(parsed?.architecture).toBe(0);
-    expect(parsed?.gpus).toEqual([{ name: 'Adapter', driverVersion: null }]);
+    expect(parsed?.gpus).toEqual([
+      { name: 'Adapter', driverVersion: null, vramBytes: null, vramUncertain: false },
+    ]);
+  });
+
+  it('falls back to AdapterRAM with the uncertain flag when the registry has no entry', () => {
+    const parsed = parseSystemInfoJson(
+      JSON.stringify({
+        gpus: [
+          {
+            Name: 'GPU',
+            PNPDeviceID: 'PCI\\VEN_1002&DEV_1234&SUBSYS_0000&REV_00\\0',
+            AdapterRAM: 4293918720,
+          },
+        ],
+        vram: [],
+      }),
+    );
+    expect(parsed?.gpus).toEqual([
+      { name: 'GPU', driverVersion: null, vramBytes: 4293918720, vramUncertain: true },
+    ]);
+  });
+
+  it('omits VRAM when neither the registry nor AdapterRAM reports it', () => {
+    const parsed = parseSystemInfoJson(JSON.stringify({ gpus: [{ Name: 'GPU' }] }));
+    expect(parsed?.gpus).toEqual([
+      { name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
+    ]);
+  });
+
+  it('matches registry entries per adapter for multi-GPU machines', () => {
+    const parsed = parseSystemInfoJson(
+      JSON.stringify({
+        gpus: [
+          {
+            Name: 'Integrated',
+            PNPDeviceID: 'PCI\\VEN_8086&DEV_1234&SUBSYS_0000&REV_00\\0',
+            AdapterRAM: 1073741824,
+          },
+          {
+            Name: 'Discrete',
+            PNPDeviceID: 'PCI\\VEN_10DE&DEV_2504&SUBSYS_88881043&REV_A1\\4&2283f625&0&0019',
+          },
+        ],
+        vram: [
+          {
+            matchingDeviceId: 'PCI\\VEN_10DE&DEV_2504&SUBSYS_88881043&REV_A1',
+            qwMemorySize: 8589934592,
+          },
+        ],
+      }),
+    );
+    expect(parsed?.gpus).toEqual([
+      { name: 'Integrated', driverVersion: null, vramBytes: 1073741824, vramUncertain: true },
+      { name: 'Discrete', driverVersion: null, vramBytes: 8589934592, vramUncertain: false },
+    ]);
+  });
+
+  it('ignores registry entries that match no adapter', () => {
+    const parsed = parseSystemInfoJson(
+      JSON.stringify({
+        gpus: [{ Name: 'GPU', PNPDeviceID: 'PCI\\VEN_10DE&DEV_2504&SUBSYS_88881043&REV_A1\\0' }],
+        vram: [{ matchingDeviceId: 'PCI\\VEN_8086&DEV_9999', qwMemorySize: 8589934592 }],
+      }),
+    );
+    expect(parsed?.gpus).toEqual([
+      { name: 'GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
+    ]);
   });
 
   it('sums cores across sockets and drops empty GPU entries', () => {
@@ -70,7 +157,9 @@ describe('parseSystemInfoJson', () => {
     );
     expect(parsed?.physicalCores).toBe(16);
     expect(parsed?.logicalThreads).toBe(32);
-    expect(parsed?.gpus).toEqual([{ name: 'Real GPU', driverVersion: null }]);
+    expect(parsed?.gpus).toEqual([
+      { name: 'Real GPU', driverVersion: null, vramBytes: null, vramUncertain: false },
+    ]);
   });
 
   it('returns nulls for missing sections instead of inventing values', () => {
@@ -120,7 +209,8 @@ describe('SYSTEM_INFO_SCRIPT', () => {
     expect(SYSTEM_INFO_SCRIPT).toContain('Win32_BaseBoard');
     expect(SYSTEM_INFO_SCRIPT).toContain('Win32_BIOS');
     expect(SYSTEM_INFO_SCRIPT).not.toContain('Win32_PhysicalMemory');
-    expect(SYSTEM_INFO_SCRIPT).not.toContain('AdapterRAM');
+    expect(SYSTEM_INFO_SCRIPT).toContain('AdapterRAM');
+    expect(SYSTEM_INFO_SCRIPT).toContain('qwMemorySize');
     expect(SYSTEM_INFO_SCRIPT).not.toContain('SerialNumber');
     expect(SYSTEM_INFO_SCRIPT).not.toContain('ProductName');
   });
@@ -152,7 +242,14 @@ describe('getSystemInfoStatic', () => {
       hostname: 'dev-machine',
       uptimeMs: ((2 * 24 + 4) * 3600) * 1000,
       cpu: { model: 'AMD Ryzen 5 5500', physicalCores: 6, logicalThreads: 12 },
-      gpus: [{ name: 'NVIDIA GeForce RTX 4060', driverVersion: '32.0.16.1714' }],
+      gpus: [
+        {
+          name: 'NVIDIA GeForce RTX 4060',
+          driverVersion: '32.0.16.1714',
+          vramBytes: 8589934592,
+          vramUncertain: false,
+        },
+      ],
       board: {
         manufacturer: 'Micro-Star International Co., Ltd.',
         product: 'B450M-A PRO MAX II (MS-7C52)',

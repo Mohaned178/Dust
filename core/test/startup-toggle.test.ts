@@ -5,6 +5,7 @@ import {
   entryId,
   listStartupEntries,
   parseBackupEnvelope,
+  removeStartupBackup,
 } from '../src/index';
 import type { StartupBackupEnvelope } from '../src/index';
 import { FakeFolderStore, FakeRegistryStore, makeStore } from './startup-fakes';
@@ -247,5 +248,65 @@ describe('list after toggles', () => {
 
     await enableStartupEntry(id, store);
     expect((await listStartupEntries(store))[0]?.state).toBe('enabled');
+  });
+});
+
+describe('removeStartupBackup', () => {
+  it('purges a Dust backup for a disabled Run entry', async () => {
+    const id = entryId('hkcu-run', 'Discord');
+    const registry = new FakeRegistryStore({
+      run: {},
+      backups: [
+        { source: 'hkcu-run', envelope: { v: 1, id, name: 'Discord', command, source: 'hkcu-run', disabledAt: 5 } },
+      ],
+    });
+
+    const result = await removeStartupBackup(id, makeStore({ registry }));
+
+    expect(result.ok).toBe(true);
+    expect(registry.backups).toHaveLength(0);
+    expect(registry.calls).toContain(`deleteBackup:hkcu-run:${id}`);
+  });
+
+  it('purges folder envelopes', async () => {
+    const id = entryId('startup-folder-user', 'Slack');
+    const folders = new FakeFolderStore({
+      backups: [
+        {
+          v: 1,
+          id,
+          name: 'Slack',
+          command: 'slack.exe',
+          source: 'startup-folder-user',
+          disabledAt: 5,
+          fileName: 'Slack.lnk',
+        },
+      ],
+    });
+
+    const result = await removeStartupBackup(id, makeStore({ folders }));
+
+    expect(result.ok).toBe(true);
+    expect(folders.backups).toHaveLength(0);
+    expect(folders.calls).toContain(`deleteBackup:${id}`);
+  });
+
+  it('refuses entries that are not managed by Dust', async () => {
+    const id = entryId('hkcu-run', 'Discord');
+    const registry = new FakeRegistryStore({ run: { 'hkcu-run': [{ name: 'Discord', command }] } });
+
+    const result = await removeStartupBackup(id, makeStore({ registry }));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'conflict',
+      message: 'This entry is not managed by Dust.',
+    });
+  });
+
+  it('reports not-found for unknown ids', async () => {
+    const result = await removeStartupBackup(entryId('hkcu-run', 'Ghost'), makeStore({}));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('not-found');
   });
 });

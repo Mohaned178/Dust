@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '../../renderer/src/components/Sidebar';
 import type { SidebarProps } from '../../renderer/src/components/Sidebar';
@@ -67,6 +67,9 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dev Cleanup' }));
     expect(onNavigate).toHaveBeenCalledWith('dev-cleanup');
 
+    fireEvent.click(screen.getByRole('button', { name: 'Deep Uninstall' }));
+    expect(onNavigate).toHaveBeenCalledWith('uninstall');
+
     fireEvent.click(screen.getByRole('button', { name: 'Startup Manager' }));
     expect(onNavigate).toHaveBeenCalledWith('startup');
 
@@ -116,29 +119,14 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Dashboard')).toBeNull();
   });
 
-  it('keeps coming-soon items inert text, not controls', () => {
+  it('shows Deep Uninstall as a real navigation item with no coming-soon group', () => {
     renderSidebar();
 
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
-    expect(screen.getByText('Deep Uninstall')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Deep Uninstall' })).toBeNull();
-    expect(screen.getAllByText('Soon')).toHaveLength(1);
-  });
+    expect(screen.queryByText('Coming soon')).toBeNull();
+    expect(screen.queryByText('Soon')).toBeNull();
 
-  it('meets contrast on the coming-soon group and keeps it out of the tab order', () => {
-    renderSidebar();
-
-    expect(screen.getByText('Coming soon')).toHaveClass('text-ink-muted');
-    for (const label of ['Deep Uninstall']) {
-      expect(screen.getByText(label)).toHaveClass('text-ink-muted');
-    }
-    for (const tag of screen.getAllByText('Soon')) {
-      expect(tag).toHaveClass('text-ink-muted');
-    }
-
-    const list = screen.getByRole('list');
-    expect(within(list).queryAllByRole('button')).toHaveLength(0);
-    expect(list.querySelectorAll('button, a, input, select, textarea, [tabindex]')).toHaveLength(0);
+    const item = screen.getByRole('button', { name: 'Deep Uninstall' });
+    expect(item).not.toHaveAttribute('aria-current');
   });
 
   it('keeps the collapse toggle and nav reachable in visual order', () => {
@@ -149,6 +137,7 @@ describe('Sidebar', () => {
       'Collapse sidebar',
       'Dashboard',
       'Dev Cleanup',
+      'Deep Uninstall',
       'Startup Manager',
       'Drives',
       'System Info',

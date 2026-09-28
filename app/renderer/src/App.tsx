@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CategoryId } from '@dust/core';
-import type { DustApi, ScanEvent, StartAnalyzeResult, StartupNotice } from '../../src/shared/ipc';
+import type { DustApi, ScanEvent, StartAnalyzeResult, StartupNotice, UninstallLaunchHint } from '../../src/shared/ipc';
 import { bumpRendererCount, recordRendererSample } from './instrument';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
@@ -14,6 +14,7 @@ import { ResultsView } from './pages/ResultsView';
 import { ScanView } from './pages/ScanView';
 import { StartupView } from './pages/StartupView';
 import { SystemInfoView } from './pages/SystemInfoView';
+import { UninstallView } from './pages/UninstallView';
 
 export interface AppProps {
   api: DustApi;
@@ -27,12 +28,15 @@ type View =
   | { name: 'browse'; root: string }
   | { name: 'startup' }
   | { name: 'system-info' }
+  | { name: 'uninstall' }
   | { name: 'dev-cleanup'; root: string };
 
 function navFor(view: View): NavKey {
   switch (view.name) {
     case 'dev-cleanup':
       return 'dev-cleanup';
+    case 'uninstall':
+      return 'uninstall';
     case 'startup':
       return 'startup';
     case 'system-info':
@@ -54,6 +58,7 @@ export function App({ api }: AppProps) {
   const [systemRoot, setSystemRoot] = useState<string | null>(null);
   const [event, setEvent] = useState<ScanEvent | null>(null);
   const [startupNotice, setStartupNotice] = useState<StartupNotice | null>(null);
+  const [uninstallHint, setUninstallHint] = useState<UninstallLaunchHint | null>(null);
   const launchHandled = useRef(false);
 
   useEffect(
@@ -78,6 +83,14 @@ export function App({ api }: AppProps) {
         if (hint === null || !hint.open) return;
         setStartupNotice(hint.notice);
         setView({ name: 'startup' });
+      })
+      .catch(() => {});
+    api
+      .getUninstallLaunchHint()
+      .then((hint) => {
+        if (hint === null || !hint.open) return;
+        setUninstallHint(hint);
+        setView({ name: 'uninstall' });
       })
       .catch(() => {});
   }, [api]);
@@ -105,6 +118,7 @@ export function App({ api }: AppProps) {
       else if (key === 'drives') setView({ name: 'drives' });
       else if (key === 'startup') setView({ name: 'startup' });
       else if (key === 'system-info') setView({ name: 'system-info' });
+      else if (key === 'uninstall') setView({ name: 'uninstall' });
       else if (key === 'dev-cleanup' && systemRoot !== null) setView({ name: 'dev-cleanup', root: systemRoot });
     },
     [systemRoot],
@@ -137,6 +151,10 @@ export function App({ api }: AppProps) {
     );
   } else if (view.name === 'system-info') {
     content = <SystemInfoView api={api} />;
+  } else if (view.name === 'uninstall') {
+    content = (
+      <UninstallView api={api} hint={uninstallHint} onHintShown={() => setUninstallHint(null)} />
+    );
   } else if (view.name === 'dev-cleanup') {
     content = (
       <DevCleanupView api={api} root={view.root} onBack={back} onViewResults={viewResults} />

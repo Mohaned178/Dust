@@ -13,12 +13,13 @@ import type { RuleContext } from '../src/rules/types';
 import type { RuleEnv } from '../src/rules/paths';
 import type { InstalledApp, InstalledAppsSnapshot } from '../src/system/installed-apps';
 import { Fixture } from './fixtures';
+import { makeInstalledApp } from './installed-app-fixtures';
 
-const CHROME: InstalledApp = { displayName: 'Google Chrome', publisher: 'Google LLC', installLocation: '' };
-const DISCORD: InstalledApp = { displayName: 'Discord', publisher: 'Discord Inc.', installLocation: '' };
-const EDGE: InstalledApp = { displayName: 'Microsoft Edge', publisher: 'Microsoft Corporation', installLocation: '' };
-const FIREFOX: InstalledApp = { displayName: 'Mozilla Firefox', publisher: 'Mozilla', installLocation: '' };
-const SLACK: InstalledApp = { displayName: 'Slack', publisher: 'Slack Technologies', installLocation: '' };
+const CHROME = makeInstalledApp({ displayName: 'Google Chrome', publisher: 'Google LLC' });
+const DISCORD = makeInstalledApp({ displayName: 'Discord', publisher: 'Discord Inc.' });
+const EDGE = makeInstalledApp({ displayName: 'Microsoft Edge', publisher: 'Microsoft Corporation' });
+const FIREFOX = makeInstalledApp({ displayName: 'Mozilla Firefox', publisher: 'Mozilla' });
+const SLACK = makeInstalledApp({ displayName: 'Slack', publisher: 'Slack Technologies' });
 
 describe('curated cache gating', () => {
   let fixture: Fixture;

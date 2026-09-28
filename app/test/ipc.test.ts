@@ -5,7 +5,14 @@ import type { EngineHostDeps } from '../src/main/host/engine-host';
 import { registerIpcHandlers, parseCleanPreviewRequest } from '../src/main/ipc';
 import type { IpcRegistrar } from '../src/main/ipc';
 import { IPC } from '../src/shared/ipc';
-import type { DashboardState, ScanEvent, StartAnalyzeResult, SystemInfoStatic } from '../src/shared/ipc';
+import type {
+  DashboardState,
+  ScanEvent,
+  StartAnalyzeResult,
+  SystemInfoStatic,
+  UninstallExecuteRequest,
+  UninstallLaunchHint,
+} from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
 import { TempTree } from './fixtures';
 
@@ -174,6 +181,12 @@ describe('registerIpcHandlers', () => {
         reason: 'not-found' as const,
         message: 'This startup entry no longer exists.',
       })),
+      removeBackup: vi.fn(async () => ({
+        ok: false as const,
+        reason: 'not-found' as const,
+        message: 'This startup entry no longer exists.',
+      })),
+      records: vi.fn(async () => []),
     };
     const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { startup });
     const registrar = new FakeRegistrar();
@@ -198,6 +211,64 @@ describe('registerIpcHandlers', () => {
       message: 'This startup entry no longer exists.',
     });
     expect(await registrar.invoke(IPC.startupHint)).toEqual(hint);
+
+    unsubscribe();
+    host.dispose();
+  });
+
+  it('routes uninstall list, preview, execute, skip and hint through the host', async () => {
+    const calls: string[] = [];
+    const uninstall = {
+      list: async (force?: boolean) => {
+        calls.push(`list:${force === true}`);
+        return { ok: true as const, apps: [], trusted: true, elevated: true, loadedAt: 5 };
+      },
+      preview: async (appId: string) => {
+        calls.push(`preview:${appId}`);
+        return { ok: false as const, reason: 'not-found' as const, message: 'gone' };
+      },
+      execute: async (request: UninstallExecuteRequest) => {
+        calls.push(`execute:${request.planId}`);
+        return { ok: false as const, reason: 'unknown-plan' as const };
+      },
+      skipWaiting: () => {
+        calls.push('skip');
+      },
+      adoptJob: () => {
+        calls.push('adopt');
+      },
+      exportJob: () => null,
+      onEvent: () => () => {},
+    };
+    const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { uninstall });
+    const registrar = new FakeRegistrar();
+    const hint: UninstallLaunchHint = {
+      open: true,
+      notice: null,
+      stalePending: false,
+      runningJobId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    };
+    const unsubscribe = registerIpcHandlers(
+      registrar,
+      host,
+      { send: () => {} },
+      { revealPath: async () => {}, relaunchElevated: async () => {} },
+      () => null,
+      () => hint,
+    );
+
+    expect(await registrar.invoke(IPC.uninstallList, true)).toMatchObject({ ok: true });
+    expect(await registrar.invoke(IPC.uninstallPreview, 'app-1')).toMatchObject({ reason: 'not-found' });
+    expect(
+      await registrar.invoke(IPC.uninstallExecute, {
+        jobId: 'plan-9',
+        planId: 'plan-9',
+        selection: ['a', 5],
+      }),
+    ).toMatchObject({ reason: 'unknown-plan' });
+    await registrar.invoke(IPC.uninstallSkipWaiting);
+    expect(await registrar.invoke(IPC.uninstallHint)).toEqual(hint);
+    expect(calls).toEqual(['list:true', 'preview:app-1', 'execute:plan-9', 'skip']);
 
     unsubscribe();
     host.dispose();

@@ -262,6 +262,7 @@ describe('Dashboard', () => {
             reclaimableBytes: null,
             cleanedAt: null,
             rulesStale: false,
+            installedAppsStale: false,
           },
         }),
     });

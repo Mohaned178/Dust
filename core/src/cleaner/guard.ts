@@ -20,7 +20,7 @@ export interface GuardResult {
   reason?: GuardDenial;
 }
 
-const DEFAULT_USER_FOLDERS = ['Documents', 'Desktop', 'Downloads', 'Pictures', 'Music', 'Videos', 'OneDrive'];
+export const DEFAULT_USER_FOLDERS = ['Documents', 'Desktop', 'Downloads', 'Pictures', 'Music', 'Videos', 'OneDrive'];
 
 export function defaultProtectedPaths(env: GuardOptions = {}): string[] {
   const paths: string[] = [];

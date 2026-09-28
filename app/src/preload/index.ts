@@ -20,6 +20,12 @@ import type {
   StartupToggleResult,
   SystemInfoLive,
   SystemInfoStatic,
+  UninstallEvent,
+  UninstallExecuteRequest,
+  UninstallExecuteResult,
+  UninstallLaunchHint,
+  UninstallListResult,
+  UninstallPreviewResult,
 } from '../shared/ipc';
 
 const api: DustApi = {
@@ -47,6 +53,24 @@ const api: DustApi = {
   getSystemInfoLive: () => ipcRenderer.invoke(IPC.systemInfoLive) as Promise<SystemInfoLive>,
   relaunchElevated: (startupToggleId?: string, action?: StartupRelaunchAction) =>
     ipcRenderer.invoke(IPC.relaunchElevated, startupToggleId, action) as Promise<void>,
+  listUninstallApps: (force?: boolean) =>
+    ipcRenderer.invoke(IPC.uninstallList, force === true) as Promise<UninstallListResult>,
+  previewUninstall: (appId: string) =>
+    ipcRenderer.invoke(IPC.uninstallPreview, appId) as Promise<UninstallPreviewResult>,
+  executeUninstall: (request: UninstallExecuteRequest) =>
+    ipcRenderer.invoke(IPC.uninstallExecute, request) as Promise<UninstallExecuteResult>,
+  skipUninstallWaiting: () => ipcRenderer.invoke(IPC.uninstallSkipWaiting) as Promise<void>,
+  getUninstallLaunchHint: () =>
+    ipcRenderer.invoke(IPC.uninstallHint) as Promise<UninstallLaunchHint | null>,
+  relaunchElevatedUninstall: (jobId: string) =>
+    ipcRenderer.invoke(IPC.relaunchElevatedUninstall, jobId) as Promise<void>,
+  onUninstallEvent: (handler: (event: UninstallEvent) => void) => {
+    const listener = (_event: unknown, payload: UninstallEvent) => handler(payload);
+    ipcRenderer.on(IPC.uninstallEvent, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC.uninstallEvent, listener);
+    };
+  },
   onScanEvent: (handler: (event: ScanEvent) => void) => {
     const listener = (_event: unknown, payload: ScanEvent) => handler(payload);
     ipcRenderer.on(IPC.scanEvent, listener);

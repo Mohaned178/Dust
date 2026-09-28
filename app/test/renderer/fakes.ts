@@ -6,12 +6,16 @@ import type {
   DevCleanupState,
   DevProject,
   DustApi,
+  RemovalReport,
   ResultRow,
   ResultsState,
   StartupEntry,
   StartupListState,
   SystemInfoLive,
   SystemInfoStatic,
+  UninstallAppSummary,
+  UninstallItemPreview,
+  UninstallPreview,
 } from '../../src/shared/ipc';
 
 export function makeResultsRows(): ResultRow[] {
@@ -273,6 +277,7 @@ export function makeDashboardState(overrides: Partial<DashboardState> = {}): Das
       reclaimableBytes: 512 * 1024 ** 2,
       cleanedAt: null,
       rulesStale: false,
+      installedAppsStale: false,
     },
     ...overrides,
   };
@@ -347,7 +352,14 @@ export function makeSystemInfo(overrides: Partial<SystemInfoStatic> = {}): Syste
     hostname: 'dev-machine',
     uptimeMs: (2 * 24 + 4) * 3_600_000,
     cpu: { model: 'AMD Ryzen 7 5800X', physicalCores: 8, logicalThreads: 16 },
-    gpus: [{ name: 'NVIDIA GeForce RTX 4070', driverVersion: '560.94' }],
+    gpus: [
+      {
+        name: 'NVIDIA GeForce RTX 4070',
+        driverVersion: '560.94',
+        vramBytes: 8 * 1024 ** 3,
+        vramUncertain: false,
+      },
+    ],
     board: { manufacturer: 'ASUSTeK COMPUTER INC.', product: 'ROG STRIX B550-F GAMING' },
     bios: { version: '2803', date: '2023-04-12' },
     ...overrides,
@@ -360,6 +372,145 @@ export function makeSystemInfoLive(overrides: Partial<SystemInfoLive> = {}): Sys
     memTotalBytes: 32 * 1024 ** 3,
     memUsedBytes: 19_757_772_800,
     memAvailableBytes: 32 * 1024 ** 3 - 19_757_772_800,
+    ...overrides,
+  };
+}
+
+export function makeUninstallApp(overrides: Partial<UninstallAppSummary> = {}): UninstallAppSummary {
+  return {
+    id: 'app-1',
+    displayName: 'Spotify',
+    publisher: 'Spotify AB',
+    version: '1.2.3',
+    installLocation: 'C:\\Users\\x\\AppData\\Roaming\\Spotify',
+    estimatedSizeKb: 2048,
+    hive: 'hkcu',
+    kind: 'exe',
+    requiresAdmin: false,
+    hasUninstaller: true,
+    ...overrides,
+  };
+}
+
+export function makeUninstallItem(
+  overrides: Partial<UninstallItemPreview> & { id: string; kind: UninstallItemPreview['kind'] },
+): UninstallItemPreview {
+  return {
+    target: `C:\\Leftovers\\${overrides.id}`,
+    label: overrides.id,
+    bytes: null,
+    grade: 'safe',
+    evidence: ['Folder name matches Spotify'],
+    adminRequired: false,
+    defaultSelected: false,
+    ...overrides,
+  };
+}
+
+export function makeUninstallPreview(overrides: Partial<UninstallPreview> = {}): UninstallPreview {
+  const items = overrides.items ?? [
+    makeUninstallItem({
+      id: 'file-local',
+      kind: 'file',
+      dataClass: 'app-data',
+      bytes: 1024,
+      defaultSelected: true,
+      target: 'C:\\Users\\x\\AppData\\Local\\Spotify',
+      label: 'Spotify',
+    }),
+    makeUninstallItem({
+      id: 'file-roaming',
+      kind: 'file',
+      dataClass: 'user-data',
+      bytes: 2048,
+      target: 'C:\\Users\\x\\AppData\\Roaming\\Spotify',
+      label: 'Spotify',
+    }),
+    makeUninstallItem({
+      id: 'reg-vendor',
+      kind: 'registry',
+      grade: 'review',
+      defaultSelected: false,
+      target: 'HKCU\\Software\\Spotify',
+      label: 'HKCU\\Software\\Spotify',
+    }),
+    makeUninstallItem({
+      id: 'reg-uninstall',
+      kind: 'registry',
+      grade: 'safe',
+      defaultSelected: true,
+      target: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Spotify',
+      label: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Spotify',
+    }),
+  ];
+  return {
+    planId: 'plan-1',
+    createdAt: 1,
+    app: makeUninstallApp(),
+    uninstaller: {
+      raw: '"C:\\Spotify\\uninstall.exe" /S',
+      argv: ['/S'],
+      kind: 'exe',
+      launchable: true,
+      requiresAdmin: false,
+      interactiveOnly: true,
+      silent: null,
+      blockReason: null,
+    },
+    items,
+    kept: [{ target: 'C:\\ProgramData\\Spotify', reason: 'needs-admin' }],
+    totals: {
+      bytes: items.reduce((sum, item) => sum + (item.bytes ?? 0), 0),
+      items: items.length,
+      reviewBytes: 0,
+      reviewItems: items.filter((item) => item.grade === 'review').length,
+      userDataBytes: 2048,
+      userDataItems: 1,
+      adminItems: items.filter((item) => item.adminRequired).length,
+    },
+    ...overrides,
+  };
+}
+
+export function makeRemovalReport(overrides: Partial<RemovalReport> = {}): RemovalReport {
+  return {
+    planId: 'plan-1',
+    appId: 'app-1',
+    appName: 'Spotify',
+    startedAt: 1000,
+    finishedAt: 2000,
+    outcome: 'complete',
+    uninstaller: {
+      ran: true,
+      command: '"C:\\Spotify\\uninstall.exe" /S',
+      argv: ['/S'],
+      exitCode: 0,
+      rebootCode: false,
+      skippedWaiting: false,
+      verifiedGone: true,
+      skippedReason: null,
+      launchedAt: 1000,
+      finishedAt: 1500,
+    },
+    files: {
+      deletedBytes: 1024,
+      recycledBytes: 0,
+      deletedItems: 1,
+      recycledItems: 0,
+      skippedLocked: 0,
+      errors: [],
+      kept: [],
+    },
+    registry: {
+      backupPath: 'C:\\Users\\x\\AppData\\Roaming\\Dust\\uninstall-backups\\app-1-20260101-000000.reg',
+      restoreCommand: 'reg import "C:\\Users\\x\\AppData\\Roaming\\Dust\\uninstall-backups\\app-1-20260101-000000.reg"',
+      deletedKeys: ['HKCU\\Software\\Spotify'],
+      failedKeys: [],
+    },
+    startup: { disabled: [], purgedEnvelopes: [], failed: [] },
+    elevation: 'none',
+    degraded: false,
+    journalPath: 'C:\\Users\\x\\AppData\\Roaming\\Dust\\uninstall-history.log',
     ...overrides,
   };
 }
@@ -391,6 +542,13 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     getSystemInfo: async () => makeSystemInfo(),
     getSystemInfoLive: async () => makeSystemInfoLive(),
     relaunchElevated: async () => {},
+    listUninstallApps: async () => ({ ok: true, apps: [], trusted: true, elevated: false, loadedAt: 0 }),
+    previewUninstall: async () => ({ ok: false, reason: 'not-found', message: 'not found' }),
+    executeUninstall: async () => ({ ok: false, reason: 'unknown-plan' }),
+    skipUninstallWaiting: async () => {},
+    getUninstallLaunchHint: async () => null,
+    relaunchElevatedUninstall: async () => {},
+    onUninstallEvent: () => () => {},
     onScanEvent: () => () => {},
     ...overrides,
   };

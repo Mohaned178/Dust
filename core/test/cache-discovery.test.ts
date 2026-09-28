@@ -6,6 +6,7 @@ import { discoverCaches } from '../src/rules/inventory/cache-discovery';
 import type { RuleContext } from '../src/rules/types';
 import type { RuleEnv } from '../src/rules/paths';
 import type { InstalledApp, InstalledAppsSnapshot } from '../src/system/installed-apps';
+import { makeInstalledApp } from './installed-app-fixtures';
 
 const LOCAL = 'C:\\Users\\Ahmed\\AppData\\Local';
 const ROAMING = 'C:\\Users\\Ahmed\\AppData\\Roaming';
@@ -19,11 +20,7 @@ const ENV: RuleEnv = {
   programData: 'C:\\ProgramData',
 };
 
-const SPOTIFY: InstalledApp = {
-  displayName: 'Spotify',
-  publisher: 'Spotify AB',
-  installLocation: '',
-};
+const SPOTIFY = makeInstalledApp({ displayName: 'Spotify', publisher: 'Spotify AB' });
 
 function folder(tree: AggregateTree, path: string, bytes = 0): void {
   const record: FolderRecord = {
@@ -112,7 +109,7 @@ describe('discoverCaches', () => {
     const tree = new AggregateTree();
     folder(tree, `${LOCAL}\\Acme\\Cache`, 42);
     const result = discoverCaches(
-      context(tree, trusted([{ displayName: 'Music Player', publisher: 'Acme Corporation', installLocation: '' }])),
+      context(tree, trusted([makeInstalledApp({ displayName: 'Music Player', publisher: 'Acme Corporation' })])),
       ENV,
     );
 
@@ -157,7 +154,7 @@ describe('discoverCaches', () => {
     folder(tree, `${LOCAL}\\Google\\Chrome\\User Data\\Default\\Code Cache`, 10);
     folder(tree, `${ROAMING}\\discord\\Cache`, 10);
     const result = discoverCaches(
-      context(tree, trusted([{ displayName: 'Google Chrome', publisher: 'Google LLC', installLocation: '' }])),
+      context(tree, trusted([makeInstalledApp({ displayName: 'Google Chrome', publisher: 'Google LLC' })])),
       ENV,
     );
     expect(result.matches).toEqual([]);

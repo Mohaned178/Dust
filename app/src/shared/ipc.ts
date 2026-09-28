@@ -4,9 +4,14 @@ import type {
   CategoryId,
   DisplayGrade,
   DriveType,
+  LeftoverClass,
+  RemovalReport,
+  RemovalTotals,
   StartupSource,
   SystemInfoLive,
   SystemInfoStatic,
+  UninstallHive,
+  UninstallKind,
 } from '@dust/core';
 
 export const IPC = {
@@ -30,11 +35,24 @@ export const IPC = {
   systemInfoGet: 'dust:system-info:get',
   systemInfoLive: 'dust:system-info:live',
   relaunchElevated: 'dust:app:relaunch-elevated',
+  uninstallList: 'dust:uninstall:list',
+  uninstallPreview: 'dust:uninstall:preview',
+  uninstallExecute: 'dust:uninstall:execute',
+  uninstallSkipWaiting: 'dust:uninstall:skip-waiting',
+  uninstallEvent: 'dust:uninstall:event',
+  uninstallHint: 'dust:uninstall:hint',
+  relaunchElevatedUninstall: 'dust:app:relaunch-elevated-uninstall',
 } as const;
 
-export type { BrowseDeleteResult, StartupSource, SystemInfoLive, SystemInfoStatic };
+export type {
+  BrowseDeleteResult,
+  RemovalReport,
+  StartupSource,
+  SystemInfoLive,
+  SystemInfoStatic,
+};
 
-export type ScanKind = 'analyze' | 'quick-clean' | 'browse';
+export type ScanKind = 'analyze' | 'quick-clean' | 'browse' | 'uninstall';
 
 export interface ScanState {
   kind: ScanKind;
@@ -328,6 +346,7 @@ export interface DashboardSnapshotInfo {
   reclaimableBytes: number | null;
   cleanedAt: number | null;
   rulesStale: boolean;
+  installedAppsStale: boolean;
 }
 
 export interface DashboardState {
@@ -388,6 +407,104 @@ export interface StartupLaunchHint {
   notice: StartupNotice | null;
 }
 
+export interface UninstallAppSummary {
+  id: string;
+  displayName: string;
+  publisher: string;
+  version: string;
+  installLocation: string;
+  estimatedSizeKb: number | null;
+  hive: UninstallHive;
+  kind: UninstallKind;
+  requiresAdmin: boolean;
+  hasUninstaller: boolean;
+}
+
+export type UninstallListResult =
+  | { ok: true; apps: UninstallAppSummary[]; trusted: boolean; elevated: boolean; loadedAt: number }
+  | { ok: false; message: string };
+
+export interface UninstallItemPreview {
+  id: string;
+  kind: 'file' | 'registry' | 'startup';
+  target: string;
+  label: string;
+  bytes: number | null;
+  grade: ActionGrade;
+  dataClass?: LeftoverClass;
+  evidence: string[];
+  adminRequired: boolean;
+  defaultSelected: boolean;
+  syncRoot?: boolean;
+}
+
+export interface UninstallUninstallerPreview {
+  raw: string;
+  argv: string[];
+  kind: UninstallKind;
+  launchable: boolean;
+  requiresAdmin: boolean;
+  interactiveOnly: boolean;
+  silent: { argv: string[]; wellFormed: boolean } | null;
+  blockReason: string | null;
+}
+
+export interface UninstallPreview {
+  planId: string;
+  createdAt: number;
+  app: UninstallAppSummary;
+  uninstaller: UninstallUninstallerPreview | null;
+  items: UninstallItemPreview[];
+  kept: Array<{ target: string; reason: string }>;
+  totals: RemovalTotals;
+}
+
+export type UninstallPreviewResult =
+  | { ok: true; preview: UninstallPreview }
+  | { ok: false; reason: 'busy'; running: ScanKind }
+  | { ok: false; reason: 'not-found' | 'protected' | 'nothing-to-remove' | 'failed'; message: string };
+
+export interface UninstallExecuteRequest {
+  jobId: string;
+  planId: string;
+  selection: string[];
+  includeUserData: boolean;
+  runUninstaller: boolean;
+  quiet: boolean;
+  acknowledge: string[];
+}
+
+export type UninstallExecuteResult =
+  | { ok: true; report: RemovalReport }
+  | { ok: false; reason: 'busy'; running: ScanKind }
+  | {
+      ok: false;
+      reason:
+        | 'unknown-plan'
+        | 'consumed-plan'
+        | 'unacknowledged-review'
+        | 'no-selection'
+        | 'failed';
+      message?: string;
+    };
+
+export type UninstallEvent =
+  | { type: 'phase'; jobId: string; phase: string; status: 'started' | 'done' | 'failed' | 'skipped'; note?: string }
+  | { type: 'uninstaller-started'; jobId: string; pid: number | null; argv: string[] }
+  | { type: 'uninstaller-exited'; jobId: string; exitCode: number | null }
+  | { type: 'uninstaller-reboot-required'; jobId: string }
+  | { type: 'verify'; jobId: string; gone: boolean; attempt: number }
+  | { type: 'item'; jobId: string; itemId: string; status: string; bytes: number }
+  | { type: 'finished'; jobId: string; report: RemovalReport }
+  | { type: 'failed'; jobId: string; message: string };
+
+export interface UninstallLaunchHint {
+  open: boolean;
+  notice: { appName: string; outcome: RemovalReport['outcome'] } | null;
+  stalePending: boolean;
+  runningJobId: string | null;
+}
+
 export interface DustApi {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
@@ -408,5 +525,12 @@ export interface DustApi {
   getSystemInfo(force?: boolean): Promise<SystemInfoStatic>;
   getSystemInfoLive(): Promise<SystemInfoLive>;
   relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
+  listUninstallApps(force?: boolean): Promise<UninstallListResult>;
+  previewUninstall(appId: string): Promise<UninstallPreviewResult>;
+  executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
+  skipUninstallWaiting(): Promise<void>;
+  getUninstallLaunchHint(): Promise<UninstallLaunchHint | null>;
+  relaunchElevatedUninstall(jobId: string): Promise<void>;
+  onUninstallEvent(handler: (event: UninstallEvent) => void): () => void;
   onScanEvent(handler: (event: ScanEvent) => void): () => void;
 }

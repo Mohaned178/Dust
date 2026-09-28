@@ -89,6 +89,38 @@ describe('buildDashboardState', () => {
       reclaimableBytes: null,
       cleanedAt: null,
       rulesStale: false,
+      installedAppsStale: false,
     });
+  });
+
+  it('flags snapshots that predate the last installed-app change', () => {
+    const stale = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'ok', snapshot: snapshot() },
+      scan: null,
+      systemRoot: 'C:\\',
+      appsChangedAt: 30,
+    });
+    expect(stale.snapshot).toMatchObject({ installedAppsStale: true, finishedAt: 20 });
+
+    const fresh = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'ok', snapshot: snapshot() },
+      scan: null,
+      systemRoot: 'C:\\',
+      appsChangedAt: 10,
+    });
+    expect(fresh.snapshot).toMatchObject({ installedAppsStale: false });
+
+    const none = buildDashboardState({
+      volumes,
+      usage,
+      snapshot: { kind: 'ok', snapshot: snapshot() },
+      scan: null,
+      systemRoot: 'C:\\',
+    });
+    expect(none.snapshot).toMatchObject({ installedAppsStale: false });
   });
 });

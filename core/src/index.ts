@@ -69,6 +69,7 @@ export { appIsInstalled, appIsVerifiedMissing } from './rules/installed-state';
 export type { CacheFinding, CacheFindingKind } from './rules/findings';
 export {
   INSTALLED_APPS_TTL_MS,
+  appId,
   appMatchesTokens,
   listInstalledApps,
   matchInstalledApp,
@@ -194,6 +195,7 @@ export {
   disableStartupEntry,
   enableStartupEntry,
   listStartupEntries,
+  removeStartupBackup,
 } from './startup/startup';
 export type { StartupStore } from './startup/startup';
 export { createWindowsStartupStore } from './startup/index';
@@ -222,3 +224,117 @@ export type {
   SystemInfoStatic,
   SystemInfoStaticOptions,
 } from './system/system-info';
+export {
+  UNINSTALL_BACKUP_TTL_MS,
+  UNINSTALL_JOURNAL_VERSION,
+  UNINSTALL_PENDING_TTL_MS,
+  UNINSTALL_VERIFY_GRACE_MS,
+  UNINSTALL_VERIFY_POLL_MS,
+  uninstallItemId,
+} from './uninstall/types';
+export {
+  isHiddenReleaseType,
+  isUninstallableApp,
+  listRemovalApps,
+  matchAppName,
+  toRemovalApp,
+} from './uninstall/apps';
+export type { AppNameMatchStrength, RemovalAppsOptions } from './uninstall/apps';
+export { isProtectedApp, protectedAppReason } from './uninstall/protected';
+export type { ProtectedAppInput, ProtectedAppOptions } from './uninstall/protected';
+export { buildSilentOption, parseUninstallCommand, tokenizeCommandLine } from './uninstall/command';
+export type { ParseUninstallCommandOptions, SilentOptionInput } from './uninstall/command';
+export {
+  assertLeftoverNameComponent,
+  assertUninstallTarget,
+  defaultUninstallParents,
+  normalizePlanPath,
+} from './uninstall/path-policy';
+export type {
+  UninstallTargetDenial,
+  UninstallTargetOptions,
+  UninstallTargetResult,
+} from './uninstall/path-policy';
+export { LEFTOVER_MAX_DEPTH, defaultDirectorySize, discoverLeftovers } from './uninstall/leftovers';
+export type {
+  LeftoverDiscoveryOptions,
+  LeftoverRoots,
+  LeftoversResult,
+} from './uninstall/leftovers';
+export {
+  parseRegistryKeySnapshot,
+  readRegistryKeySnapshot,
+  scanRegistry,
+  UNINSTALL_KEY_PREFIX,
+} from './uninstall/registry-scan';
+export type {
+  RegistryHiveKeys,
+  RegistryKeySnapshot,
+  RegistryScanOptions,
+  RegistryScanResult,
+  RegistryVendor,
+} from './uninstall/registry-scan';
+export {
+  buildRemovalPlan,
+  defaultSelection,
+  missingAcknowledgements,
+  planRequiresAdmin,
+  uninstallerRequiresAdmin,
+} from './uninstall/plan';
+export type { RemovalPlanEnv, RemovalPlanInput } from './uninstall/plan';
+export {
+  REG_HEADER,
+  backupDirFor,
+  backupFileName,
+  createRegistryBackup,
+  fullRegistryPath,
+  mergeRegistryExports,
+  pruneRegistryBackups,
+  restoreCommandFor,
+} from './uninstall/backup';
+export type { BackupEnv, BackupResult, PruneOptions } from './uninstall/backup';
+export { Journal, journalPathFor, parseJournal } from './uninstall/journal';
+export type { JournalKind, JournalLine, JournalOptions } from './uninstall/journal';
+export { createPowerShellRecycleRunner, RECYCLE_SCRIPT, stageToRecycleBin } from './cleaner/recycle';
+export type { RecycleRunner, StageResult } from './cleaner/recycle';
+export { waitForRemoval } from './uninstall/verify';
+export type { VerifyOptions, VerifyResult } from './uninstall/verify';
+export { executeRemoval } from './uninstall/execute';
+export type {
+  FileRemoveMode,
+  FileRemoveOutcome,
+  FileRemover,
+  RemovalEvent,
+  RemovalExecutionDeps,
+  RemovalExecutionRequest,
+  RemovalExecutionResult,
+  StartupActions,
+  UninstallerRunInput,
+  UninstallerRunOutcome,
+  UninstallerRunner,
+} from './uninstall/execute';
+export type {
+  FileRemovalReport,
+  KeptItem,
+  LeftoverCandidate,
+  LeftoverClass,
+  RegistryCandidate,
+  RegistryRemovalReport,
+  RemovalApp,
+  RemovalPlan,
+  RemovalReport,
+  RemovalTotals,
+  SilentOption,
+  StartupCandidate,
+  StartupRemovalReport,
+  UninstallCommand,
+  UninstallCommandBlock,
+  UninstallGrade,
+  UninstallHive,
+  UninstallItemKind,
+  UninstallKind,
+  UninstallOutcome,
+  UninstallPhase,
+  UninstallPlannedCommand,
+  UninstallerReport,
+} from './uninstall/types';

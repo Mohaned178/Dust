@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SystemInfoLive, SystemInfoStatic } from '@dust/core';
 import type { DustApi } from '../../../src/shared/ipc';
 import { StartupToast } from '../components/StartupToast';
 import { UsageBar } from '../components/UsageBar';
 import {
+  VRAM_CAVEAT,
   formatBios,
   formatCapturedAt,
   formatMemory,
   formatOsName,
   formatSystemInfoText,
   formatUptime,
+  formatVram,
   joinBoard,
 } from '../system-info';
 
@@ -26,7 +28,7 @@ export interface SystemInfoViewProps {
 
 interface InfoRowProps {
   label: string;
-  value: string | null;
+  value: ReactNode | null;
 }
 
 function InfoRow({ label, value }: InfoRowProps) {
@@ -238,9 +240,33 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
 
           {snapshot.gpus.length > 0 && (
             <InfoSection title="Graphics">
-              {snapshot.gpus.map((gpu, index) => (
-                <InfoRow key={`${gpu.name}-${index}`} label={gpu.name} value={gpu.driverVersion} />
-              ))}
+              {snapshot.gpus.map((gpu, index) => {
+                const vram = formatVram(gpu.vramBytes);
+                return (
+                  <Fragment key={`${gpu.name}-${index}`}>
+                    <InfoRow label={gpu.name} value={gpu.driverVersion} />
+                    {vram !== null && (
+                      <InfoRow
+                        label="VRAM"
+                        value={
+                          <>
+                            {vram}
+                            {gpu.vramUncertain && (
+                              <span
+                                className="cursor-help"
+                                title={VRAM_CAVEAT}
+                                aria-label={VRAM_CAVEAT}
+                              >
+                                *
+                              </span>
+                            )}
+                          </>
+                        }
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </InfoSection>
           )}
 

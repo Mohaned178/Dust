@@ -73,8 +73,16 @@ import type {
   StartAnalyzeResult,
   StartupListResult,
   StartupToggleResult,
+  UninstallEvent,
+  UninstallExecuteRequest,
+  UninstallExecuteResult,
+  UninstallListResult,
+  UninstallPreviewResult,
 } from '../../shared/ipc';
 import type { StartupService } from './startup';
+import { createUninstallService } from './uninstall';
+import type { UninstallService, UninstallServiceDeps } from './uninstall';
+import type { PendingUninstallJob } from '../uninstall-launch';
 import { aggregateCategories, collectRuleMatches } from './analyze';
 import type { RuleMatchWithRule } from './analyze';
 import { buildDashboardState } from './dashboard';
@@ -140,6 +148,8 @@ export interface EngineHostDeps {
   listInstalledApps?: () => Promise<InstalledAppsSnapshot>;
   startup?: StartupService;
   systemInfo?: SystemInfoService;
+  uninstall?: UninstallService;
+  uninstallDeps?: Omit<UninstallServiceDeps, 'lock'>;
 }
 
 export interface EngineHost {
@@ -159,6 +169,13 @@ export interface EngineHost {
   enableStartup(id: string): Promise<StartupToggleResult>;
   getSystemInfo(force?: boolean): Promise<SystemInfoStatic>;
   getSystemInfoLive(): SystemInfoLive;
+  listUninstall(force?: boolean): Promise<UninstallListResult>;
+  previewUninstall(appId: string): Promise<UninstallPreviewResult>;
+  executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
+  skipUninstallWaiting(): void;
+  adoptUninstallJob(job: PendingUninstallJob): void;
+  exportUninstallJob(jobId: string): PendingUninstallJob | null;
+  onUninstallEvent(listener: (event: UninstallEvent) => void): () => void;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
@@ -255,8 +272,25 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     list: async () => ({ ok: false, message: unavailableStartupMessage }),
     disable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
     enable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
+    removeBackup: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
+    records: async () => [],
   };
   const systemInfoService = deps.systemInfo ?? createSystemInfoService();
+  const unavailableUninstallMessage = 'Deep Uninstall is only available on Windows.';
+  const unavailableUninstall: UninstallService = {
+    list: async () => ({ ok: false, message: unavailableUninstallMessage }),
+    preview: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
+    execute: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
+    skipWaiting: () => {},
+    adoptJob: () => {},
+    exportJob: () => null,
+    onEvent: () => () => {},
+  };
+  const uninstallService: UninstallService =
+    deps.uninstall ??
+    (deps.uninstallDeps === undefined
+      ? unavailableUninstall
+      : createUninstallService({ ...deps.uninstallDeps, lock }));
   const cleaner =
     deps.createCleaner?.() ??
     new Cleaner({ guard, now });
@@ -285,6 +319,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       snapshot: deps.store.load(),
       scan: lock.current(),
       systemRoot,
+      appsChangedAt: deps.store.getAppsChangedAt(),
       live:
         lastResults !== null
           ? {
@@ -615,6 +650,34 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   function getSystemInfoLive(): SystemInfoLive {
     return systemInfoService.live();
+  }
+
+  function listUninstall(force = false): Promise<UninstallListResult> {
+    return uninstallService.list(force);
+  }
+
+  function previewUninstall(appId: string): Promise<UninstallPreviewResult> {
+    return uninstallService.preview(appId);
+  }
+
+  function executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult> {
+    return uninstallService.execute(request);
+  }
+
+  function skipUninstallWaiting(): void {
+    uninstallService.skipWaiting();
+  }
+
+  function adoptUninstallJob(job: PendingUninstallJob): void {
+    uninstallService.adoptJob(job);
+  }
+
+  function exportUninstallJob(jobId: string): PendingUninstallJob | null {
+    return uninstallService.exportJob(jobId);
+  }
+
+  function onUninstallEvent(listener: (event: UninstallEvent) => void): () => void {
+    return uninstallService.onEvent(listener);
   }
 
   function messageOf(error: unknown): string {
@@ -1315,6 +1378,13 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     enableStartup,
     getSystemInfo,
     getSystemInfoLive,
+    listUninstall,
+    previewUninstall,
+    executeUninstall,
+    skipUninstallWaiting,
+    adoptUninstallJob,
+    exportUninstallJob,
+    onUninstallEvent,
     onEvent,
     dispose,
   };

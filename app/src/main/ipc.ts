@@ -6,6 +6,8 @@ import type {
   ScanEvent,
   StartupLaunchHint,
   StartupRelaunchAction,
+  UninstallExecuteRequest,
+  UninstallLaunchHint,
 } from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
 import { instrument } from './host/instrument';
@@ -21,6 +23,7 @@ export interface EventSender {
 export interface ShellActions {
   revealPath(path: string): Promise<void>;
   relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
+  relaunchElevatedUninstall?(jobId: string): Promise<void>;
 }
 
 const timingEnabled = process.env.DUST_TIMING === '1';
@@ -55,6 +58,7 @@ export function registerIpcHandlers(
   sender: EventSender,
   shell: ShellActions,
   getStartupLaunchHint: () => StartupLaunchHint | null = () => null,
+  getUninstallLaunchHint: () => UninstallLaunchHint | null = () => null,
 ): () => void {
   registrar.handle(IPC.dashboardGet, () => timed('dashboardGet', () => host.getDashboard()));
   registrar.handle(IPC.scanStart, (_event, volume) => host.startAnalyze(typeof volume === 'string' ? volume : ''));
@@ -97,9 +101,30 @@ export function registerIpcHandlers(
       action === 'enable' ? 'enable' : 'disable',
     ),
   );
-  return host.onEvent((event: ScanEvent) => {
+  registrar.handle(IPC.uninstallList, (_event, force) =>
+    timed('uninstallList', () => host.listUninstall(force === true)),
+  );
+  registrar.handle(IPC.uninstallPreview, (_event, appId) =>
+    timed('uninstallPreview', () => host.previewUninstall(typeof appId === 'string' ? appId : '')),
+  );
+  registrar.handle(IPC.uninstallExecute, (_event, request) =>
+    host.executeUninstall(parseUninstallExecuteRequest(request)),
+  );
+  registrar.handle(IPC.uninstallSkipWaiting, () => host.skipUninstallWaiting());
+  registrar.handle(IPC.uninstallHint, () => getUninstallLaunchHint());
+  registrar.handle(IPC.relaunchElevatedUninstall, (_event, jobId) =>
+    shell.relaunchElevatedUninstall?.(typeof jobId === 'string' ? jobId : '') ?? Promise.resolve(),
+  );
+  const offScan = host.onEvent((event: ScanEvent) => {
     instrument('ipc.send', () => sender.send(IPC.scanEvent, event));
   });
+  const offUninstall = host.onUninstallEvent((event) => {
+    instrument('ipc.send', () => sender.send(IPC.uninstallEvent, event));
+  });
+  return () => {
+    offScan();
+    offUninstall();
+  };
 }
 
 export function parseCleanPreviewRequest(value: unknown): CleanPreviewRequest | null {
@@ -129,5 +154,20 @@ export function parseCleanExecuteRequest(value: unknown): CleanExecuteRequest {
     cleanId: typeof record.cleanId === 'string' ? record.cleanId : '',
     planId: typeof record.planId === 'string' ? record.planId : '',
     acknowledge,
+  };
+}
+
+export function parseUninstallExecuteRequest(value: unknown): UninstallExecuteRequest {
+  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const strings = (input: unknown): string[] =>
+    Array.isArray(input) ? input.filter((entry): entry is string => typeof entry === 'string') : [];
+  return {
+    jobId: typeof record.jobId === 'string' ? record.jobId : '',
+    planId: typeof record.planId === 'string' ? record.planId : '',
+    selection: strings(record.selection),
+    includeUserData: record.includeUserData === true,
+    runUninstaller: record.runUninstaller !== false,
+    quiet: record.quiet === true,
+    acknowledge: strings(record.acknowledge),
   };
 }

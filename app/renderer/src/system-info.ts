@@ -6,8 +6,20 @@ import type {
   SystemInfoOs,
   SystemInfoStatic,
 } from '@dust/core';
+import { formatBytes } from './format';
+
+export const VRAM_CAVEAT = 'Reported by Windows. May be inaccurate for GPUs with more than 4 GB.';
+
 function present(value: string | null): value is string {
   return value !== null && value.length > 0;
+}
+
+export function formatVram(bytes: number | null): string | null {
+  if (bytes === null || !Number.isFinite(bytes) || bytes <= 0) return null;
+  const gigabytes = bytes / 1024 ** 3;
+  if (gigabytes < 1) return formatBytes(bytes);
+  const rounded = Math.round(gigabytes * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded} GB` : `${rounded.toFixed(1)} GB`;
 }
 
 export function formatMemory(bytes: number): string {
@@ -66,7 +78,11 @@ export function formatCpuLine(cpu: SystemInfoCpu): string {
 }
 
 export function formatGpuLine(gpu: SystemInfoGpu): string {
-  return gpu.driverVersion === null ? gpu.name : `${gpu.name} (Driver ${gpu.driverVersion})`;
+  const parts: string[] = [];
+  if (gpu.driverVersion !== null) parts.push(`Driver ${gpu.driverVersion}`);
+  const vram = formatVram(gpu.vramBytes);
+  if (vram !== null) parts.push(`VRAM ${vram}${gpu.vramUncertain ? '*' : ''}`);
+  return parts.length === 0 ? gpu.name : `${gpu.name} (${parts.join(', ')})`;
 }
 
 export function joinBoard(manufacturer: string | null, product: string | null): string | null {
@@ -113,6 +129,9 @@ export function formatSystemInfoText(
 
   if (snapshot.gpus.length > 0) {
     blocks.push(snapshot.gpus.map((gpu) => `GPU: ${formatGpuLine(gpu)}`));
+    if (snapshot.gpus.some((gpu) => gpu.vramUncertain)) {
+      blocks.push([`* ${VRAM_CAVEAT}`]);
+    }
   }
 
   const firmware: string[] = [];

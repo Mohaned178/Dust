@@ -175,3 +175,13 @@ export function AppWindowIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function UninstallIcon(props: IconProps) {
+  return (
+    <svg {...withDefaults(24, 24, props)}>
+      <path d="M12 3.5v9" />
+      <path d="m8.5 9 3.5 3.5L15.5 9" />
+      <path d="M4.5 14.5v3a3 3 0 0 0 3 3h9a3 3 0 0 0 3-3v-3" />
+    </svg>
+  );
+}
