@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build installer
+        run: npm run dist -w app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem app/release/*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Set-Content app/release/sha256sums.txt
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $installer = (Get-ChildItem app/release/Dust-Setup-*.exe).FullName
+          gh release create "$env:GITHUB_REF_NAME" --draft --generate-notes --title "Dust $env:GITHUB_REF_NAME" $installer app/release/sha256sums.txt
