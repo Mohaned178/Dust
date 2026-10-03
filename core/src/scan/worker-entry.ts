@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { NodeFsEnumerator } from '../scanner/enumerator';
 import { createExclusionPredicate } from '../scanner/exclusions';
+import { createPlatformEnumerator } from '../scanner/win-enumerator';
 import type { WorkerCommand, WorkerInit } from './protocol';
 import { createWorkerRuntime } from './worker-runtime';
 
@@ -13,7 +13,7 @@ const isExcluded = createExclusionPredicate(init.exclusions);
 
 const runtime = createWorkerRuntime({
   send: (event) => port.postMessage(event),
-  enumerator: new NodeFsEnumerator(),
+  enumerator: createPlatformEnumerator(),
   isExcluded,
   shouldAbort: () => Atomics.load(abortFlag, 0) === 1,
   splitAfterEntries: init.limits.splitAfterEntries,

@@ -10,7 +10,7 @@ const shared = {
   target: 'node22',
   format: 'cjs',
   sourcemap: true,
-  external: ['electron'],
+  external: ['electron', 'koffi', 'electron-updater'],
   logLevel: 'info',
 };
 

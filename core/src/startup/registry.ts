@@ -43,6 +43,7 @@ export interface RegistryStore {
 }
 
 const QUERY_TIMEOUT_MS = 20_000;
+const SNAPSHOT_TTL_MS = 30_000;
 
 const READ_SNAPSHOT_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
@@ -205,6 +206,20 @@ export function parseRegistrySnapshot(raw: string): RegistrySnapshot | null {
 }
 
 export function createPowerShellRegistryStore(): RegistryStore {
+  let snapshotCache: { at: number; snapshot: RegistrySnapshot } | null = null;
+  let snapshotInFlight: Promise<RegistrySnapshot> | null = null;
+
+  function invalidate(): void {
+    snapshotCache = null;
+  }
+
+  async function loadSnapshot(): Promise<RegistrySnapshot> {
+    const raw = await runPowerShell(READ_SNAPSHOT_SCRIPT);
+    const snapshot = parseRegistrySnapshot(raw);
+    if (snapshot === null) throw new Error('Could not read startup entries');
+    return snapshot;
+  }
+
   async function readValue(key: string, name: string): Promise<string | null> {
     const raw = await runPowerShell(READ_VALUE_SCRIPT, {
       DUST_STARTUP_KEY: key,
@@ -221,14 +236,24 @@ export function createPowerShellRegistryStore(): RegistryStore {
       DUST_STARTUP_NAME: name,
       DUST_STARTUP_COMMAND: command,
     });
+    invalidate();
   }
 
   return {
     async readSnapshot() {
-      const raw = await runPowerShell(READ_SNAPSHOT_SCRIPT);
-      const snapshot = parseRegistrySnapshot(raw);
-      if (snapshot === null) throw new Error('Could not read startup entries');
-      return snapshot;
+      if (snapshotCache !== null && Date.now() - snapshotCache.at < SNAPSHOT_TTL_MS) {
+        return snapshotCache.snapshot;
+      }
+      if (snapshotInFlight !== null) return snapshotInFlight;
+      const pending = loadSnapshot();
+      snapshotInFlight = pending;
+      try {
+        const snapshot = await pending;
+        snapshotCache = { at: Date.now(), snapshot };
+        return snapshot;
+      } finally {
+        snapshotInFlight = null;
+      }
     },
     readRunValue: (source, name) => readValue(RUN_REGISTRY_KEYS[source], name),
     writeRunValue: (source, name, command) => writeValue(RUN_REGISTRY_KEYS[source], name, command),
@@ -241,6 +266,7 @@ export function createPowerShellRegistryStore(): RegistryStore {
         DUST_STARTUP_KEY: APPROVED_REGISTRY_KEYS[source],
         DUST_STARTUP_NAME: name,
       });
+      invalidate();
     },
   };
 
@@ -249,5 +275,6 @@ export function createPowerShellRegistryStore(): RegistryStore {
       DUST_STARTUP_KEY: key,
       DUST_STARTUP_NAME: name,
     });
+    invalidate();
   }
 }

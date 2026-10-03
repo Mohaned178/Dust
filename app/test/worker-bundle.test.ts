@@ -8,11 +8,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TempTree } from './fixtures';
 
 const workerEntry = fileURLToPath(new URL('../../core/src/scan/worker-entry.ts', import.meta.url));
+const rootNodeModules = fileURLToPath(new URL('../../node_modules', import.meta.url));
 
 describe('bundled scan worker', () => {
   let bundleDir: string;
   let workerPath: string;
   let tree: TempTree;
+  let previousNodePath: string | undefined;
 
   beforeAll(async () => {
     bundleDir = mkdtempSync(join(tmpdir(), 'dust-worker-bundle-'));
@@ -24,8 +26,11 @@ describe('bundled scan worker', () => {
       platform: 'node',
       target: 'node22',
       format: 'cjs',
+      external: ['koffi'],
       logLevel: 'silent',
     });
+    previousNodePath = process.env.NODE_PATH;
+    process.env.NODE_PATH = previousNodePath ? `${previousNodePath};${rootNodeModules}` : rootNodeModules;
     tree = new TempTree();
     tree.file('a/one.bin', '0123456789');
     tree.file('b/two.bin', '12345');
@@ -34,6 +39,8 @@ describe('bundled scan worker', () => {
   afterAll(() => {
     rmSync(bundleDir, { recursive: true, force: true });
     tree.cleanup();
+    if (previousNodePath === undefined) delete process.env.NODE_PATH;
+    else process.env.NODE_PATH = previousNodePath;
   });
 
   it('runs a pooled scan through the production bundle', async () => {

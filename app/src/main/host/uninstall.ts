@@ -8,6 +8,7 @@ import {
   fullRegistryPath,
   listRemovalApps,
   resetInstalledAppsCache,
+  resetRegistrySnapshotCache,
   resolveUninstallerCommand,
   uninstallerRequiresAdmin,
 } from '@dust/core';
@@ -210,7 +211,10 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   }
 
   async function listSnapshot(force: boolean): Promise<InstalledAppsSnapshot> {
-    if (force) resetApps();
+    if (force) {
+      resetApps();
+      resetRegistrySnapshotCache();
+    }
     return listApps({ systemRoot: deps.systemRoot, dustInstallPath: deps.dustInstallPath });
   }
 
@@ -311,6 +315,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
           : { ok: false, reason: 'no-selection', message: 'Nothing was selected.' };
       }
       resetApps();
+      resetRegistrySnapshotCache();
       deps.store.markAppsChanged(now());
       emit({ type: 'finished', jobId: request.jobId, report: result.report });
       return { ok: true, report: result.report };

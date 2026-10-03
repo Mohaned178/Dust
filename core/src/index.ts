@@ -71,7 +71,7 @@ export { defaultRuleEnv, expandProfileWildcard } from './rules/paths';
 export type { RuleEnv } from './rules/paths';
 export { classifyDisplayGrade, createDisplayGrader } from './display/display-grade';
 export type { DisplayGrade, DisplayGradeReason } from './display/display-grade';
-export { defaultEmptyRecycleBin } from './cleaner/executor';
+export { defaultEmptyRecycleBin, defaultEmptyRecycleBinAsync } from './cleaner/executor';
 export type { EmptyRecycleBinResult } from './cleaner/executor';
 export { classifyProjects, DEFAULT_RECENCY_THRESHOLDS } from './projects/classify';
 export { discoverProjects } from './projects/discover';
@@ -118,7 +118,7 @@ export type { FolderMapOptions, SnapshotInput } from './snapshot/build';
 export { SnapshotStore } from './snapshot/store';
 export type { SaveResult, SnapshotLoadResult, StorePaths, UserPreferences } from './snapshot/store';
 export { RULES_VERSION } from './rules/version';
-export { getVolumeUsage, listFixedVolumes } from './system/volumes';
+export { getVolumeUsage, getVolumeUsageAsync, listFixedVolumes } from './system/volumes';
 export type { VolumeUsage } from './system/volumes';
 export {
   createExternalPredicate,
@@ -225,6 +225,8 @@ export type { LeftoverDiscoveryOptions, LeftoverRoots, LeftoversResult } from '.
 export {
   parseRegistryKeySnapshot,
   readRegistryKeySnapshot,
+  readRegistryKeySnapshotCached,
+  resetRegistrySnapshotCache,
   scanRegistry,
   UNINSTALL_KEY_PREFIX,
 } from './uninstall/registry-scan';

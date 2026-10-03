@@ -21,23 +21,7 @@ export class NodeFsEnumerator implements Enumerator {
       if (dirent.isDirectory()) {
         entries.push({ name: dirent.name, kind: 'dir', size: 0, mtimeMs: 0 });
       } else if (dirent.isSymbolicLink()) {
-        try {
-          const stats = lstatSync(join(dir, dirent.name));
-          if (stats.isSymbolicLink()) {
-            entries.push({ name: dirent.name, kind: 'link', size: 0, mtimeMs: 0 });
-          } else if (stats.isDirectory()) {
-            entries.push({ name: dirent.name, kind: 'dir', size: 0, mtimeMs: 0 });
-          } else {
-            entries.push({
-              name: dirent.name,
-              kind: 'file',
-              size: stats.size,
-              mtimeMs: stats.mtimeMs,
-            });
-          }
-        } catch {
-          entryErrors += 1;
-        }
+        entries.push({ name: dirent.name, kind: 'link', size: 0, mtimeMs: 0 });
       } else {
         try {
           const stats = lstatSync(join(dir, dirent.name));

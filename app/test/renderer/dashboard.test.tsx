@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { describe, expect, it, vi } from 'vitest';
 import type { CategoryId } from '@dust/core';
 import { Dashboard } from '../../renderer/src/pages/Dashboard';
-import type { DashboardState, DustApi, ResultsState, StartAnalyzeResult } from '../../src/shared/ipc';
+import type { DashboardState, DustApi, ResultsCategoriesState, StartAnalyzeResult } from '../../src/shared/ipc';
 import { makeApi, makeDashboardState, makeResultsState } from './fakes';
 
 function okAnalyze() {
@@ -108,11 +108,11 @@ describe('Dashboard', () => {
   });
 
   it('surfaces a category load failure with a retry instead of an unanalyzed em-dash state', async () => {
-    const getResults = vi
+    const getResultCategories = vi
       .fn()
       .mockRejectedValueOnce(new Error('EIO: i/o error'))
       .mockResolvedValueOnce(makeResultsState());
-    renderDashboard({ api: makeApi({ getResults }) });
+    renderDashboard({ api: makeApi({ getResultCategories }) });
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load category details: EIO: i/o error");
     expect(screen.queryByRole('button', { name: /reclaimable/ })).toBeNull();
@@ -122,12 +122,12 @@ describe('Dashboard', () => {
 
     expect(await screen.findByRole('button', { name: /Temp — 256 KB reclaimable/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Developer cleanup' })).toBeInTheDocument();
-    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getResultCategories).toHaveBeenCalledTimes(2));
   });
 
   it('shows a category skeleton while results load after analysis', async () => {
-    const getResults = vi.fn(() => new Promise<ResultsState>(() => {}));
-    renderDashboard({ api: makeApi({ getResults }) });
+    const getResultCategories = vi.fn(() => new Promise<ResultsCategoriesState>(() => {}));
+    renderDashboard({ api: makeApi({ getResultCategories }) });
 
     expect(await screen.findByText('Loading category details…')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /reclaimable/ })).toBeNull();

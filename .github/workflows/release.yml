@@ -36,4 +36,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $installer = (Get-ChildItem app/release/Dust-Setup-*.exe).FullName
-          gh release create "$env:GITHUB_REF_NAME" --draft --generate-notes --title "Dust $env:GITHUB_REF_NAME" $installer app/release/sha256sums.txt
+          $assets = @($installer, 'app/release/latest.yml', 'app/release/sha256sums.txt')
+          $assets += (Get-ChildItem app/release/*.blockmap).FullName
+          gh release create "$env:GITHUB_REF_NAME" --draft --generate-notes --title "Dust $env:GITHUB_REF_NAME" @assets

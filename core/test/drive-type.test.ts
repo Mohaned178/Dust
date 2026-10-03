@@ -1,4 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LIST_VOLUMES_SCRIPT,
@@ -7,9 +10,11 @@ import {
   listVolumesAsync,
   mapDriveType,
   parseVolumesJson,
+  resetVolumeCache,
   systemDriveRoot,
   volumeRootOf,
 } from '../src/system/drive-type';
+import { writePersistentCache } from '../src/system/persistent-cache';
 
 describe('mapDriveType', () => {
   it('maps the Windows drive-type strings', () => {
@@ -176,5 +181,29 @@ describe('listVolumesAsync', () => {
       expect(['fixed', 'removable', 'network', 'cdrom', 'ram', 'unknown']).toContain(volume.driveType);
       expect(['ssd', 'hdd', 'unknown']).toContain(volume.mediaType);
     }
+  });
+});
+
+describe('listVolumesAsync disk cache', () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    resetVolumeCache();
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('serves persisted volumes without running PowerShell', async (ctx) => {
+    if (process.platform !== 'win32') {
+      ctx.skip();
+      return;
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'dust-volumes-cache-'));
+    dirs.push(dir);
+    const path = join(dir, 'volumes.json');
+    writePersistentCache(path, [{ root: 'Q:\\', label: 'Fixture', driveType: 'fixed', mediaType: 'ssd' }], () => 1000);
+
+    resetVolumeCache();
+    const volumes = await listVolumesAsync({ cacheFile: path, diskTtlMs: 60_000, now: () => 2000 });
+    expect(volumes).toEqual([{ root: 'Q:\\', label: 'Fixture', driveType: 'fixed', mediaType: 'ssd' }]);
   });
 });

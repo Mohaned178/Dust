@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defaultProtectedPaths } from '../cleaner/guard';
 import { vendorKey } from '../system/installed-apps';
@@ -122,6 +123,71 @@ export function defaultDirectorySize(path: string): number | null {
     }
   }
   return failed ? null : total;
+}
+
+const FILE_STAT_CONCURRENCY = 64;
+const CANDIDATE_MEASURE_CONCURRENCY = 4;
+
+export async function defaultDirectorySizeAsync(path: string): Promise<number | null> {
+  try {
+    await stat(path);
+  } catch {
+    return null;
+  }
+  let total = 0;
+  let failed = false;
+  const stack: string[] = [path];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      failed = true;
+      continue;
+    }
+    const files: string[] = [];
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const child = join(current, entry.name);
+      if (entry.isDirectory()) stack.push(child);
+      else files.push(child);
+    }
+    for (let index = 0; index < files.length; index += FILE_STAT_CONCURRENCY) {
+      const chunk = files.slice(index, index + FILE_STAT_CONCURRENCY);
+      const sizes = await Promise.all(
+        chunk.map((file) =>
+          stat(file)
+            .then((stats) => stats.size)
+            .catch(() => {
+              failed = true;
+              return 0;
+            }),
+        ),
+      );
+      for (const size of sizes) total += size;
+    }
+  }
+  return failed ? null : total;
+}
+
+export async function measureLeftoverCandidates(
+  candidates: readonly LeftoverCandidate[],
+  measure: (path: string) => Promise<number | null> = defaultDirectorySizeAsync,
+  concurrency = CANDIDATE_MEASURE_CONCURRENCY,
+): Promise<void> {
+  const queue = candidates.filter((candidate) => candidate.link === null);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      const candidate = queue[index];
+      if (candidate === undefined) return;
+      candidate.bytes = await measure(candidate.path);
+    }
+  });
+  await Promise.all(workers);
 }
 
 function detectLink(path: string): 'junction' | 'symlink' | null {

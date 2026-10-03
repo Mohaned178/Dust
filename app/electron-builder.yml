@@ -13,6 +13,15 @@ files:
 asar: true
 npmRebuild: false
 
+asarUnpack:
+  - '**/node_modules/koffi/**'
+  - '**/node_modules/@koromix/**'
+
+publish:
+  provider: github
+  owner: Mohaned178
+  repo: Dust
+
 win:
   target:
     - target: nsis

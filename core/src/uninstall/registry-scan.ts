@@ -29,6 +29,7 @@ export interface RegistryScanOptions {
 }
 
 const QUERY_TIMEOUT_MS = 20_000;
+const SNAPSHOT_TTL_MS = 5 * 60_000;
 
 export const UNINSTALL_KEY_PREFIX = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall';
 
@@ -87,6 +88,34 @@ export function readRegistryKeySnapshot(): Promise<string> {
       },
     );
   });
+}
+
+let snapshotCache: { at: number; raw: string } | null = null;
+let snapshotInFlight: Promise<string> | null = null;
+
+export function resetRegistrySnapshotCache(): void {
+  snapshotCache = null;
+  snapshotInFlight = null;
+}
+
+export function readRegistryKeySnapshotCached(read: () => Promise<string> = readRegistryKeySnapshot): Promise<string> {
+  if (snapshotCache !== null && Date.now() - snapshotCache.at < SNAPSHOT_TTL_MS) {
+    return Promise.resolve(snapshotCache.raw);
+  }
+  if (snapshotInFlight !== null) return snapshotInFlight;
+  const pending = read();
+  snapshotInFlight = pending;
+  return pending.then(
+    (raw) => {
+      snapshotCache = { at: Date.now(), raw };
+      snapshotInFlight = null;
+      return raw;
+    },
+    (error: unknown) => {
+      snapshotInFlight = null;
+      throw error;
+    },
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -213,7 +242,7 @@ export async function scanRegistry(
     return { candidates: uninstall, trusted: false };
   }
   try {
-    const raw = await (read ?? readRegistryKeySnapshot)();
+    const raw = await (read ?? readRegistryKeySnapshotCached)();
     const snapshot = parseRegistryKeySnapshot(raw);
     if (snapshot === null) return { candidates: uninstall, trusted: false };
     const others = apps.filter((entry) => entry.id !== app.id);

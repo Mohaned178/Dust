@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseRegistryKeySnapshot, scanRegistry } from '../src/uninstall/registry-scan';
+import {
+  parseRegistryKeySnapshot,
+  readRegistryKeySnapshotCached,
+  resetRegistrySnapshotCache,
+  scanRegistry,
+} from '../src/uninstall/registry-scan';
 import type { RegistryHiveKeys, RegistryVendor } from '../src/uninstall/registry-scan';
 import { makeInstalledApp } from './installed-app-fixtures';
 
@@ -130,6 +135,49 @@ describe('scanRegistry', () => {
       read: queryFor([hive('hklm', [vendor('Unrelated')])]),
     });
     expect(result.candidates.map((candidate) => candidate.scope)).toEqual(['uninstall-key']);
+  });
+});
+
+describe('readRegistryKeySnapshotCached', () => {
+  it('reuses the first read and shares concurrent calls', async () => {
+    resetRegistrySnapshotCache();
+    let calls = 0;
+    const read = async (): Promise<string> => {
+      calls += 1;
+      return '[]';
+    };
+
+    const [first, second] = await Promise.all([
+      readRegistryKeySnapshotCached(read),
+      readRegistryKeySnapshotCached(read),
+    ]);
+    expect(first).toBe('[]');
+    expect(second).toBe('[]');
+    expect(calls).toBe(1);
+
+    await readRegistryKeySnapshotCached(read);
+    expect(calls).toBe(1);
+    resetRegistrySnapshotCache();
+  });
+
+  it('retries after a failure and drops the cache on reset', async () => {
+    resetRegistrySnapshotCache();
+    let calls = 0;
+    const read = async (): Promise<string> => {
+      calls += 1;
+      if (calls === 1) throw new Error('registry blocked');
+      return '[]';
+    };
+
+    await expect(readRegistryKeySnapshotCached(read)).rejects.toThrow('registry blocked');
+    await expect(readRegistryKeySnapshotCached(read)).resolves.toBe('[]');
+    await readRegistryKeySnapshotCached(read);
+    expect(calls).toBe(2);
+
+    resetRegistrySnapshotCache();
+    await readRegistryKeySnapshotCached(read);
+    expect(calls).toBe(3);
+    resetRegistrySnapshotCache();
   });
 });
 

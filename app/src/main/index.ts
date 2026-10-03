@@ -2,12 +2,13 @@ import {
   SnapshotStore,
   backupDirFor,
   createWindowsStartupStore,
-  getVolumeUsage,
+  getVolumeUsageAsync,
   journalPathFor,
-  listVolumes,
+  listVolumesAsync,
   pruneRegistryBackups,
 } from '@dust/core';
 import { BrowserWindow, app, dialog, ipcMain, session, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,6 +46,9 @@ import {
 } from './uninstall-launch';
 import type { PendingUninstallJob } from './uninstall-launch';
 import type { StartupLaunchHint, StartupRelaunchAction, UninstallLaunchHint } from '../shared/ipc';
+import { IPC } from '../shared/ipc';
+import { createUpdateService } from './updater';
+import type { UpdaterAdapter } from './updater';
 
 function isRunningElevated(): Promise<boolean> {
   if (process.platform !== 'win32') return Promise.resolve(true);
@@ -407,6 +411,8 @@ void app
     const host = createEngineHost({
       store,
       workerPath: resolveWorkerPath(__dirname),
+      volumesCacheFile: join(userDataDir, 'volumes-cache.json'),
+      installedAppsCacheFile: join(userDataDir, 'installed-apps-cache.json'),
       startup,
       dustInstallPath,
       uninstallDeps: {
@@ -424,6 +430,13 @@ void app
       },
     });
     const window = createMainWindow(benchRoot === undefined);
+    const updates = createUpdateService({
+      updater: autoUpdater as unknown as UpdaterAdapter,
+      isPackaged: app.isPackaged,
+      onStatus: (status) => {
+        if (!window.webContents.isDestroyed()) window.webContents.send(IPC.updatesEvent, status);
+      },
+    });
 
     const pendingToggle = parsePendingStartupToggle(process.argv);
     let startupLaunchHint: StartupLaunchHint | null = pendingToggle.requested ? { open: true, notice: null } : null;
@@ -486,17 +499,19 @@ void app
       },
       () => startupLaunchHint,
       () => uninstallLaunchHint,
+      updates,
     );
 
     window.once('ready-to-show', () => window.show());
-    app.on('before-quit', () => host.dispose());
-    try {
-      const volumes = listVolumes();
-      getVolumeUsage(volumes.map((volume) => volume.root));
-    } catch {
-      /* volume warm-up is best effort */
-    }
+    app.on('before-quit', () => {
+      updates.dispose();
+      host.dispose();
+    });
+    void listVolumesAsync()
+      .then((volumes) => getVolumeUsageAsync(volumes.map((volume) => volume.root)))
+      .catch(() => undefined);
     await loadRenderer(window);
+    updates.start();
     hardenWebContents(window.webContents, {
       appUrl: window.webContents.getURL(),
       devServerUrl: process.env.DUST_DEV_SERVER_URL,

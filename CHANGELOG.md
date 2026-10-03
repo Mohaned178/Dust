@@ -5,6 +5,28 @@ All notable changes to Dust are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-04
+
+Performance release: Analyze is much faster and the app no longer stalls on PowerShell-backed work.
+
+### Added
+
+- **In-app updates** — packaged builds check GitHub Releases on startup, download updates in the background, and show a "Restart to update" banner when one is ready.
+
+### Changed
+
+- **Analyze speed** — the scanner now reads file sizes and timestamps during directory enumeration instead of issuing one extra filesystem call per file, and ramps up its worker pool sooner. On the test machine this is ~4x faster on a 200k-file tree and ~1.6x on a warm real tree; cold-cache and HDD gains are larger because per-file handle opens (and antivirus interception) are eliminated.
+- **Startup** — volume discovery no longer blocks the first window; it runs in the background.
+- **Deep Uninstall preview** — leftover sizing is asynchronous and no longer freezes the UI; registry snapshots are cached for 5 minutes and invalidated after a removal.
+- **Recycle bin** — leftover items are staged to the Recycle Bin in batches (up to 40 paths per PowerShell run) instead of one process per item, and emptying the Recycle Bin no longer blocks the main process.
+- **Startup Manager** — registry snapshots are cached for 30 seconds and invalidated on every toggle.
+- **Installed apps and volumes** — the lists are persisted to the user-data folder (12 h / 1 h TTL) so restarts do not re-query PowerShell.
+- **Navigation** — Dashboard category cards use a lightweight categories-only IPC payload, changing category in Results no longer rebuilds the row store, and scan events no longer re-render inactive views.
+
+### Fixed
+
+- File metadata (size and modification time) from the native enumerator matches Node's `fs` values exactly, keeping snapshots and pool/legacy scans identical.
+
 ## [1.0.0] - 2026-09-28
 
 First production release: a Windows NSIS installer published through GitHub Releases.

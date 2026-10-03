@@ -2,7 +2,7 @@
   "name": "@dust/app",
   "productName": "Dust",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "author": "Mohaned178",
   "description": "Windows disk cleanup for developers: find what is safe to delete.",
@@ -20,6 +20,7 @@
     "@dust/core": "*",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.13",
+    "electron-updater": "^6.8.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

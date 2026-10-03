@@ -1,10 +1,13 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
+import { promisify } from 'node:util';
 import type { PlanItem } from './plan';
 import { checkDeletable } from './guard';
 import type { GuardOptions } from './guard';
+
+const execFileAsync = promisify(execFile);
 
 export interface DeleteError {
   path: string;
@@ -51,6 +54,28 @@ export function defaultEmptyRecycleBin(): EmptyRecycleBinResult {
   if (process.platform !== 'win32') return { ok: false, code: 'RECYCLE-BIN-UNSUPPORTED' };
   try {
     execFileSync(
+      resolvePowerShell(),
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Clear-RecycleBin -Force -Confirm:$false -ErrorAction Stop -DriveLetter $env:SystemDrive',
+      ],
+      {
+        encoding: 'utf8',
+        timeout: 60_000,
+      },
+    );
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, code: 'RECYCLE-BIN-ERROR', detail: codeOf(error) };
+  }
+}
+
+export async function defaultEmptyRecycleBinAsync(): Promise<EmptyRecycleBinResult> {
+  if (process.platform !== 'win32') return { ok: false, code: 'RECYCLE-BIN-UNSUPPORTED' };
+  try {
+    await execFileAsync(
       resolvePowerShell(),
       [
         '-NoProfile',

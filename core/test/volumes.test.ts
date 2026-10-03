@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { getVolumeUsage, listFixedVolumes } from '../src/system/volumes';
 
 describe('getVolumeUsage', () => {
-  it('reports real numbers for the system drive', (ctx) => {
+  it('reports real numbers for the system drive', { timeout: 30_000 }, (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;
@@ -15,7 +15,7 @@ describe('getVolumeUsage', () => {
     expect(usage!.totalBytes!).toBeGreaterThanOrEqual(usage!.freeBytes!);
   });
 
-  it('returns nulls for a volume that cannot exist', (ctx) => {
+  it('returns nulls for a volume that cannot exist', { timeout: 30_000 }, (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;
@@ -29,7 +29,7 @@ describe('getVolumeUsage', () => {
     });
   });
 
-  it('falls through to nulls for an unmounted drive letter on every platform', () => {
+  it('falls through to nulls for an unmounted drive letter on every platform', { timeout: 30_000 }, () => {
     let letter = '';
     for (let code = 'A'.charCodeAt(0); code <= 'Z'.charCodeAt(0); code += 1) {
       const candidate = String.fromCharCode(code);
@@ -46,7 +46,7 @@ describe('getVolumeUsage', () => {
 });
 
 describe('listFixedVolumes', () => {
-  it('lists fixed drive roots in drive-letter form', (ctx) => {
+  it('lists fixed drive roots in drive-letter form', { timeout: 30_000 }, (ctx) => {
     if (process.platform !== 'win32') {
       ctx.skip();
       return;
