@@ -5,6 +5,15 @@ All notable changes to Dust are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-04
+
+Fix release: bulk cleanup now deletes every selected item, and results refresh after a clean.
+
+### Fixed
+
+- **Bulk cleanup** — "Select all safe" (and any multi-row selection) now builds a plan containing every selected item instead of only the first one. Previously a bulk clean deleted a single item, and a retry could report "Nothing to clean here".
+- **Results refresh** — the post-analyze results view now reloads after a cleanup, so deleted rows disappear immediately instead of staying visible.
+
 ## [1.1.0] - 2026-10-04
 
 Performance release: Analyze is much faster and the app no longer stalls on PowerShell-backed work.
