@@ -60,8 +60,8 @@ export function scopeRules(rules: Rule[], scope: CleanScope, paths: readonly str
   if (scope === 'quick') return rules.filter((rule) => rule.category !== 'npm-projects');
   if (paths.length === 0) return [];
   if (scope === 'row') {
-    const target = paths[0]!;
-    return rules.map((rule) => filterRuleMatches(rule, (path) => samePath(path, target)));
+    const targets = new Set(paths.map(canonicalKey));
+    return rules.map((rule) => filterRuleMatches(rule, (path) => targets.has(canonicalKey(path))));
   }
   const roots = [...paths];
   return rules.map((rule) => filterRuleMatches(rule, (path) => isUnderAny(path, roots)));

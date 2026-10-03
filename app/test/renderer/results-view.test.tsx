@@ -285,6 +285,34 @@ describe('ResultsView', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Preview & clean' })).toBeNull());
   });
 
+  it('drops cleaned rows from the live results view', async () => {
+    const getResults = vi.fn(async () =>
+      makeResultsState({ rows: makeResultsRows().filter((row) => row.path !== 'C:\\Temp') }),
+    );
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      getResults,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(<ResultsView api={api} root="C:\\" runId="run-clean" />);
+
+    act(() => {
+      ingestScanEvent({ type: 'folders', runId: 'run-clean', folders: makeResultsRows() });
+      flushLiveScan();
+    });
+    expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
+    expect(getResults).not.toHaveBeenCalled();
+
+    await act(async () => {
+      for (const handler of handlers) handler({ type: 'cleaned', cleanId: 'clean-1', root: 'C:\\' });
+    });
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Select Temp' })).toBeNull());
+  });
+
   it('opens Dev Cleanup from the npm projects chip', async () => {
     const onOpenDevCleanup = vi.fn();
     const categories = makeCategories().map((row) =>

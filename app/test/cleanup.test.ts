@@ -118,6 +118,12 @@ describe('scopeRules', () => {
     expect(matches.map((entry) => entry.path)).toEqual(['C:\\Windows\\Temp']);
   });
 
+  it('keeps every exact path when several rows are selected', async () => {
+    const scoped = scopeRules(rules, 'row', ['c:\\temp', 'c:\\windows\\temp']);
+    const matches = await scoped[0]!.match(ctx);
+    expect(matches.map((entry) => entry.path)).toEqual(['C:\\Temp', 'C:\\Windows\\Temp']);
+  });
+
   it('keeps matches under the selected projects for dev clean', async () => {
     const scoped = scopeRules(rules, 'dev', ['C:\\dev\\app']);
     expect(await scoped[1]!.match(ctx)).toHaveLength(1);

@@ -94,6 +94,7 @@ export function ResultsView({
         categories: next.categories,
       });
       setSnapshotVersion((value) => value + 1);
+      setReconciled(true);
       if (!seededRef.current) {
         setExpanded(defaultExpanded(storeRef.current));
         seededRef.current = true;
@@ -157,14 +158,12 @@ export function ResultsView({
 
   useEffect(() => {
     return api.onScanEvent((next) => {
-      if (runId !== null) return;
-      if (next.type === 'cleaned' && sameRoot(next.root, root)) {
-        setSelected(new Set());
-        setKept(new Set());
-        reload();
-      }
+      if (next.type !== 'cleaned' || !sameRoot(next.root, root)) return;
+      setSelected(new Set());
+      setKept(new Set());
+      reload();
     });
-  }, [api, reload, root, runId]);
+  }, [api, reload, root]);
 
   useEffect(() => {
     if (!liveMode) return;

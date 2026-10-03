@@ -963,6 +963,53 @@ describe('createEngineHost', () => {
     expect(existsSync(temp)).toBe(false);
   });
 
+  it('cleans every selected row in one plan', async () => {
+    const temp = tree.dir('temp');
+    const cache = tree.dir('cache');
+    tree.file('temp/junk.bin', '0123456789');
+    tree.file('cache/blob.bin', '0123456789');
+
+    const bothRule: Rule = {
+      id: 'fixture-both',
+      category: 'temp',
+      title: 'Fixture both',
+      action: { kind: 'delete-path' },
+      match: (ctx: RuleContext) =>
+        [temp, cache].map((path) => ({
+          path,
+          bytes: ctx.tree.get(path)?.bytes ?? 0,
+          grade: 'safe' as const,
+          recovery: { kind: 'junk' as const, reason: 'fixture junk' },
+          evidence: 'fixture',
+        })),
+    };
+
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [bothRule],
+    });
+
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    await finished;
+
+    const preview = await host.previewClean({ scope: 'row', root: tree.root, paths: [temp, cache] });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.preview.items.map((item) => item.path).sort()).toEqual([cache, temp].sort());
+
+    const executed = await host.executeClean({ cleanId: 'clean-rows', planId: preview.preview.planId });
+    expect(executed.ok).toBe(true);
+    if (!executed.ok) return;
+    expect(executed.report.items.map((item) => item.status)).toEqual(['done', 'done']);
+    expect(existsSync(temp)).toBe(false);
+    expect(existsSync(cache)).toBe(false);
+  });
+
   it('requires an acknowledgement for review-grade project matches', async () => {
     const appPath = join(tree.root, 'ghost-app');
     const nodeModules = join(appPath, 'node_modules');
