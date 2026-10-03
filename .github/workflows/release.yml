@@ -20,7 +20,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Build installer
-        run: npm run dist -w app
+        run: npm run dist -w app -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Write checksums
