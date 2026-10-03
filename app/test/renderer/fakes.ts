@@ -523,6 +523,18 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     startBrowse: async () => ({ ok: true, runId: 'browse-1' }),
     cancelScan: async () => {},
     getResults: async (root) => makeResultsState({ root }),
+    getResultCategories: async (root) => {
+      const state = makeResultsState({ root });
+      return {
+        source: state.source,
+        root: state.root,
+        finishedAt: state.finishedAt,
+        status: state.status,
+        rulesStale: state.rulesStale,
+        depthLimited: state.depthLimited,
+        categories: state.categories,
+      };
+    },
     getBrowseResults: async (root) => ({ source: 'empty', root, finishedAt: null, status: null, rows: [] }),
     deleteBrowsePath: async (path) => ({
       path,
@@ -549,6 +561,10 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     skipUninstallWaiting: async () => {},
     getUninstallLaunchHint: async () => null,
     relaunchElevatedUninstall: async () => {},
+    getUpdateStatus: async () => ({ phase: 'idle', version: null, percent: null, message: null }),
+    checkForUpdates: async () => ({ phase: 'idle', version: null, percent: null, message: null }),
+    installUpdate: async () => {},
+    onUpdateEvent: () => () => {},
     onUninstallEvent: () => () => {},
     onScanEvent: () => () => {},
     ...overrides,

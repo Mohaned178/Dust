@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { normalize, parse } from 'node:path';
 import { promisify } from 'node:util';
+import { readPersistentCache, removePersistentCache, writePersistentCache } from './persistent-cache';
 
 export const LIST_VOLUMES_SCRIPT = `$parts = @();
 try { $parts = @(Get-Partition -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | Select-Object @{n='root';e={"$($_.DriveLetter):\\"}}, DiskNumber) } catch {}
@@ -83,11 +84,20 @@ export function parseVolumesJson(raw: string): VolumeInfo[] {
 }
 
 const VOLUME_CACHE_TTL_MS = 5 * 60_000;
+export const VOLUME_DISK_TTL_MS = 60 * 60_000;
+
+export interface ListVolumesOptions {
+  cacheFile?: string;
+  diskTtlMs?: number;
+  now?: () => number;
+}
 
 let volumeCache: { at: number; volumes: VolumeInfo[] } | null = null;
+let volumeDiskCacheFile: string | null = null;
 
 export function resetVolumeCache(): void {
   volumeCache = null;
+  if (volumeDiskCacheFile !== null) removePersistentCache(volumeDiskCacheFile);
 }
 
 export function listVolumes(): VolumeInfo[] {
@@ -109,15 +119,36 @@ export function listVolumes(): VolumeInfo[] {
   }
 }
 
-export async function listVolumesAsync(): Promise<VolumeInfo[]> {
+export async function listVolumesAsync(options: ListVolumesOptions = {}): Promise<VolumeInfo[]> {
   if (process.platform !== 'win32') return [];
+  const now = options.now ?? Date.now;
+  if (options.cacheFile !== undefined) volumeDiskCacheFile = options.cacheFile;
+  if (volumeCache !== null && now() - volumeCache.at < VOLUME_CACHE_TTL_MS) {
+    return volumeCache.volumes.map((volume) => ({ ...volume }));
+  }
+  if (options.cacheFile !== undefined) {
+    const persisted = readPersistentCache<VolumeInfo[]>(
+      options.cacheFile,
+      options.diskTtlMs ?? VOLUME_DISK_TTL_MS,
+      now,
+    );
+    if (persisted !== null && Array.isArray(persisted)) {
+      volumeCache = { at: now(), volumes: persisted };
+      return persisted.map((volume) => ({ ...volume }));
+    }
+  }
   try {
     const { stdout } = await promisify(execFile)(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-Command', LIST_VOLUMES_SCRIPT],
       { encoding: 'utf8', timeout: 15_000, windowsHide: true },
     );
-    return parseVolumesJson(stdout);
+    const volumes = parseVolumesJson(stdout);
+    volumeCache = { at: now(), volumes };
+    if (options.cacheFile !== undefined && volumes.length > 0) {
+      writePersistentCache(options.cacheFile, volumes, now);
+    }
+    return volumes.map((volume) => ({ ...volume }));
   } catch {
     return [];
   }

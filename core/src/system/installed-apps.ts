@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { UninstallHive } from '../uninstall/types';
+import { readPersistentCache, removePersistentCache, writePersistentCache } from './persistent-cache';
 
 export interface InstalledApp {
   id: string;
@@ -39,9 +40,12 @@ export interface InstalledAppsOptions {
   ttlMs?: number;
   now?: () => number;
   query?: () => Promise<string>;
+  cacheFile?: string;
+  diskTtlMs?: number;
 }
 
 export const INSTALLED_APPS_TTL_MS = 5 * 60_000;
+export const INSTALLED_APPS_DISK_TTL_MS = 12 * 60 * 60_000;
 
 const QUERY_TIMEOUT_MS = 15_000;
 
@@ -252,6 +256,7 @@ function queryInstalledAppsJson(): Promise<string> {
 
 let cache: { at: number; snapshot: InstalledAppsSnapshot } | null = null;
 let inFlight: Promise<InstalledAppsSnapshot> | null = null;
+let diskCacheFile: string | null = null;
 
 async function load(query: () => Promise<string>): Promise<InstalledAppsSnapshot> {
   if (process.platform !== 'win32') return { apps: [], trusted: false };
@@ -268,14 +273,30 @@ async function load(query: () => Promise<string>): Promise<InstalledAppsSnapshot
 export async function listInstalledApps(options: InstalledAppsOptions = {}): Promise<InstalledAppsSnapshot> {
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? INSTALLED_APPS_TTL_MS;
+  if (options.cacheFile !== undefined) diskCacheFile = options.cacheFile;
   if (cache !== null && now() - cache.at < ttlMs) return cache.snapshot;
   if (inFlight !== null) return inFlight;
+
+  if (options.cacheFile !== undefined) {
+    const persisted = readPersistentCache<InstalledAppsSnapshot>(
+      options.cacheFile,
+      options.diskTtlMs ?? INSTALLED_APPS_DISK_TTL_MS,
+      now,
+    );
+    if (persisted !== null && Array.isArray(persisted.apps)) {
+      cache = { at: now(), snapshot: persisted };
+      return persisted;
+    }
+  }
 
   const pending = load(options.query ?? queryInstalledAppsJson);
   inFlight = pending;
   try {
     const snapshot = await pending;
     cache = { at: now(), snapshot };
+    if (options.cacheFile !== undefined && snapshot.trusted) {
+      writePersistentCache(options.cacheFile, snapshot, now);
+    }
     return snapshot;
   } finally {
     inFlight = null;
@@ -285,4 +306,5 @@ export async function listInstalledApps(options: InstalledAppsOptions = {}): Pro
 export function resetInstalledAppsCache(): void {
   cache = null;
   inFlight = null;
+  if (diskCacheFile !== null) removePersistentCache(diskCacheFile);
 }

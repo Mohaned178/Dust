@@ -106,7 +106,7 @@ export function Dashboard({
     setCategories(null);
     setCategoryError(null);
     api
-      .getResults(systemRoot)
+      .getResultCategories(systemRoot)
       .then((result) => {
         if (active) setCategories(result.categories);
       })

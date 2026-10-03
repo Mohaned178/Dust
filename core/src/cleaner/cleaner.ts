@@ -2,8 +2,8 @@ import type { Rule, RuleContext } from '../rules/types';
 import { buildPlan } from './plan';
 import type { BuildPlanOptions, CleanupPlan } from './plan';
 import { canonicalizePath } from './guard';
-import { executeItem } from './executor';
-import type { ItemResult } from './executor';
+import { defaultEmptyRecycleBinAsync, executeItem } from './executor';
+import type { EmptyRecycleBinResult, ItemResult } from './executor';
 
 export type PlanTokenErrorCode = 'unknown-plan' | 'consumed-plan' | 'unacknowledged-review' | 'rule-not-in-plan';
 
@@ -17,7 +17,9 @@ export class PlanTokenError extends Error {
   }
 }
 
-export type CleanerOptions = BuildPlanOptions;
+export type CleanerOptions = BuildPlanOptions & {
+  runEmptyRecycleBin?: () => EmptyRecycleBinResult | Promise<EmptyRecycleBinResult>;
+};
 
 export interface ExecuteOptions {
   acknowledge?: string[];
@@ -80,6 +82,11 @@ export class Cleaner {
     let skippedLocked = 0;
     let itemErrors = 0;
 
+    const hasRecycleBinItem = entry.plan.items.some((item) => item.action.kind === 'empty-recycle-bin');
+    const recycleBinResult = hasRecycleBinItem
+      ? await (this.options.runEmptyRecycleBin ?? defaultEmptyRecycleBinAsync)()
+      : null;
+
     for (const item of entry.plan.items) {
       if (!entry.ruleIds.has(item.ruleId)) {
         const result: ItemResult = {
@@ -103,7 +110,10 @@ export class Cleaner {
         continue;
       }
 
-      const result = executeItem(item, { guard: this.options.guard });
+      const result = executeItem(item, {
+        guard: this.options.guard,
+        ...(recycleBinResult === null ? {} : { runEmptyRecycleBin: () => recycleBinResult }),
+      });
       items.push(result);
       deletedBytes += result.deletedBytes;
       skippedLocked += result.skippedLocked;

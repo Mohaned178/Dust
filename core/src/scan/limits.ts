@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import type { PoolLimits } from './protocol';
 
 export const DEFAULT_POOL_LIMITS: PoolLimits = {
-  splitAfterEntries: 20_000,
+  splitAfterEntries: 2_000,
   batchIntervalMs: 200,
   batchMaxItems: 500,
 };

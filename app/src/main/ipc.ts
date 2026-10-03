@@ -8,6 +8,7 @@ import type {
   StartupRelaunchAction,
   UninstallExecuteRequest,
   UninstallLaunchHint,
+  UpdateStatus,
 } from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
 import { instrument } from './host/instrument';
@@ -25,6 +26,14 @@ export interface ShellActions {
   relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
   relaunchElevatedUninstall?(jobId: string): Promise<void>;
 }
+
+export interface UpdateActions {
+  status(): UpdateStatus;
+  check(): Promise<UpdateStatus>;
+  install(): void;
+}
+
+const IDLE_UPDATE_STATUS: UpdateStatus = { phase: 'idle', version: null, percent: null, message: null };
 
 const timingEnabled = process.env.DUST_TIMING === '1';
 let timingLogPath: string | null = null;
@@ -59,12 +68,16 @@ export function registerIpcHandlers(
   shell: ShellActions,
   getStartupLaunchHint: () => StartupLaunchHint | null = () => null,
   getUninstallLaunchHint: () => UninstallLaunchHint | null = () => null,
+  updates: UpdateActions | null = null,
 ): () => void {
   registrar.handle(IPC.dashboardGet, () => timed('dashboardGet', () => host.getDashboard()));
   registrar.handle(IPC.scanStart, (_event, volume) => host.startAnalyze(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.scanCancel, () => host.cancelScan());
   registrar.handle(IPC.resultsGet, (_event, root) =>
     timed('resultsGet', () => host.getResults(typeof root === 'string' ? root : '')),
+  );
+  registrar.handle(IPC.resultsCategoriesGet, (_event, root) =>
+    timed('resultsCategoriesGet', () => host.getResultCategories(typeof root === 'string' ? root : '')),
   );
   registrar.handle(IPC.browseStart, (_event, volume) => host.startBrowse(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.browseResultsGet, (_event, root) =>
@@ -111,6 +124,11 @@ export function registerIpcHandlers(
     IPC.relaunchElevatedUninstall,
     (_event, jobId) => shell.relaunchElevatedUninstall?.(typeof jobId === 'string' ? jobId : '') ?? Promise.resolve(),
   );
+  registrar.handle(IPC.updatesGet, () => updates?.status() ?? IDLE_UPDATE_STATUS);
+  registrar.handle(IPC.updatesCheck, () => updates?.check() ?? IDLE_UPDATE_STATUS);
+  registrar.handle(IPC.updatesInstall, () => {
+    updates?.install();
+  });
   const offScan = host.onEvent((event: ScanEvent) => {
     instrument('ipc.send', () => sender.send(IPC.scanEvent, event));
   });

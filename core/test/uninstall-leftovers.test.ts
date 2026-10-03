@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { defaultDirectorySize, discoverLeftovers } from '../src/uninstall/leftovers';
+import {
+  defaultDirectorySize,
+  defaultDirectorySizeAsync,
+  discoverLeftovers,
+  measureLeftoverCandidates,
+} from '../src/uninstall/leftovers';
 import type { LeftoverDiscoveryOptions, LeftoverRoots } from '../src/uninstall/leftovers';
+import type { LeftoverCandidate } from '../src/uninstall/types';
 import { Fixture } from './fixtures';
 import { makeInstalledApp } from './installed-app-fixtures';
 
@@ -291,5 +297,37 @@ describe('defaultDirectorySize', () => {
 
     expect(defaultDirectorySize(join(fixture.root, 'tree'))).toBe(6);
     expect(defaultDirectorySize(join(fixture.root, 'ghost'))).toBeNull();
+  });
+});
+
+describe('defaultDirectorySizeAsync', () => {
+  it('matches the synchronous walker for trees, links, and missing paths', async () => {
+    const fixture = new Fixture();
+    fixtures.push(fixture);
+    fixture.file('tree/a.txt', '1234');
+    fixture.file('tree/sub/b.txt', '12');
+    fixture.file('tree/sub/deep/c.txt', '123');
+    fixture.dir('outside');
+    fixture.link('tree/link', join(fixture.root, 'outside'));
+
+    const sync = defaultDirectorySize(join(fixture.root, 'tree'));
+    await expect(defaultDirectorySizeAsync(join(fixture.root, 'tree'))).resolves.toBe(sync);
+    await expect(defaultDirectorySizeAsync(join(fixture.root, 'ghost'))).resolves.toBeNull();
+  });
+});
+
+describe('measureLeftoverCandidates', () => {
+  it('fills bytes for non-link candidates in place and skips links', async () => {
+    const candidates = [
+      { id: 'a', path: 'first', bytes: null, link: null },
+      { id: 'b', path: 'second', bytes: null, link: 'junction' },
+      { id: 'c', path: 'third', bytes: null, link: null },
+    ] as unknown as LeftoverCandidate[];
+
+    await measureLeftoverCandidates(candidates, async (path) => (path === 'first' ? 42 : 7));
+
+    expect(candidates[0]?.bytes).toBe(42);
+    expect(candidates[1]?.bytes).toBeNull();
+    expect(candidates[2]?.bytes).toBe(7);
   });
 });

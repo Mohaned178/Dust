@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   appMatchesTokens,
   appId,
@@ -212,6 +215,71 @@ describe('listInstalledApps', () => {
 
     clock += 1000;
     await listInstalledApps({ query, ttlMs: 500, now: () => clock });
+    expect(calls).toBe(2);
+  });
+});
+
+describe('listInstalledApps disk cache', () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    resetInstalledAppsCache();
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function cacheFile(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'dust-apps-cache-'));
+    dirs.push(dir);
+    return join(dir, 'apps.json');
+  }
+
+  it('persists a trusted snapshot and serves it after the memory ttl expires', async () => {
+    const path = cacheFile();
+    let calls = 0;
+    let clock = 1000;
+    const query = async (): Promise<string> => {
+      calls += 1;
+      return JSON.stringify([{ DisplayName: 'Spotify' }]);
+    };
+
+    await listInstalledApps({ query, cacheFile: path, ttlMs: 500, diskTtlMs: 60_000, now: () => clock });
+    expect(calls).toBe(1);
+
+    clock += 600;
+    const snapshot = await listInstalledApps({
+      query,
+      cacheFile: path,
+      ttlMs: 500,
+      diskTtlMs: 60_000,
+      now: () => clock,
+    });
+    expect(calls).toBe(1);
+    expect(snapshot).toMatchObject({ trusted: true });
+    expect(snapshot.apps[0]).toMatchObject({ displayName: 'Spotify' });
+  });
+
+  it('does not persist untrusted snapshots', async () => {
+    const path = cacheFile();
+    await listInstalledApps({
+      query: async () => {
+        throw new Error('registry blocked');
+      },
+      cacheFile: path,
+    });
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('reset invalidates the disk cache as well', async () => {
+    const path = cacheFile();
+    let calls = 0;
+    const query = async (): Promise<string> => {
+      calls += 1;
+      return JSON.stringify([{ DisplayName: 'Spotify' }]);
+    };
+
+    await listInstalledApps({ query, cacheFile: path });
+    resetInstalledAppsCache();
+    await listInstalledApps({ query, cacheFile: path });
     expect(calls).toBe(2);
   });
 });

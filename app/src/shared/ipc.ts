@@ -20,6 +20,7 @@ export const IPC = {
   scanCancel: 'dust:scan:cancel',
   scanEvent: 'dust:scan:event',
   resultsGet: 'dust:results:get',
+  resultsCategoriesGet: 'dust:results:categories',
   browseStart: 'dust:browse:start',
   browseResultsGet: 'dust:browse:results',
   browseDelete: 'dust:browse:delete',
@@ -42,6 +43,10 @@ export const IPC = {
   uninstallEvent: 'dust:uninstall:event',
   uninstallHint: 'dust:uninstall:hint',
   relaunchElevatedUninstall: 'dust:app:relaunch-elevated-uninstall',
+  updatesGet: 'dust:updates:get',
+  updatesCheck: 'dust:updates:check',
+  updatesInstall: 'dust:updates:install',
+  updatesEvent: 'dust:updates:event',
 } as const;
 
 export type { BrowseDeleteResult, RemovalReport, StartupSource, SystemInfoLive, SystemInfoStatic };
@@ -137,6 +142,16 @@ export interface ResultsState {
   depthLimited: boolean;
   categories: CategorySummaryRow[];
   rows: ResultRow[];
+}
+
+export interface ResultsCategoriesState {
+  source: 'live' | 'snapshot' | 'empty';
+  root: string;
+  finishedAt: number | null;
+  status: 'complete' | 'cancelled' | null;
+  rulesStale: boolean;
+  depthLimited: boolean;
+  categories: CategorySummaryRow[];
 }
 
 export type CleanScope = 'quick' | 'dev' | 'row';
@@ -487,12 +502,22 @@ export interface UninstallLaunchHint {
   runningJobId: string | null;
 }
 
+export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error';
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  version: string | null;
+  percent: number | null;
+  message: string | null;
+}
+
 export interface DustApi {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
   startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<void>;
   getResults(root: string): Promise<ResultsState>;
+  getResultCategories(root: string): Promise<ResultsCategoriesState>;
   getBrowseResults(root: string): Promise<BrowseState>;
   deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   revealPath(path: string): Promise<void>;
@@ -513,6 +538,10 @@ export interface DustApi {
   skipUninstallWaiting(): Promise<void>;
   getUninstallLaunchHint(): Promise<UninstallLaunchHint | null>;
   relaunchElevatedUninstall(jobId: string): Promise<void>;
+  getUpdateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  installUpdate(): Promise<void>;
+  onUpdateEvent(handler: (status: UpdateStatus) => void): () => void;
   onUninstallEvent(handler: (event: UninstallEvent) => void): () => void;
   onScanEvent(handler: (event: ScanEvent) => void): () => void;
 }

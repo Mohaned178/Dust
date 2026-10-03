@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { lstatSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { deletePathTree } from '../cleaner/executor';
-import { stageToRecycleBin } from '../cleaner/recycle';
+import { stageManyToRecycleBin, stageToRecycleBin } from '../cleaner/recycle';
 import { createRegistryBackup, fullRegistryPath } from './backup';
 import type { BackupResult } from './backup';
 import type { Journal } from './journal';
@@ -137,17 +137,31 @@ function defaultDeleteRegistryKey(fullKeyPath: string): Promise<boolean> {
   );
 }
 
+function precheckRemovable(path: string): FileRemoveOutcome | null {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      return { status: 'kept', bytes: 0, skippedLocked: 0, code: 'reparse-point' };
+    }
+  } catch (error) {
+    const code = codeOf(error);
+    if (code === 'ENOENT') return { status: 'already-gone', bytes: 0, skippedLocked: 0 };
+    return { status: 'failed', bytes: 0, skippedLocked: 0, code };
+  }
+  return null;
+}
+
+async function safelyRemove(remove: FileRemover, path: string, mode: FileRemoveMode): Promise<FileRemoveOutcome> {
+  try {
+    return await remove(path, mode);
+  } catch {
+    return { status: 'failed', bytes: 0, skippedLocked: 0, code: 'UNKNOWN' };
+  }
+}
+
 export function defaultFileRemover(): FileRemover {
   return async (path, mode) => {
-    try {
-      if (lstatSync(path).isSymbolicLink()) {
-        return { status: 'kept', bytes: 0, skippedLocked: 0, code: 'reparse-point' };
-      }
-    } catch (error) {
-      const code = codeOf(error);
-      if (code === 'ENOENT') return { status: 'already-gone', bytes: 0, skippedLocked: 0 };
-      return { status: 'failed', bytes: 0, skippedLocked: 0, code };
-    }
+    const precheck = precheckRemovable(path);
+    if (precheck !== null) return precheck;
     if (mode === 'recycle') {
       const staged = await stageToRecycleBin(path);
       return staged.ok
@@ -426,7 +440,6 @@ export async function executeRemoval(
       systemRoot: process.env.SystemRoot,
       userProfile: process.env.USERPROFILE,
     };
-    const remove = deps.removeFile ?? defaultFileRemover();
     const journalReady = deps.journal.append('files-started', { items: selectedLeftovers.length });
     if (!journalReady) {
       for (const item of selectedLeftovers) {
@@ -434,6 +447,13 @@ export async function executeRemoval(
       }
       phase('files', 'failed', 'journal-unavailable');
     }
+    interface PlannedRemoval {
+      id: string;
+      path: string;
+      mode: FileRemoveMode;
+    }
+    const planned: PlannedRemoval[] = [];
+
     for (const item of journalReady ? selectedLeftovers : []) {
       if (item.link !== null) {
         fileKept.push({ target: item.path, reason: 'reparse-point' });
@@ -457,12 +477,44 @@ export async function executeRemoval(
         emit({ type: 'item', itemId: item.id, status: 'kept', bytes: 0 });
         continue;
       }
-      let outcome: FileRemoveOutcome;
-      try {
-        outcome = await remove(target.path, mode);
-      } catch {
-        outcome = { status: 'failed', bytes: 0, skippedLocked: 0, code: 'UNKNOWN' };
+      planned.push({ id: item.id, path: target.path, mode });
+    }
+
+    const injectedRemover = deps.removeFile;
+    const remove = injectedRemover ?? defaultFileRemover();
+    const outcomes = new Map<string, FileRemoveOutcome>();
+    const recycleTargets: string[] = [];
+
+    for (const action of planned) {
+      if (injectedRemover !== undefined || action.mode === 'delete') {
+        outcomes.set(action.path, await safelyRemove(remove, action.path, action.mode));
+        continue;
       }
+      const precheck = precheckRemovable(action.path);
+      if (precheck !== null) outcomes.set(action.path, precheck);
+      else recycleTargets.push(action.path);
+    }
+
+    if (recycleTargets.length > 0) {
+      const staged = await stageManyToRecycleBin(recycleTargets);
+      for (const path of recycleTargets) {
+        const result = staged.get(path) ?? { ok: false, code: 'RECYCLE-ERROR' };
+        outcomes.set(
+          path,
+          result.ok
+            ? { status: 'recycled', bytes: 0, skippedLocked: 0 }
+            : { status: 'kept', bytes: 0, skippedLocked: 0, code: result.code ?? 'RECYCLE-ERROR' },
+        );
+      }
+    }
+
+    for (const action of planned) {
+      const outcome = outcomes.get(action.path) ?? {
+        status: 'failed' as const,
+        bytes: 0,
+        skippedLocked: 0,
+        code: 'UNKNOWN',
+      };
       switch (outcome.status) {
         case 'deleted':
           filesReport.deletedItems += 1;
@@ -478,19 +530,19 @@ export async function executeRemoval(
         case 'partial':
           filesReport.deletedBytes += outcome.bytes;
           filesReport.skippedLocked += outcome.skippedLocked;
-          if (outcome.code !== undefined) filesReport.errors.push({ path: item.path, code: outcome.code });
+          if (outcome.code !== undefined) filesReport.errors.push({ path: action.path, code: outcome.code });
           break;
         case 'skipped-locked':
           filesReport.skippedLocked += Math.max(outcome.skippedLocked, 1);
           break;
         case 'kept':
-          fileKept.push({ target: item.path, reason: outcome.code ?? 'kept' });
+          fileKept.push({ target: action.path, reason: outcome.code ?? 'kept' });
           break;
         case 'failed':
-          filesReport.errors.push({ path: item.path, code: outcome.code ?? 'UNKNOWN' });
+          filesReport.errors.push({ path: action.path, code: outcome.code ?? 'UNKNOWN' });
           break;
       }
-      emit({ type: 'item', itemId: item.id, status: outcome.status, bytes: outcome.bytes });
+      emit({ type: 'item', itemId: action.id, status: outcome.status, bytes: outcome.bytes });
     }
     deps.journal.append('files', {
       deleted: filesReport.deletedItems,

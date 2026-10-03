@@ -10,6 +10,7 @@ import type {
   DashboardState,
   DevCleanupState,
   DustApi,
+  ResultsCategoriesState,
   ResultsState,
   ScanEvent,
   SetPinResult,
@@ -26,6 +27,7 @@ import type {
   UninstallLaunchHint,
   UninstallListResult,
   UninstallPreviewResult,
+  UpdateStatus,
 } from '../shared/ipc';
 
 const api: DustApi = {
@@ -33,6 +35,8 @@ const api: DustApi = {
   startAnalyze: (volume: string) => ipcRenderer.invoke(IPC.scanStart, volume) as Promise<StartAnalyzeResult>,
   cancelScan: () => ipcRenderer.invoke(IPC.scanCancel) as Promise<void>,
   getResults: (root: string) => ipcRenderer.invoke(IPC.resultsGet, root) as Promise<ResultsState>,
+  getResultCategories: (root: string) =>
+    ipcRenderer.invoke(IPC.resultsCategoriesGet, root) as Promise<ResultsCategoriesState>,
   startBrowse: (volume: string) => ipcRenderer.invoke(IPC.browseStart, volume) as Promise<StartAnalyzeResult>,
   getBrowseResults: (root: string) => ipcRenderer.invoke(IPC.browseResultsGet, root) as Promise<BrowseState>,
   deleteBrowsePath: (path: string) => ipcRenderer.invoke(IPC.browseDelete, path) as Promise<BrowseDeleteResult>,
@@ -62,6 +66,16 @@ const api: DustApi = {
   getUninstallLaunchHint: () => ipcRenderer.invoke(IPC.uninstallHint) as Promise<UninstallLaunchHint | null>,
   relaunchElevatedUninstall: (jobId: string) =>
     ipcRenderer.invoke(IPC.relaunchElevatedUninstall, jobId) as Promise<void>,
+  getUpdateStatus: () => ipcRenderer.invoke(IPC.updatesGet) as Promise<UpdateStatus>,
+  checkForUpdates: () => ipcRenderer.invoke(IPC.updatesCheck) as Promise<UpdateStatus>,
+  installUpdate: () => ipcRenderer.invoke(IPC.updatesInstall) as Promise<void>,
+  onUpdateEvent: (handler: (status: UpdateStatus) => void) => {
+    const listener = (_event: unknown, payload: UpdateStatus) => handler(payload);
+    ipcRenderer.on(IPC.updatesEvent, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC.updatesEvent, listener);
+    };
+  },
   onUninstallEvent: (handler: (event: UninstallEvent) => void) => {
     const listener = (_event: unknown, payload: UninstallEvent) => handler(payload);
     ipcRenderer.on(IPC.uninstallEvent, listener);

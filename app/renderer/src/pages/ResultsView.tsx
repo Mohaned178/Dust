@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CategoryId } from '@dust/core';
 import { CATEGORY_LABELS, RESULTS_SCOPE_NOTE } from '../../../src/shared/categories';
-import type { CleanItemPreview, DustApi, ResultsState } from '../../../src/shared/ipc';
+import type { CleanItemPreview, DustApi, ResultsCategoriesState, ResultsState } from '../../../src/shared/ipc';
 import { BulkBar } from '../components/BulkBar';
 import { CategoryStrip } from '../components/CategoryStrip';
 import { ContributorList } from '../components/ContributorList';
@@ -48,7 +48,7 @@ export function ResultsView({
 }: ResultsViewProps) {
   const storeRef = useRef<RowStore>(createRowStore(root));
   const [snapshotVersion, setSnapshotVersion] = useState(0);
-  const [state, setState] = useState<ResultsState | null>(null);
+  const [state, setState] = useState<ResultsCategoriesState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reconciled, setReconciled] = useState(false);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -84,7 +84,15 @@ export function ResultsView({
     (next: ResultsState) => {
       storeRef.current = createRowStore(root);
       upsertRows(storeRef.current, next.rows);
-      setState(next);
+      setState({
+        source: next.source,
+        root: next.root,
+        finishedAt: next.finishedAt,
+        status: next.status,
+        rulesStale: next.rulesStale,
+        depthLimited: next.depthLimited,
+        categories: next.categories,
+      });
       setSnapshotVersion((value) => value + 1);
       if (!seededRef.current) {
         setExpanded(defaultExpanded(storeRef.current));
@@ -116,7 +124,6 @@ export function ResultsView({
     setError(null);
     seededRef.current = false;
     setExpanded(new Set());
-    setCategoryFilter(initialCategory);
     setSearch('');
     setReviewToo(false);
     setTreeSelectedPath(null);
@@ -125,7 +132,11 @@ export function ResultsView({
     setBulkOpen(false);
     setReconciled(false);
     if (runId === null) reload();
-  }, [initialCategory, reload, root, runId]);
+  }, [reload, root, runId]);
+
+  useEffect(() => {
+    setCategoryFilter(initialCategory);
+  }, [initialCategory]);
 
   useEffect(() => {
     if (runId !== null || reconciled) return;

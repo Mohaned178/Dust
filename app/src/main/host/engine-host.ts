@@ -17,7 +17,7 @@ import {
   defaultWorkersForVolume,
   deleteUnprotectedPath,
   discoverCaches,
-  getVolumeUsage,
+  getVolumeUsageAsync,
   listInstalledApps,
   listVolumesAsync,
   pruneSnapshotAfterCleanup,
@@ -66,6 +66,7 @@ import type {
   RecentlyCleanedProject,
   ResultMatch,
   ResultRow,
+  ResultsCategoriesState,
   ResultsState,
   ScanEvent,
   SetPinResult,
@@ -134,7 +135,9 @@ export interface EngineHostDeps {
   categoryIntervalMs?: number;
   volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
-  getVolumeUsage?: (volumes: string[]) => VolumeUsage[];
+  volumesCacheFile?: string;
+  installedAppsCacheFile?: string;
+  getVolumeUsage?: (volumes: string[]) => VolumeUsage[] | Promise<VolumeUsage[]>;
   createSession?: (options: SessionOptions) => ScanSessionLike;
   createRules?: (
     env: RuleEnv,
@@ -156,6 +159,7 @@ export interface EngineHost {
   startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
   getResults(root: string): ResultsState;
+  getResultCategories(root: string): ResultsCategoriesState;
   getBrowseResults(root: string): BrowseState;
   deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
@@ -203,12 +207,13 @@ interface PendingPlan {
 
 export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const now = deps.now ?? Date.now;
-  const volumeSource = deps.listVolumes ?? listVolumesAsync;
+  const volumeSource = deps.listVolumes ?? (() => listVolumesAsync({ cacheFile: deps.volumesCacheFile }));
   const volumes = createVolumeCache(() => Promise.resolve(volumeSource()), deps.volumesTtlMs ?? 30_000, now);
-  const getVolumeUsageFn = deps.getVolumeUsage ?? getVolumeUsage;
+  const getVolumeUsageFn = deps.getVolumeUsage ?? getVolumeUsageAsync;
   const env = deps.env ?? defaultRuleEnv();
   const systemRoot = deps.systemRoot ?? systemDriveRoot(env) ?? 'C:\\';
-  const installsSource = deps.listInstalledApps ?? listInstalledApps;
+  const installsSource =
+    deps.listInstalledApps ?? (() => listInstalledApps({ cacheFile: deps.installedAppsCacheFile }));
   const createSession = deps.createSession ?? ((options: SessionOptions) => new ScanSession(options));
   const createRules =
     deps.createRules ??
@@ -304,7 +309,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function getDashboard(): Promise<DashboardState> {
     const volumeList = await volumes.get();
-    const usage = getVolumeUsageFn(volumeList.map((volume) => volume.root));
+    const usage = await getVolumeUsageFn(volumeList.map((volume) => volume.root));
     return buildDashboardState({
       volumes: volumeList,
       usage,
@@ -1161,7 +1166,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     await yieldToEventLoop();
 
     emit({ type: 'finalize-progress', runId, step: 'snapshot' });
-    const usage = instrument('finalize.volumes', () => getVolumeUsageFn(volumeList.map((volume) => volume.root)));
+    const usage = await instrumentAsync('finalize.volumes', async () =>
+      getVolumeUsageFn(volumeList.map((volume) => volume.root)),
+    );
     const snapshot = instrument('finalize.buildSnapshot', () =>
       buildSnapshot({
         root: result.root,
@@ -1267,6 +1274,43 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
   }
 
+  function getResultCategories(requestedRoot: string): ResultsCategoriesState {
+    if (lastResults !== null && sameRoot(lastResults.root, requestedRoot)) {
+      return {
+        source: 'live',
+        root: lastResults.root,
+        finishedAt: lastResults.finishedAt,
+        status: lastResults.status,
+        rulesStale: false,
+        depthLimited: false,
+        categories: lastResults.categories,
+      };
+    }
+
+    const loaded = deps.store.load();
+    if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, requestedRoot)) {
+      return {
+        source: 'snapshot',
+        root: loaded.snapshot.root,
+        finishedAt: loaded.snapshot.finishedAt,
+        status: loaded.snapshot.status,
+        rulesStale: loaded.snapshot.rulesVersion !== RULES_VERSION,
+        depthLimited: true,
+        categories: summarizeCategories(loaded.snapshot.categories),
+      };
+    }
+
+    return {
+      source: 'empty',
+      root: requestedRoot,
+      finishedAt: null,
+      status: null,
+      rulesStale: false,
+      depthLimited: false,
+      categories: summarizeCategories([]),
+    };
+  }
+
   function getBrowseResults(requestedRoot: string): BrowseState {
     if (lastBrowse !== null && sameRoot(lastBrowse.root, requestedRoot)) {
       return {
@@ -1335,6 +1379,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     startBrowse,
     cancelScan,
     getResults,
+    getResultCategories,
     getBrowseResults,
     deleteBrowsePath,
     previewClean,

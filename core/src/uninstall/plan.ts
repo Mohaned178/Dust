@@ -5,7 +5,7 @@ import type { InstalledApp } from '../system/installed-apps';
 import type { StartupEntryRecord } from '../startup/types';
 import { matchAppName, toRemovalApp } from './apps';
 import { buildSilentOption, isAbsoluteWindowsPath, parseUninstallCommand } from './command';
-import { discoverLeftovers } from './leftovers';
+import { discoverLeftovers, measureLeftoverCandidates } from './leftovers';
 import type { LeftoverRoots } from './leftovers';
 import { assertUninstallTarget, defaultUninstallParents, isPathInsideOrEqual, normalizePlanPath } from './path-policy';
 import { scanRegistry, UNINSTALL_KEY_PREFIX } from './registry-scan';
@@ -213,7 +213,9 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
     programFiles: env.programFiles,
     systemRoot: env.systemRoot,
     dustInstallPath: env.dustInstallPath,
+    measure: () => null,
   });
+  await measureLeftoverCandidates(leftovers.candidates);
   kept.push(...leftovers.skipped);
 
   const registryScan = await scanRegistry(

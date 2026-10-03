@@ -5,6 +5,7 @@ import { bumpRendererCount, recordRendererSample } from './instrument';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
+import { UpdateBanner } from './components/UpdateBanner';
 import { BrowseView } from './pages/BrowseView';
 import { Dashboard } from './pages/Dashboard';
 import { DevCleanupView } from './pages/DevCleanupView';
@@ -60,12 +61,17 @@ export function App({ api }: AppProps) {
   const [startupNotice, setStartupNotice] = useState<StartupNotice | null>(null);
   const [uninstallHint, setUninstallHint] = useState<UninstallLaunchHint | null>(null);
   const launchHandled = useRef(false);
+  const activeViewRef = useRef<View['name']>('dashboard');
+
+  useEffect(() => {
+    activeViewRef.current = view.name;
+  }, [view.name]);
 
   useEffect(
     () =>
       api.onScanEvent((next) => {
         const startedAt = performance.now();
-        setEvent(next);
+        if (activeViewRef.current === 'scan') setEvent(next);
         recordRendererSample('app.event', performance.now() - startedAt);
         bumpRendererCount(`app.event.${next.type}`);
         if (next.type === 'folders') bumpRendererCount('app.event.folders.rows', next.folders.length);
@@ -162,7 +168,7 @@ export function App({ api }: AppProps) {
       <main className="dust-dashboard min-h-screen bg-canvas text-ink">
         <div className="mx-auto max-w-6xl px-6 py-10 sm:px-8">
           <ResultsView
-            key={`${view.root}|${view.category ?? 'all'}`}
+            key={view.root}
             api={api}
             root={view.root}
             runId={null}
@@ -204,6 +210,7 @@ export function App({ api }: AppProps) {
       <div className="min-w-0 flex-1 overflow-y-auto">{content}</div>
       {quickCleanOpen && <QuickCleanView api={api} onDone={closeQuickClean} onViewResults={viewResults} />}
       {settingsOpen && <SettingsDialog api={api} onClose={() => setSettingsOpen(false)} />}
+      <UpdateBanner api={api} />
     </div>
   );
 }
