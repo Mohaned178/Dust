@@ -49,7 +49,6 @@ import type {
   VolumeInfo,
   VolumeUsage,
 } from '@dust/core';
-import type { SnapshotStore } from '@dust/core';
 import type {
   BrowseRow,
   BrowseState,
@@ -77,7 +76,10 @@ import type {
   UninstallExecuteRequest,
   UninstallExecuteResult,
   UninstallListResult,
+  UninstallPreviewOptions,
   UninstallPreviewResult,
+  UninstallRunRequest,
+  UninstallRunResult,
 } from '../../shared/ipc';
 import type { StartupService } from './startup';
 import { createUninstallService } from './uninstall';
@@ -85,6 +87,7 @@ import type { UninstallService, UninstallServiceDeps } from './uninstall';
 import { aggregateCategories, collectRuleMatches } from './analyze';
 import type { RuleMatchWithRule } from './analyze';
 import { buildDashboardState } from './dashboard';
+import type { SnapshotStoreLike } from './volume-store';
 import { instrument, instrumentAsync } from './instrument';
 import { ScanLock } from './scan-lock';
 import { ThrottledEmitter } from './throttler';
@@ -123,7 +126,7 @@ export interface ScanSessionLike {
 }
 
 export interface EngineHostDeps {
-  store: SnapshotStore;
+  store: SnapshotStoreLike;
   workerPath?: string;
   pool?: SessionOptions['pool'];
   env?: RuleEnv;
@@ -133,6 +136,8 @@ export interface EngineHostDeps {
   progressIntervalMs?: number;
   folderIntervalMs?: number;
   categoryIntervalMs?: number;
+  /** Stream every folder row to the renderer during Analyze (live results table). Default on. */
+  streamLiveRows?: boolean;
   volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   volumesCacheFile?: string;
@@ -172,7 +177,8 @@ export interface EngineHost {
   getSystemInfo(force?: boolean): Promise<SystemInfoStatic>;
   getSystemInfoLive(): SystemInfoLive;
   listUninstall(force?: boolean): Promise<UninstallListResult>;
-  previewUninstall(appId: string): Promise<UninstallPreviewResult>;
+  previewUninstall(appId: string, options?: UninstallPreviewOptions): Promise<UninstallPreviewResult>;
+  runUninstaller(request: UninstallRunRequest): Promise<UninstallRunResult>;
   executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
   skipUninstallWaiting(): void;
   elevatedUninstallHandoff(jobId: string): { jobId: string; appId: string } | null;
@@ -222,6 +228,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const listeners = new Set<(event: ScanEvent) => void>();
   const lock = new ScanLock();
   const guard = guardEnv(env, deps.dustInstallPath);
+  const streamLiveRows = deps.streamLiveRows ?? true;
 
   function yieldToEventLoop(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
@@ -282,6 +289,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const unavailableUninstall: UninstallService = {
     list: async () => ({ ok: false, message: unavailableUninstallMessage }),
     preview: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
+    runUninstaller: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
     execute: async () => ({ ok: false, reason: 'failed', message: unavailableUninstallMessage }),
     skipWaiting: () => {},
     elevatedHandoff: () => null,
@@ -313,7 +321,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return buildDashboardState({
       volumes: volumeList,
       usage,
-      snapshot: deps.store.load(),
+      snapshot: deps.store.load(systemRoot),
+      snapshotFor: (root) => deps.store.load(root),
       scan: lock.current(),
       systemRoot,
       appsChangedAt: deps.store.getAppsChangedAt(),
@@ -356,10 +365,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
   }
 
+  // Quick Clean always means the system drive, whichever drive was analyzed last.
   function quickCleanRoot(): string {
-    if (lastRun !== null) return lastRun.root;
-    const loaded = deps.store.load();
-    if (loaded.kind === 'ok') return loaded.snapshot.root;
+    if (lastRun !== null && onSystemDrive(lastRun.root)) return lastRun.root;
+    const loaded = deps.store.load(systemRoot);
+    if (loaded.kind === 'ok' && onSystemDrive(loaded.snapshot.root)) return loaded.snapshot.root;
     return deps.quickRoot?.() ?? systemRoot;
   }
 
@@ -434,16 +444,16 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
   async function resolveQuickSource(): Promise<PlanSource> {
     const live = liveSource();
-    if (live !== null) return live;
-    const loaded = deps.store.load();
-    if (loaded.kind === 'ok') return snapshotSource(loaded.snapshot);
+    if (live !== null && onSystemDrive(live.root)) return live;
+    const loaded = deps.store.load(systemRoot);
+    if (loaded.kind === 'ok' && onSystemDrive(loaded.snapshot.root)) return snapshotSource(loaded.snapshot);
     return targetedSource(quickCleanRoot());
   }
 
   async function resolveRootSource(root: string): Promise<PlanSource | null> {
     const live = liveSource();
     if (live !== null && sameRoot(live.root, root)) return live;
-    const loaded = deps.store.load();
+    const loaded = deps.store.load(root);
     if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, root)) return snapshotSource(loaded.snapshot);
     return null;
   }
@@ -454,12 +464,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       return { ok: false, reason: 'empty-selection', message: 'Select at least one item to clean' };
     }
     const lockRoot = scope === 'quick' ? quickCleanRoot() : request.root;
-    if (!onSystemDrive(lockRoot)) {
-      return {
-        ok: false,
-        reason: 'invalid-root',
-        message: `Cleanup is only available for the system drive (${systemRoot})`,
-      };
+    if (volumeRootOf(lockRoot) === null) {
+      return { ok: false, reason: 'invalid-root', message: `Not a drive path: ${lockRoot}` };
     }
     const acquired = lock.acquire('quick-clean', lockRoot, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
@@ -500,7 +506,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }
 
   function applyCleanupEffects(pending: PendingPlan, coreReport: CoreCleanupReport): number {
-    const loaded = deps.store.load();
+    const loaded = deps.store.load(pending.root);
     const baseCategories: SnapshotCategory[] =
       lastRun !== null && sameRoot(lastRun.root, pending.root)
         ? lastRun.ruleCategories
@@ -556,7 +562,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult> {
     const pending = pendingPlans.get(request.planId);
     if (!pending) return { ok: false, reason: 'unknown-plan' };
-    if (!onSystemDrive(pending.root)) return { ok: false, reason: 'unknown-plan' };
     const acquired = lock.acquire('quick-clean', pending.root, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
     try {
@@ -587,7 +592,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }
 
   function getDevCleanup(root: string): DevCleanupState {
-    if (!onSystemDrive(root)) {
+    if (volumeRootOf(root) === null) {
       return { source: 'empty', root, finishedAt: null, groups: [], recentlyCleaned: [] };
     }
     const pins = deps.store.getPins();
@@ -600,7 +605,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       finishedAt = lastRun.finishedAt;
       projects = lastRun.projects;
     } else {
-      const loaded = deps.store.load();
+      const loaded = deps.store.load(root);
       if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, root)) {
         source = 'snapshot';
         finishedAt = loaded.snapshot.finishedAt;
@@ -616,8 +621,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }
 
   function setPin(path: string, pinned: boolean): SetPinResult {
-    if (!onSystemDrive(path)) {
-      return { ok: false, message: `Pins are only supported on the system drive (${systemRoot})` };
+    if (volumeRootOf(path) === null) {
+      return { ok: false, message: `Not a drive path: ${path}` };
     }
     const current = deps.store.getPins();
     const remaining = current.filter((pin) => !samePath(pin, path));
@@ -650,8 +655,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return uninstallService.list(force);
   }
 
-  function previewUninstall(appId: string): Promise<UninstallPreviewResult> {
-    return uninstallService.preview(appId);
+  function previewUninstall(appId: string, options?: UninstallPreviewOptions): Promise<UninstallPreviewResult> {
+    return uninstallService.preview(appId, options);
+  }
+
+  function runUninstaller(request: UninstallRunRequest): Promise<UninstallRunResult> {
+    return uninstallService.runUninstaller(request);
   }
 
   function executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult> {
@@ -701,13 +710,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
     if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
     const targetRoot = target.root;
-    if (!onSystemDrive(targetRoot)) {
-      return {
-        ok: false,
-        reason: 'not-system-drive',
-        message: `Analyze is only available for the system drive (${systemRoot})`,
-      };
-    }
 
     const acquired = lock.acquire('analyze', targetRoot, now());
     if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
@@ -729,6 +731,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       installsReady = snapshot;
     });
     const liveRows: ResultRow[] = [];
+    const deferredRecords: FolderRecord[] = [];
     const folderBuffer: ResultRow[] = [];
     let lastFolderFlush = 0;
     let lastCategoryRun = 0;
@@ -767,6 +770,14 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       instrument('tree.live.addFolder', () => {
         liveTree.addFolder(record);
       });
+      if (!streamLiveRows) {
+        // Rows are built once at the end instead: nothing shows them during
+        // the scan, and building them here competes with the scan's
+        // coordinator for the main thread.
+        deferredRecords.push(record);
+        maybeLiveCategories();
+        return;
+      }
       const row = instrument('row.build.live', () =>
         toResultRow(record, {
           root: targetRoot,
@@ -790,6 +801,19 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     function finishLive(result: ScanResult | null): void {
       liveEnded = true;
+      instrument('row.build.deferred', () => {
+        for (const record of deferredRecords) {
+          liveRows.push(
+            toResultRow(record, {
+              root: targetRoot,
+              complete: true,
+              childCount: liveTree.children(record.path).length,
+              env: guard,
+            }),
+          );
+        }
+      });
+      deferredRecords.length = 0;
       if (result !== null) {
         const rootNode = result.tree.get(result.root);
         if (rootNode) {
@@ -1094,8 +1118,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     matches: ResultMatch[];
   }> {
     emit({ type: 'finalize-progress', runId, step: 'projects' });
-    const existing = instrument('finalize.store.load', () => deps.store.load());
-    const priorCleanedAt = existing.kind === 'ok' ? existing.snapshot.cleanedAt : null;
+    const existing = instrument('finalize.store.load', () => deps.store.load(result.root));
+    const priorCleanedAt =
+      existing.kind === 'ok' && sameRoot(existing.snapshot.root, result.root) ? existing.snapshot.cleanedAt : null;
     const external = createExternalPredicate(volumeList);
     const pins = deps.store.getPins();
 
@@ -1244,7 +1269,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       };
     }
 
-    const loaded = deps.store.load();
+    const loaded = deps.store.load(requestedRoot);
     if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, requestedRoot)) {
       const cached = snapshotResultsCache.get(loaded.snapshot);
       if (cached !== undefined) return cached;
@@ -1287,7 +1312,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       };
     }
 
-    const loaded = deps.store.load();
+    const loaded = deps.store.load(requestedRoot);
     if (loaded.kind === 'ok' && sameRoot(loaded.snapshot.root, requestedRoot)) {
       return {
         source: 'snapshot',
@@ -1393,6 +1418,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     getSystemInfoLive,
     listUninstall,
     previewUninstall,
+    runUninstaller,
     executeUninstall,
     skipUninstallWaiting,
     elevatedUninstallHandoff,

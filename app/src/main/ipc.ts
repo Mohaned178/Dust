@@ -8,6 +8,7 @@ import type {
   StartupRelaunchAction,
   UninstallExecuteRequest,
   UninstallLaunchHint,
+  UninstallRunRequest,
   UpdateStatus,
 } from '../shared/ipc';
 import type { EngineHost } from './host/engine-host';
@@ -112,9 +113,17 @@ export function registerIpcHandlers(
   registrar.handle(IPC.uninstallList, (_event, force) =>
     timed('uninstallList', () => host.listUninstall(force === true)),
   );
-  registrar.handle(IPC.uninstallPreview, (_event, appId) =>
-    timed('uninstallPreview', () => host.previewUninstall(typeof appId === 'string' ? appId : '')),
+  registrar.handle(IPC.uninstallPreview, (_event, appId, options) =>
+    timed('uninstallPreview', () =>
+      host.previewUninstall(typeof appId === 'string' ? appId : '', {
+        leftoversOnly:
+          typeof options === 'object' &&
+          options !== null &&
+          (options as Record<string, unknown>).leftoversOnly === true,
+      }),
+    ),
   );
+  registrar.handle(IPC.uninstallRun, (_event, request) => host.runUninstaller(parseUninstallRunRequest(request)));
   registrar.handle(IPC.uninstallExecute, (_event, request) =>
     host.executeUninstall(parseUninstallExecuteRequest(request)),
   );
@@ -168,6 +177,15 @@ export function parseCleanExecuteRequest(value: unknown): CleanExecuteRequest {
     cleanId: typeof record.cleanId === 'string' ? record.cleanId : '',
     planId: typeof record.planId === 'string' ? record.planId : '',
     acknowledge,
+  };
+}
+
+export function parseUninstallRunRequest(value: unknown): UninstallRunRequest {
+  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  return {
+    jobId: typeof record.jobId === 'string' ? record.jobId : '',
+    appId: typeof record.appId === 'string' ? record.appId : '',
+    quiet: record.quiet === true,
   };
 }
 

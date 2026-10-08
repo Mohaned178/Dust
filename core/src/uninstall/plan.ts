@@ -3,7 +3,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { InstalledApp } from '../system/installed-apps';
 import type { StartupEntryRecord } from '../startup/types';
-import { matchAppName, toRemovalApp } from './apps';
+import { toRemovalApp } from './apps';
+import { appIdentity, matchIdentity } from './identity';
+import type { AppIdentity } from './identity';
+import { appCaution } from './protected';
 import { buildSilentOption, isAbsoluteWindowsPath, parseUninstallCommand } from './command';
 import { discoverLeftovers, measureLeftoverCandidates } from './leftovers';
 import type { LeftoverRoots } from './leftovers';
@@ -28,6 +31,7 @@ export interface RemovalPlanEnv {
   programFiles?: string[];
   systemRoot?: string;
   dustInstallPath?: string;
+  startMenu?: string[];
 }
 
 export interface RemovalPlanInput {
@@ -39,6 +43,15 @@ export interface RemovalPlanInput {
   exists?: (path: string) => boolean;
   now?: () => number;
   makeId?: () => string;
+  /**
+   * Leftover-only plan, built after the app's own uninstaller has already
+   * run: no uninstaller step, only what is still on disk and in the registry.
+   */
+  skipUninstaller?: boolean;
+  /** Only the uninstaller step, without scanning for leftovers. */
+  uninstallerOnly?: boolean;
+  /** False once the app's Uninstall key is gone (it is then not offered). */
+  uninstallKeyPresent?: boolean;
 }
 
 function defaultProgramFiles(): string[] {
@@ -82,6 +95,11 @@ export function resolveUninstallerCommand(
   exists: (path: string) => boolean = existsSync,
 ): UninstallCommand {
   const parsed = parseUninstallCommand(app.uninstallString.trim(), { exists });
+  // Many MSI entries register "MsiExec.exe /I{GUID}", which opens the
+  // install/repair wizard rather than removing anything. /x always uninstalls.
+  if (parsed.kind === 'msi' && parsed.msiProductCode !== null) {
+    return { ...parsed, args: ['/x', parsed.msiProductCode] };
+  }
   return resolveBareExecutable(parsed, app, env, exists);
 }
 
@@ -95,22 +113,31 @@ function planUninstaller(
     return { plan: null, kept: { target: app.displayName, reason: 'no-uninstaller' } };
   }
   const command = resolveUninstallerCommand(app, env, exists);
+  const silent = buildSilentOption({
+    command,
+    quietUninstallString: app.quietUninstallString,
+    windowsInstaller: app.windowsInstaller,
+  });
   return {
     plan: {
       command,
       requiresAdmin: uninstallerRequiresAdmin(app, env),
-      interactiveOnly: command.kind !== 'msi',
-      silent: buildSilentOption({
-        command,
-        quietUninstallString: app.quietUninstallString,
-        windowsInstaller: app.windowsInstaller,
-      }),
+      interactiveOnly: silent === null,
+      silent,
     },
     kept: null,
   };
 }
 
-function startupMatch(entry: StartupEntryRecord, app: InstalledApp, installLocation: string): 'path' | 'name' | null {
+function startupMatch(
+  entry: StartupEntryRecord,
+  identity: AppIdentity,
+  installLocation: string,
+): 'path' | 'name' | null {
+  const named = (value: string): boolean => {
+    const match = matchIdentity(value, identity);
+    return match === 'product' || match === 'exe';
+  };
   const parsed = parseUninstallCommand(entry.command, { exists: () => true });
   if (parsed.executable.length > 0) {
     if (
@@ -121,9 +148,9 @@ function startupMatch(entry: StartupEntryRecord, app: InstalledApp, installLocat
       return 'path';
     }
     const leaf = (parsed.executable.split(/[\\/]/).pop() ?? '').replace(/\.exe$/i, '');
-    if (leaf.length > 0 && matchAppName(leaf, app) !== null) return 'name';
+    if (leaf.length > 0 && named(leaf)) return 'name';
   }
-  return matchAppName(entry.name, app) !== null ? 'name' : null;
+  return named(entry.name) ? 'name' : null;
 }
 
 function toStartupCandidate(entry: StartupEntryRecord, match: 'path' | 'name'): StartupCandidate {
@@ -201,8 +228,24 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
       : null;
   const matchLocation = policyLocation?.ok === true ? policyLocation.path : '';
 
-  const uninstaller = planUninstaller(app, env, exists);
-  if (uninstaller.kept !== null) kept.push(uninstaller.kept);
+  const caution = appCaution(app) !== null;
+  const uninstaller = input.skipUninstaller === true ? null : planUninstaller(app, env, exists);
+  if (uninstaller?.kept != null) kept.push(uninstaller.kept);
+
+  if (input.uninstallerOnly === true) {
+    return {
+      id: (input.makeId ?? randomUUID)(),
+      appId: app.id,
+      createdAt: (input.now ?? Date.now)(),
+      app: toRemovalApp(app),
+      uninstaller: uninstaller?.plan ?? null,
+      leftovers: [],
+      registry: [],
+      startup: [],
+      kept,
+      totals: buildTotals([], [], []),
+    };
+  }
 
   const leftovers = discoverLeftovers(app, apps, {
     roots: env.roots,
@@ -213,6 +256,8 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
     programFiles: env.programFiles,
     systemRoot: env.systemRoot,
     dustInstallPath: env.dustInstallPath,
+    startMenu: env.startMenu,
+    caution,
     measure: () => null,
   });
   await measureLeftoverCandidates(leftovers.candidates);
@@ -221,7 +266,7 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
   const registryScan = await scanRegistry(
     app,
     apps,
-    input.registryRead === undefined ? {} : { read: input.registryRead },
+    input.registryRead === undefined ? { caution } : { read: input.registryRead, caution },
   );
   const registry: RegistryCandidate[] = [];
   for (const candidate of registryScan.candidates) {
@@ -229,15 +274,19 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
       kept.push({ target: candidate.path, reason: candidate.excludedReason });
       continue;
     }
+    // After a successful uninstall the app's own registration is gone; offering
+    // it would only fail the registry backup for a key that no longer exists.
+    if (candidate.scope === 'uninstall-key' && input.uninstallKeyPresent === false) continue;
     registry.push(candidate);
   }
   if (!registryScan.trusted) {
     kept.push({ target: UNINSTALL_KEY_PREFIX, reason: 'registry-untrusted' });
   }
 
+  const identity = appIdentity(app);
   const startup: StartupCandidate[] = [];
   for (const entry of input.startup ?? []) {
-    const match = startupMatch(entry, app, matchLocation);
+    const match = startupMatch(entry, identity, matchLocation);
     if (match === null) continue;
     if (entry.protected) {
       kept.push({ target: entry.name, reason: 'protected-startup-entry' });
@@ -251,7 +300,7 @@ export async function buildRemovalPlan(input: RemovalPlanInput): Promise<Removal
     appId: app.id,
     createdAt: (input.now ?? Date.now)(),
     app: toRemovalApp(app),
-    uninstaller: uninstaller.plan,
+    uninstaller: uninstaller?.plan ?? null,
     leftovers: leftovers.candidates,
     registry,
     startup,

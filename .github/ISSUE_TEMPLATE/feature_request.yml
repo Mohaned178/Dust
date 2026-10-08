@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a change or an addition to Dust.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [roadmap](https://github.com/Mohaned178/Dust#roadmap) lists what is already planned — code signing, Docker cleanup, pnpm/bun support, quarantine, and cross-platform builds. Check it before filing.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and where does Dust get in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should Dust do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Other ways to solve the problem, including doing nothing.
+    validations:
+      required: false

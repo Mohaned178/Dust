@@ -3,7 +3,10 @@
 // Synthetic mode (default):
 //   npx tsx scripts/bench-scan.ts --files 200000 [--workers 8] [--split 20000] [--legacy]
 // Real-disk mode (the spec section 8 validation spike):
-//   npx tsx scripts/bench-scan.ts --root "C:\\" [--workers 8] [--split 20000]
+//   npx tsx scripts/bench-scan.ts --root "C:\\" [--workers 8] [--split 20000] [--method auto|walk]
+//
+// On a volume root, an elevated (administrator) shell reads the NTFS MFT
+// directly; otherwise, or with --method walk, the directory walker runs.
 //
 // The real-disk run must be executed on the developer machine (2-4M entries)
 // with Windows Defender enabled, before any UI investment. If the budget
@@ -20,10 +23,18 @@ interface Args {
   workers: number | undefined;
   split: number | undefined;
   legacy: boolean;
+  method: 'auto' | 'walk';
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { files: 200_000, root: null, workers: undefined, split: undefined, legacy: false };
+  const args: Args = {
+    files: 200_000,
+    root: null,
+    workers: undefined,
+    split: undefined,
+    legacy: false,
+    method: 'auto',
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -32,6 +43,7 @@ function parseArgs(argv: string[]): Args {
     else if (flag === '--workers' && value) args.workers = Number(value);
     else if (flag === '--split' && value) args.split = Number(value);
     else if (flag === '--legacy') args.legacy = true;
+    else if (flag === '--method' && value) args.method = value === 'walk' ? 'walk' : 'auto';
   }
   return args;
 }
@@ -63,6 +75,7 @@ async function main(): Promise<void> {
     const startedAt = Date.now();
     const session = new ScanSession({
       root,
+      mft: args.method !== 'walk',
       pool: args.legacy
         ? false
         : {
@@ -81,6 +94,7 @@ async function main(): Promise<void> {
         {
           root,
           mode: args.legacy ? 'legacy' : 'pool',
+          method: result.method ?? 'walk',
           workers: args.legacy ? 1 : (args.workers ?? 'default'),
           splitAfterEntries: args.split ?? 'default',
           status: result.status,

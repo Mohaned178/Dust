@@ -26,7 +26,10 @@ import type {
   UninstallExecuteResult,
   UninstallLaunchHint,
   UninstallListResult,
+  UninstallPreviewOptions,
   UninstallPreviewResult,
+  UninstallRunRequest,
+  UninstallRunResult,
   UpdateStatus,
 } from '../shared/ipc';
 
@@ -58,8 +61,10 @@ const api: DustApi = {
     ipcRenderer.invoke(IPC.relaunchElevated, startupToggleId, action) as Promise<void>,
   listUninstallApps: (force?: boolean) =>
     ipcRenderer.invoke(IPC.uninstallList, force === true) as Promise<UninstallListResult>,
-  previewUninstall: (appId: string) =>
-    ipcRenderer.invoke(IPC.uninstallPreview, appId) as Promise<UninstallPreviewResult>,
+  previewUninstall: (appId: string, options?: UninstallPreviewOptions) =>
+    ipcRenderer.invoke(IPC.uninstallPreview, appId, options ?? {}) as Promise<UninstallPreviewResult>,
+  runUninstaller: (request: UninstallRunRequest) =>
+    ipcRenderer.invoke(IPC.uninstallRun, request) as Promise<UninstallRunResult>,
   executeUninstall: (request: UninstallExecuteRequest) =>
     ipcRenderer.invoke(IPC.uninstallExecute, request) as Promise<UninstallExecuteResult>,
   skipUninstallWaiting: () => ipcRenderer.invoke(IPC.uninstallSkipWaiting) as Promise<void>,

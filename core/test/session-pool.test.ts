@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ScanSession } from '../src/scanner/session';
 import { NodeFsEnumerator } from '../src/scanner/enumerator';
+import { createPlatformEnumerator } from '../src/scanner/win-enumerator';
 import { Fixture } from './fixtures';
 
 const workerPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'src', 'scan', 'worker-entry.ts');
@@ -25,7 +26,7 @@ describe('ScanSession with the worker pool', () => {
     fixture.file('package.json', '{}');
 
     const pooled = await new ScanSession({ root: fixture.root, pool: poolOptions }).start();
-    const legacy = await new ScanSession({ root: fixture.root, pool: false }).start();
+    const legacy = await new ScanSession({ root: fixture.root, enumerator: createPlatformEnumerator() }).start();
 
     expect(pooled.status).toBe('complete');
     expect(pooled.tree.get(fixture.root)).toEqual(legacy.tree.get(fixture.root));

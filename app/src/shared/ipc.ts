@@ -39,6 +39,7 @@ export const IPC = {
   uninstallList: 'dust:uninstall:list',
   uninstallPreview: 'dust:uninstall:preview',
   uninstallExecute: 'dust:uninstall:execute',
+  uninstallRun: 'dust:uninstall:run',
   uninstallSkipWaiting: 'dust:uninstall:skip-waiting',
   uninstallEvent: 'dust:uninstall:event',
   uninstallHint: 'dust:uninstall:hint',
@@ -336,6 +337,7 @@ export interface DashboardVolumeCard {
   root: string;
   label: string | null;
   driveType: DriveType;
+  mediaType?: 'ssd' | 'hdd' | 'unknown';
   role: 'system' | 'browse';
   external: boolean;
   totalBytes: number | null;
@@ -408,6 +410,8 @@ export interface StartupLaunchHint {
   notice: StartupNotice | null;
 }
 
+export type UninstallCaution = 'hardware' | 'security' | 'runtime';
+
 export interface UninstallAppSummary {
   id: string;
   displayName: string;
@@ -415,10 +419,40 @@ export interface UninstallAppSummary {
   version: string;
   installLocation: string;
   estimatedSizeKb: number | null;
+  /** Measured size of the install folder, once known (arrives via 'app-size' events). */
+  sizeBytes: number | null;
   hive: UninstallHive;
   kind: UninstallKind;
   requiresAdmin: boolean;
   hasUninstaller: boolean;
+  /** Removing this can affect hardware, security, or apps that depend on it. */
+  caution: UninstallCaution | null;
+}
+
+export interface UninstallRunRequest {
+  jobId: string;
+  appId: string;
+  quiet: boolean;
+}
+
+export interface UninstallRunOutcome {
+  ran: boolean;
+  exitCode: number | null;
+  /** The app's registration is gone: the uninstaller finished its job. */
+  verifiedGone: boolean;
+  rebootRequired: boolean;
+  skippedWaiting: boolean;
+  skippedReason: string | null;
+}
+
+export type UninstallRunResult =
+  | { ok: true; outcome: UninstallRunOutcome }
+  | { ok: false; reason: 'busy'; running: ScanKind }
+  | { ok: false; reason: 'not-found' | 'no-uninstaller' | 'failed'; message: string };
+
+export interface UninstallPreviewOptions {
+  /** Scan for what is left after the app's own uninstaller ran; no uninstaller step. */
+  leftoversOnly?: boolean;
 }
 
 export type UninstallListResult =
@@ -492,7 +526,8 @@ export type UninstallEvent =
   | { type: 'verify'; jobId: string; gone: boolean; attempt: number }
   | { type: 'item'; jobId: string; itemId: string; status: string; bytes: number }
   | { type: 'finished'; jobId: string; report: RemovalReport }
-  | { type: 'failed'; jobId: string; message: string };
+  | { type: 'failed'; jobId: string; message: string }
+  | { type: 'app-size'; appId: string; bytes: number };
 
 export interface UninstallLaunchHint {
   open: boolean;
@@ -533,7 +568,8 @@ export interface DustApi {
   getSystemInfoLive(): Promise<SystemInfoLive>;
   relaunchElevated(startupToggleId?: string, action?: StartupRelaunchAction): Promise<void>;
   listUninstallApps(force?: boolean): Promise<UninstallListResult>;
-  previewUninstall(appId: string): Promise<UninstallPreviewResult>;
+  previewUninstall(appId: string, options?: UninstallPreviewOptions): Promise<UninstallPreviewResult>;
+  runUninstaller(request: UninstallRunRequest): Promise<UninstallRunResult>;
   executeUninstall(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
   skipUninstallWaiting(): Promise<void>;
   getUninstallLaunchHint(): Promise<UninstallLaunchHint | null>;

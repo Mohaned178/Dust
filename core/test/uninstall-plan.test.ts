@@ -31,6 +31,7 @@ function setup(overrides: Partial<RemovalPlanEnv> = {}): Setup {
     installParents: [fixture.root],
     home: fixture.dir('profile'),
     programFiles: [],
+    startMenu: [],
     systemRoot: 'C:\\Windows',
     oneDrive: [],
     ...overrides,
@@ -95,12 +96,12 @@ describe('buildRemovalPlan', () => {
       command: { kind: 'exe', launchable: false, blockReason: 'not-absolute' },
     });
     expect(plan.leftovers).toHaveLength(1);
-    expect(plan.registry.map((candidate) => candidate.scope)).toEqual(['vendor-root', 'product', 'uninstall-key']);
+    expect(plan.registry.map((candidate) => candidate.scope)).toEqual(['vendor-root', 'uninstall-key']);
     expect(plan.startup).toHaveLength(1);
     expect(plan.startup[0]).toMatchObject({ action: 'disable', protected: false });
     expect(plan.totals).toEqual({
       bytes: 10,
-      items: 5,
+      items: 4,
       reviewBytes: 0,
       reviewItems: 0,
       userDataBytes: 0,
@@ -319,15 +320,21 @@ describe('selection helpers', () => {
 
   it('never defaults to review-grade registry keys', async () => {
     const { env } = setup();
-    const app = makeInstalledApp({ displayName: 'Music Player', publisher: 'Acme Software', keyName: '{M}' });
+    const app = makeInstalledApp({
+      displayName: 'Music Player',
+      publisher: 'Acme Software',
+      keyName: '{M}',
+      displayIcon: 'C:\\Apps\\Music Player\\Tunes.exe,0',
+    });
     const plan = await buildRemovalPlan({
       app,
       env,
-      registryRead: registryQuery([{ name: 'Acme', children: ['Player'] }]),
+      registryRead: registryQuery([{ name: 'Acme', children: ['Tunes'] }]),
     });
 
-    const vendorRoot = plan.registry.find((candidate) => candidate.scope === 'vendor-root');
-    expect(vendorRoot).toMatchObject({ grade: 'review' });
+    // Matched only by the program file's name: a weaker signal, so review.
+    const productKey = plan.registry.find((candidate) => candidate.scope === 'product');
+    expect(productKey).toMatchObject({ path: 'Software\\Acme\\Tunes', grade: 'review' });
     const uninstallKey = plan.registry.find((candidate) => candidate.scope === 'uninstall-key');
     expect(uninstallKey).toBeDefined();
     expect(defaultSelection(plan)).toEqual([uninstallKey!.id]);
@@ -335,7 +342,7 @@ describe('selection helpers', () => {
 
   it('requires acknowledgement only for selected review items', async () => {
     const { fixture, env } = setup();
-    fixture.dir('local/Acme');
+    fixture.dir('roaming/Music Player');
     const app = makeInstalledApp({ displayName: 'Music Player', publisher: 'Acme Software', keyName: '{M}' });
     const plan = await buildRemovalPlan({ app, env, registryRead: registryQuery([]) });
     const review = plan.leftovers.find((candidate) => candidate.grade === 'review')!;

@@ -20,7 +20,7 @@ export type UninstallPhase =
   'prepare' | 'backup' | 'uninstaller' | 'verify' | 'files' | 'registry' | 'startup' | 'finish';
 
 export const UNINSTALL_VERIFY_POLL_MS = 2_000;
-export const UNINSTALL_VERIFY_GRACE_MS = 120_000;
+export const UNINSTALL_VERIFY_GRACE_MS = 16_000;
 export const UNINSTALL_BACKUP_TTL_MS = 30 * 24 * 60 * 60_000;
 export const UNINSTALL_PENDING_TTL_MS = 15 * 60_000;
 export const UNINSTALL_JOURNAL_VERSION = 1;
@@ -84,6 +84,11 @@ export interface LeftoverCandidate {
   syncRoot: boolean;
   link: 'junction' | 'symlink' | null;
   sharedWith: string[];
+  /**
+   * A vendor folder (ProgramData\\Acme) that only this app's folders live in.
+   * Removed after the leftover itself, and only if it is then empty.
+   */
+  emptyParent?: string;
 }
 
 export interface RegistryCandidate {

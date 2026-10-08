@@ -11,7 +11,7 @@ import {
 describe('uninstall constants', () => {
   it('pins the verification cadence', () => {
     expect(UNINSTALL_VERIFY_POLL_MS).toBe(2_000);
-    expect(UNINSTALL_VERIFY_GRACE_MS).toBe(120_000);
+    expect(UNINSTALL_VERIFY_GRACE_MS).toBe(16_000);
   });
 
   it('pins backup retention to 30 days', () => {

@@ -80,7 +80,7 @@ export function scanDirectory(dir: string, trackMtime: boolean, ctx: DirScanCont
 
     if (entry.kind === 'file') {
       result.directBytes += entry.size;
-      result.directAllocatedBytes += roundUpToCluster(entry.size, clusterSize);
+      result.directAllocatedBytes += entry.allocated ?? roundUpToCluster(entry.size, clusterSize);
       result.directFileCount += 1;
       if (trackMtime && entry.mtimeMs > result.newestMtimeMs) result.newestMtimeMs = entry.mtimeMs;
       if (isPackageJsonMarker(dir, entry.name)) {

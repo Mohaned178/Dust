@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { matchAppName } from './apps';
+import { appIdentity, matchIdentity } from './identity';
+import type { IdentityMatch } from './identity';
 import { uninstallItemId } from './types';
 import type { InstalledApp } from '../system/installed-apps';
 import type { RegistryCandidate, UninstallHive } from './types';
@@ -26,6 +27,8 @@ export interface RegistryScanResult {
 
 export interface RegistryScanOptions {
   read?: () => Promise<string>;
+  /** Microsoft, driver, security, and runtime software: every key is review-only. */
+  caution?: boolean;
 }
 
 const QUERY_TIMEOUT_MS = 20_000;
@@ -194,35 +197,53 @@ function buildCandidates(
   app: InstalledApp,
   others: readonly InstalledApp[],
   snapshot: RegistryKeySnapshot,
+  caution: boolean,
 ): RegistryCandidate[] {
+  const identity = appIdentity(app);
+  const otherIdentities = others.map(appIdentity);
+  // A top-level key is shared when another app could keep anything in it,
+  // including as its vendor; a product key only when another app has that name.
+  const claimed = (name: string, includeVendor: boolean): boolean =>
+    otherIdentities.some((other) => {
+      const match = matchIdentity(name, other);
+      return match === 'product' || match === 'exe' || (includeVendor && match === 'vendor');
+    });
+  const gradeFor = (match: IdentityMatch, shared: boolean) =>
+    shared || match !== 'product' || caution ? ('review' as const) : ('safe' as const);
+
   const out: RegistryCandidate[] = [];
   for (const hiveKeys of snapshot.hives) {
     for (const vendor of hiveKeys.vendors) {
       const vendorKeyName = vendor.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
       if (vendorKeyName.length === 0 || EXCLUDED_VENDOR_KEYS.has(vendorKeyName)) continue;
-      const strength = matchAppName(vendor.name, app);
-      if (strength === null) continue;
-      const shared = others.some((other) => matchAppName(vendor.name, other) !== null) === true;
-      out.push(
-        candidate(
-          hiveKeys.hive,
-          `Software\\${vendor.name}`,
-          'vendor-root',
-          shared || strength !== 'product' ? 'review' : 'safe',
-          shared ? 'shared-vendor-root' : null,
-        ),
-      );
+      const match = matchIdentity(vendor.name, identity);
+      if (match === null) continue;
+      if (match === 'product' || match === 'exe') {
+        // Software\Discord: the app's own top-level key, children included.
+        const shared = claimed(vendor.name, true);
+        out.push(
+          candidate(
+            hiveKeys.hive,
+            `Software\\${vendor.name}`,
+            'vendor-root',
+            gradeFor(match, shared),
+            shared ? 'shared-vendor-root' : null,
+          ),
+        );
+        continue;
+      }
+      // Software\Acme: a vendor key; only this app's product key inside it.
       for (const child of vendor.children) {
-        const childStrength = matchAppName(child, app);
-        if (childStrength === null) continue;
-        const childShared = others.some((other) => matchAppName(child, other) !== null) === true;
+        const childMatch = matchIdentity(child, identity);
+        if (childMatch !== 'product' && childMatch !== 'exe') continue;
+        const shared = claimed(child, false);
         out.push(
           candidate(
             hiveKeys.hive,
             `Software\\${vendor.name}\\${child}`,
             'product',
-            childShared || childStrength !== 'product' ? 'review' : 'safe',
-            childShared ? 'shared-product-key' : null,
+            gradeFor(childMatch, shared),
+            shared ? 'shared-product-key' : null,
           ),
         );
       }
@@ -246,7 +267,10 @@ export async function scanRegistry(
     const snapshot = parseRegistryKeySnapshot(raw);
     if (snapshot === null) return { candidates: uninstall, trusted: false };
     const others = apps.filter((entry) => entry.id !== app.id);
-    return { candidates: [...buildCandidates(app, others, snapshot), ...uninstall], trusted: true };
+    return {
+      candidates: [...buildCandidates(app, others, snapshot, options.caution === true), ...uninstall],
+      trusted: true,
+    };
   } catch {
     return { candidates: uninstall, trusted: false };
   }

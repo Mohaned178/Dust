@@ -13,13 +13,13 @@ export interface ProtectedAppOptions {
   dustInstallPath?: string;
 }
 
-const PROTECTED_PUBLISHER_TOKENS = new Set([
-  'microsoft',
-  'windows',
-  'nvidia',
-  'amd',
-  'intel',
-  'realtek',
+// Hidden outright: Windows itself, Windows updates, and Dust. Everything
+// else is listed; risky software is listed with a caution instead (below).
+const PROTECTED_NAME_PHRASES = ['windowsdefender', 'windowssecurity', 'windefend', 'malicioussoftware'];
+
+export type AppCaution = 'hardware' | 'security' | 'runtime';
+
+const SECURITY_TOKENS = new Set([
   'defender',
   'windefend',
   'eset',
@@ -38,16 +38,9 @@ const PROTECTED_PUBLISHER_TOKENS = new Set([
   'avira',
   'comodo',
 ]);
-
-const PROTECTED_PUBLISHER_PHRASES = ['advancedmicrodevices'];
-
-const PROTECTED_NAME_PHRASES = [
-  'windowsdefender',
-  'windowssecurity',
-  'windefend',
-  'malicioussoftware',
-  'redistributable',
-];
+const HARDWARE_TOKENS = new Set(['nvidia', 'amd', 'intel', 'realtek']);
+const HARDWARE_PUBLISHER_PHRASES = ['advancedmicrodevices'];
+const RUNTIME_NAME_PHRASES = ['redistributable', 'runtime', 'webview2', 'directx', 'netframework', 'xnaframework'];
 
 function canonical(value: string): string {
   return normalize(value)
@@ -89,13 +82,7 @@ export function protectedAppReason(app: ProtectedAppInput, options: ProtectedApp
     if (underRoot(location, `${root}\\Windows Defender`)) return 'protected-location';
   }
 
-  const tokens = publisherTokens(app.publisher);
-  if (tokens.some((token) => PROTECTED_PUBLISHER_TOKENS.has(token))) return 'protected-publisher';
-
-  const compactPublisher = vendorKey(app.publisher);
-  if (PROTECTED_PUBLISHER_PHRASES.some((phrase) => compactPublisher.includes(phrase))) {
-    return 'protected-publisher';
-  }
+  if (isWindowsUpdate(app.displayName)) return 'windows-update';
 
   const compactName = vendorKey(`${app.displayName} ${location}`);
   if (PROTECTED_NAME_PHRASES.some((phrase) => compactName.includes(phrase))) {
@@ -107,4 +94,30 @@ export function protectedAppReason(app: ProtectedAppInput, options: ProtectedApp
 
 export function isProtectedApp(app: ProtectedAppInput, options: ProtectedAppOptions = {}): boolean {
   return protectedAppReason(app, options) !== null;
+}
+
+export function isWindowsUpdate(displayName: string): boolean {
+  return /\(KB\d{6,}\)/i.test(displayName) || /^(security )?update for (microsoft )?windows/i.test(displayName.trim());
+}
+
+/**
+ * Software that is listed and can run its own uninstaller, but whose
+ * leftovers Dust only proposes for review: removing it can affect Windows,
+ * hardware, security, or other apps that depend on it.
+ */
+export function appCaution(app: ProtectedAppInput): AppCaution | null {
+  const tokens = publisherTokens(app.publisher);
+  if (RUNTIME_NAME_PHRASES.some((phrase) => vendorKey(app.displayName).includes(phrase))) return 'runtime';
+  if (tokens.some((token) => SECURITY_TOKENS.has(token))) return 'security';
+  const microsoft = tokens.includes('microsoft') || tokens.includes('windows');
+  if (
+    tokens.some((token) => HARDWARE_TOKENS.has(token)) ||
+    HARDWARE_PUBLISHER_PHRASES.some((phrase) => vendorKey(app.publisher).includes(phrase)) ||
+    (!microsoft && /\bdrivers?\b/i.test(app.displayName))
+  ) {
+    return 'hardware';
+  }
+  // Ordinary Microsoft apps (VS Code, PowerShell, Teams) get no caution:
+  // matching is exact, and the shared Microsoft folders are never proposed.
+  return null;
 }

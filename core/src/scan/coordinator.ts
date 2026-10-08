@@ -42,6 +42,10 @@ interface Accumulator {
   partial: boolean;
   childDirs: string[];
   finalizedChildren: Set<string>;
+  // Children listed by the open but not yet finalized. Kept as a counter so a
+  // child finalizing is O(1); re-filtering childDirs on every finalize made
+  // directories with tens of thousands of subfolders (WinSxS) quadratic.
+  pendingChildren: number;
   sumBytes: number;
   sumAllocated: number;
   sumFiles: number;
@@ -173,6 +177,11 @@ export class ScanCoordinator {
       accumulator.newestMtimeMs = this.isMtimeTrackedPath(open.path) ? open.newestMtimeMs : 0;
       accumulator.partial = open.partial;
       accumulator.childDirs = open.childDirs;
+      let pending = 0;
+      for (const child of open.childDirs) {
+        if (!accumulator.finalizedChildren.has(child)) pending += 1;
+      }
+      accumulator.pendingChildren = pending;
     }
     this.tryFinalize(open.path);
   }
@@ -216,8 +225,7 @@ export class ScanCoordinator {
     while (current) {
       const accumulator = this.ensure(current);
       if (!accumulator.opened || accumulator.finalized) return;
-      const pending = accumulator.childDirs.filter((child) => !accumulator.finalizedChildren.has(child));
-      if (pending.length > 0) return;
+      if (accumulator.pendingChildren > 0) return;
 
       accumulator.finalized = true;
       this.finalizedCount += 1;
@@ -232,7 +240,10 @@ export class ScanCoordinator {
 
       this.options.onFolder?.(record);
       const parent = this.ensure(dirname(accumulator.path));
-      parent.finalizedChildren.add(accumulator.path);
+      if (!parent.finalizedChildren.has(accumulator.path)) {
+        parent.finalizedChildren.add(accumulator.path);
+        if (parent.opened) parent.pendingChildren -= 1;
+      }
       parent.sumBytes += record.bytes;
       parent.sumAllocated += record.allocatedBytes;
       parent.sumFiles += record.fileCount;
@@ -282,6 +293,7 @@ export class ScanCoordinator {
       partial: false,
       childDirs: [],
       finalizedChildren: new Set(),
+      pendingChildren: 0,
       sumBytes: 0,
       sumAllocated: 0,
       sumFiles: 0,

@@ -484,3 +484,64 @@ describe('execute', () => {
     expect(seen[0]).toMatchObject({ degraded: false, elevated: true });
   });
 });
+
+describe('two-step uninstall', () => {
+  it('runs only the uninstaller and reports whether the app is gone', async () => {
+    const planInputs: unknown[] = [];
+    const { service, calls } = makeService({
+      buildPlan: async (input) => {
+        planInputs.push(input);
+        return makePlan(input.app.id);
+      },
+    });
+    const result = await service.runUninstaller({ jobId: 'job-1', appId: 'app-1', quiet: false });
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: {
+        ran: true,
+        exitCode: 0,
+        verifiedGone: true,
+        rebootRequired: false,
+        skippedWaiting: false,
+        skippedReason: null,
+      },
+    });
+    expect(planInputs[0]).toMatchObject({ uninstallerOnly: true });
+    expect(calls.lock.releases).toBe(1);
+    expect(calls.marked).toEqual([1000]);
+  });
+
+  it('refuses an app without a launchable uninstaller', async () => {
+    const { service } = makeService({ buildPlan: async ({ app }) => makePlan(app.id, { uninstaller: null }) });
+    const result = await service.runUninstaller({ jobId: 'job-1', appId: 'app-1', quiet: false });
+    expect(result).toMatchObject({ ok: false, reason: 'no-uninstaller' });
+  });
+
+  it('scans leftovers for an app whose registration is already gone', async () => {
+    let installed = true;
+    const planInputs: Array<Record<string, unknown>> = [];
+    const { service } = makeService({
+      listApps: async () => ({
+        apps: installed ? [installedApp({ displayName: 'Spotify' })] : [],
+        trusted: true,
+      }),
+      buildPlan: async (input) => {
+        planInputs.push(input as unknown as Record<string, unknown>);
+        return makePlan(input.app.id, input.uninstallerOnly ? {} : { uninstaller: null });
+      },
+      executePlan: async () => {
+        installed = false;
+        return { ok: true, report: makeReport() };
+      },
+    });
+
+    await service.runUninstaller({ jobId: 'job-1', appId: 'app-1', quiet: false });
+    const preview = await service.preview('app-1', { leftoversOnly: true });
+
+    expect(preview.ok).toBe(true);
+    expect(planInputs[1]).toMatchObject({ skipUninstaller: true, uninstallKeyPresent: false });
+    // Without leftoversOnly an uninstalled app is simply gone.
+    expect(await service.preview('app-1')).toMatchObject({ ok: false, reason: 'not-found' });
+  });
+});

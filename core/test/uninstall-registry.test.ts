@@ -35,9 +35,9 @@ describe('scanRegistry', () => {
     });
 
     expect(result.trusted).toBe(true);
+    // The app's own top-level key goes with everything under it.
     expect(result.candidates.map((candidate) => [candidate.path, candidate.scope, candidate.grade])).toEqual([
       ['Software\\FooApp', 'vendor-root', 'safe'],
-      ['Software\\FooApp\\FooApp', 'product', 'safe'],
       [`${UNINSTALL_PREFIX}\\{FOO-GUID}`, 'uninstall-key', 'safe'],
     ]);
     expect(result.candidates.every((candidate) => candidate.excludedReason === null)).toBe(true);
@@ -45,15 +45,25 @@ describe('scanRegistry', () => {
     expect(result.candidates[0]!.id).toMatch(/^[a-f0-9]{16}$/);
   });
 
-  it('downgrades publisher-only matches to review', async () => {
+  it("proposes only the product key inside a vendor's key, never the vendor key", async () => {
     const app = makeInstalledApp({ displayName: 'Music Player', publisher: 'Acme Software' });
     const result = await scanRegistry(app, [], {
-      read: queryFor([hive('hklm', [vendor('Acme', ['Player'])])]),
+      read: queryFor([hive('hklm', [vendor('Acme', ['Music Player', 'Player', 'Video Editor'])])]),
     });
-    const root = result.candidates.find((candidate) => candidate.scope === 'vendor-root');
-    expect(root).toMatchObject({ path: 'Software\\Acme', grade: 'review' });
+    expect(result.candidates.find((candidate) => candidate.scope === 'vendor-root')).toBeUndefined();
+    expect(
+      result.candidates.filter((candidate) => candidate.scope === 'product').map((candidate) => candidate.path),
+    ).toEqual(['Software\\Acme\\Music Player']);
+  });
+
+  it('only proposes review keys for caution apps', async () => {
+    const app = makeInstalledApp({ displayName: 'NVIDIA App', publisher: 'NVIDIA Corporation' });
+    const result = await scanRegistry(app, [], {
+      read: queryFor([hive('hklm', [vendor('NVIDIA Corporation', ['NVIDIA App'])])]),
+      caution: true,
+    });
     const product = result.candidates.find((candidate) => candidate.scope === 'product');
-    expect(product).toMatchObject({ path: 'Software\\Acme\\Player', grade: 'review' });
+    expect(product).toMatchObject({ path: 'Software\\NVIDIA Corporation\\NVIDIA App', grade: 'review' });
   });
 
   it('never enumerates structurally protected scopes', async () => {

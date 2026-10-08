@@ -6,7 +6,7 @@ export type { Enumerator, ListResult } from './scanner/enumerator';
 export { createExclusionPredicate } from './scanner/exclusions';
 export type { ExclusionConfig } from './scanner/exclusions';
 export { ScanSession } from './scanner/session';
-export type { PoolOptions, ScanResult, SessionOptions } from './scanner/session';
+export type { PoolOptions, ScanMethod, ScanResult, SessionOptions } from './scanner/session';
 export type { PoolLimits } from './scan/protocol';
 export { defaultWorkerCount, defaultWorkersForVolume, DEFAULT_POOL_LIMITS, HDD_WORKERS } from './scan/limits';
 export { scanTree } from './scanner/scanner';
@@ -207,10 +207,21 @@ export {
   UNINSTALL_VERIFY_POLL_MS,
   uninstallItemId,
 } from './uninstall/types';
-export { isHiddenReleaseType, isUninstallableApp, listRemovalApps, matchAppName, toRemovalApp } from './uninstall/apps';
+export {
+  dedupeApps,
+  isHiddenReleaseType,
+  isUninstallableApp,
+  listRemovalApps,
+  matchAppName,
+  toRemovalApp,
+} from './uninstall/apps';
+export { appIdentity, cleanDisplayName, matchIdentity } from './uninstall/identity';
+export type { AppIdentity, IdentityMatch } from './uninstall/identity';
+export { ProcessTreeTracker, listProcesses } from './uninstall/process-tree';
+export type { ProcessEntry } from './uninstall/process-tree';
 export type { AppNameMatchStrength, RemovalAppsOptions } from './uninstall/apps';
-export { isProtectedApp, protectedAppReason } from './uninstall/protected';
-export type { ProtectedAppInput, ProtectedAppOptions } from './uninstall/protected';
+export { appCaution, isProtectedApp, isWindowsUpdate, protectedAppReason } from './uninstall/protected';
+export type { AppCaution, ProtectedAppInput, ProtectedAppOptions } from './uninstall/protected';
 export { buildSilentOption, parseUninstallCommand, tokenizeCommandLine } from './uninstall/command';
 export type { ParseUninstallCommandOptions, SilentOptionInput } from './uninstall/command';
 export {
@@ -220,7 +231,13 @@ export {
   normalizePlanPath,
 } from './uninstall/path-policy';
 export type { UninstallTargetDenial, UninstallTargetOptions, UninstallTargetResult } from './uninstall/path-policy';
-export { LEFTOVER_MAX_DEPTH, defaultDirectorySize, discoverLeftovers } from './uninstall/leftovers';
+export {
+  LEFTOVER_MAX_DEPTH,
+  defaultDirectorySize,
+  defaultDirectorySizeAsync,
+  defaultStartMenuRoots,
+  discoverLeftovers,
+} from './uninstall/leftovers';
 export type { LeftoverDiscoveryOptions, LeftoverRoots, LeftoversResult } from './uninstall/leftovers';
 export {
   parseRegistryKeySnapshot,
@@ -263,7 +280,7 @@ export { createPowerShellRecycleRunner, RECYCLE_SCRIPT, stageToRecycleBin } from
 export type { RecycleRunner, StageResult } from './cleaner/recycle';
 export { waitForRemoval } from './uninstall/verify';
 export type { VerifyOptions, VerifyResult } from './uninstall/verify';
-export { executeRemoval } from './uninstall/execute';
+export { createUninstallerRunner, executeRemoval } from './uninstall/execute';
 export type {
   FileRemoveMode,
   FileRemoveOutcome,

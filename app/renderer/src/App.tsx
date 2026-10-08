@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CategoryId } from '@dust/core';
-import type { DustApi, ScanEvent, StartAnalyzeResult, StartupNotice, UninstallLaunchHint } from '../../src/shared/ipc';
+import type { DustApi, StartAnalyzeResult, StartupNotice, UninstallLaunchHint } from '../../src/shared/ipc';
 import { bumpRendererCount, recordRendererSample } from './instrument';
 import { Sidebar } from './components/Sidebar';
 import type { NavKey } from './components/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { UpdateBanner } from './components/UpdateBanner';
-import { BrowseView } from './pages/BrowseView';
-import { Dashboard } from './pages/Dashboard';
 import { DevCleanupView } from './pages/DevCleanupView';
-import { DrivesView } from './pages/DrivesView';
+import { HomeView } from './pages/HomeView';
+import type { ToolKey } from './pages/HomeView';
 import { QuickCleanView } from './pages/QuickCleanView';
-import { ResultsView } from './pages/ResultsView';
-import { ScanView } from './pages/ScanView';
+import { ResultsPage } from './pages/ResultsPage';
+import { ScanProgress } from './pages/ScanProgress';
 import { StartupView } from './pages/StartupView';
 import { SystemInfoView } from './pages/SystemInfoView';
 import { UninstallView } from './pages/UninstallView';
@@ -21,12 +20,12 @@ export interface AppProps {
   api: DustApi;
 }
 
+// The main path is three steps: Home (pick a drive) → Scan → Results.
+// Tools (uninstall, startup, developer cleanup, system info) sit beside it.
 type View =
-  | { name: 'dashboard' }
-  | { name: 'drives' }
-  | { name: 'scan'; root: string; runId: string; mode: 'analyze' | 'browse' }
+  | { name: 'home' }
+  | { name: 'scan'; root: string; runId: string; usedBytes: number | null }
   | { name: 'results'; root: string; category: CategoryId | null }
-  | { name: 'browse'; root: string }
   | { name: 'startup' }
   | { name: 'system-info' }
   | { name: 'uninstall' }
@@ -42,40 +41,28 @@ function navFor(view: View): NavKey {
       return 'startup';
     case 'system-info':
       return 'system-info';
-    case 'drives':
-    case 'browse':
-      return 'drives';
-    case 'scan':
-      return view.mode === 'browse' ? 'drives' : 'dashboard';
     default:
       return 'dashboard';
   }
 }
 
 export function App({ api }: AppProps) {
-  const [view, setView] = useState<View>({ name: 'dashboard' });
+  const [view, setView] = useState<View>({ name: 'home' });
   const [quickCleanOpen, setQuickCleanOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [systemRoot, setSystemRoot] = useState<string | null>(null);
-  const [event, setEvent] = useState<ScanEvent | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [startupNotice, setStartupNotice] = useState<StartupNotice | null>(null);
   const [uninstallHint, setUninstallHint] = useState<UninstallLaunchHint | null>(null);
   const launchHandled = useRef(false);
-  const activeViewRef = useRef<View['name']>('dashboard');
-
-  useEffect(() => {
-    activeViewRef.current = view.name;
-  }, [view.name]);
+  const usedByRoot = useRef(new Map<string, number | null>());
 
   useEffect(
     () =>
       api.onScanEvent((next) => {
         const startedAt = performance.now();
-        if (activeViewRef.current === 'scan') setEvent(next);
         recordRendererSample('app.event', performance.now() - startedAt);
         bumpRendererCount(`app.event.${next.type}`);
-        if (next.type === 'folders') bumpRendererCount('app.event.folders.rows', next.folders.length);
-        if (next.type === 'browse-folders') bumpRendererCount('app.event.browse.rows', next.folders.length);
       }),
     [api],
   );
@@ -101,54 +88,72 @@ export function App({ api }: AppProps) {
       .catch(() => {});
   }, [api]);
 
-  const startScan = useCallback(
-    async (root: string, mode: 'analyze' | 'browse'): Promise<StartAnalyzeResult> => {
-      const result = await (mode === 'analyze' ? api.startAnalyze(root) : api.startBrowse(root));
+  const scan = useCallback(
+    async (root: string, usedBytes: number | null): Promise<StartAnalyzeResult> => {
+      usedByRoot.current.set(root.toLowerCase(), usedBytes);
+      const result = await api.startAnalyze(root);
       if (result.ok) {
-        setEvent(null);
-        setView({ name: 'scan', root, runId: result.runId, mode });
+        setScanError(null);
+        setView({ name: 'scan', root, runId: result.runId, usedBytes });
       }
       return result;
     },
     [api],
   );
 
-  const analyze = useCallback((root: string) => startScan(root, 'analyze'), [startScan]);
-  const browse = useCallback((root: string) => startScan(root, 'browse'), [startScan]);
-
-  const back = useCallback(() => setView({ name: 'dashboard' }), []);
-
-  const navigate = useCallback(
-    (key: NavKey) => {
-      if (key === 'dashboard') setView({ name: 'dashboard' });
-      else if (key === 'drives') setView({ name: 'drives' });
-      else if (key === 'startup') setView({ name: 'startup' });
-      else if (key === 'system-info') setView({ name: 'system-info' });
-      else if (key === 'uninstall') setView({ name: 'uninstall' });
-      else if (key === 'dev-cleanup' && systemRoot !== null) setView({ name: 'dev-cleanup', root: systemRoot });
+  const rescan = useCallback(
+    (root: string) => {
+      void scan(root, usedByRoot.current.get(root.toLowerCase()) ?? null).then((result) => {
+        if (!result.ok && result.reason !== 'busy') setScanError(result.message);
+      });
     },
-    [systemRoot],
+    [scan],
   );
 
-  const closeQuickClean = useCallback(() => setQuickCleanOpen(false), []);
+  const home = useCallback(() => setView({ name: 'home' }), []);
+
   const viewResults = useCallback((root: string, category: CategoryId | null = null) => {
     setQuickCleanOpen(false);
     setView({ name: 'results', root, category });
   }, []);
-  const openDevCleanup = useCallback((root: string) => setView({ name: 'dev-cleanup', root }), []);
-  const browseDone = useCallback((root: string) => setView({ name: 'browse', root }), []);
+
+  const openTool = useCallback(
+    (tool: ToolKey | NavKey) => {
+      if (tool === 'dashboard') setView({ name: 'home' });
+      else if (tool === 'startup') setView({ name: 'startup' });
+      else if (tool === 'system-info') setView({ name: 'system-info' });
+      else if (tool === 'uninstall') setView({ name: 'uninstall' });
+      else if (tool === 'dev-cleanup' && systemRoot !== null) setView({ name: 'dev-cleanup', root: systemRoot });
+    },
+    [systemRoot],
+  );
 
   let content;
   if (view.name === 'scan') {
     content = (
-      <ScanView
+      <ScanProgress
+        key={view.runId}
         api={api}
         root={view.root}
         runId={view.runId}
-        mode={view.mode}
-        event={event}
-        onBack={back}
-        onBrowseComplete={view.mode === 'browse' ? browseDone : undefined}
+        usedBytes={view.usedBytes}
+        onFinished={(root) => viewResults(root)}
+        onFailed={(message) => {
+          setScanError(message);
+          home();
+        }}
+      />
+    );
+  } else if (view.name === 'results') {
+    content = (
+      <ResultsPage
+        key={view.root}
+        api={api}
+        root={view.root}
+        initialCategory={view.category}
+        onRescan={rescan}
+        onBack={home}
+        onOpenDevCleanup={(root) => setView({ name: 'dev-cleanup', root })}
       />
     );
   } else if (view.name === 'startup') {
@@ -158,44 +163,26 @@ export function App({ api }: AppProps) {
   } else if (view.name === 'uninstall') {
     content = <UninstallView api={api} hint={uninstallHint} onHintShown={() => setUninstallHint(null)} />;
   } else if (view.name === 'dev-cleanup') {
-    content = <DevCleanupView api={api} root={view.root} onBack={back} onViewResults={viewResults} />;
-  } else if (view.name === 'drives') {
-    content = <DrivesView api={api} onBrowse={browse} />;
-  } else if (view.name === 'browse') {
-    content = <BrowseView api={api} root={view.root} runId={null} onBack={back} />;
-  } else if (view.name === 'results') {
-    content = (
-      <main className="dust-dashboard min-h-screen bg-canvas text-ink">
-        <div className="mx-auto max-w-6xl px-6 py-10 sm:px-8">
-          <ResultsView
-            key={view.root}
-            api={api}
-            root={view.root}
-            runId={null}
-            initialCategory={view.category}
-            onOpenDevCleanup={() => setView({ name: 'dev-cleanup', root: view.root })}
-          />
-          <button
-            type="button"
-            onClick={back}
-            className="mt-6 inline-flex items-center rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Back to dashboard
-          </button>
-        </div>
-      </main>
-    );
+    content = <DevCleanupView api={api} root={view.root} onBack={home} onViewResults={viewResults} />;
   } else {
     content = (
-      <Dashboard
-        api={api}
-        onAnalyze={analyze}
-        onViewResults={viewResults}
-        onQuickClean={() => setQuickCleanOpen(true)}
-        onOpenDevCleanup={openDevCleanup}
-        onSystemDrive={setSystemRoot}
-        shortcutsEnabled={!quickCleanOpen && !settingsOpen}
-      />
+      <>
+        {scanError !== null && (
+          <div className="mx-auto max-w-5xl px-6 pt-6 sm:px-10">
+            <p role="alert" className="rounded-xl bg-grade-danger-soft px-4 py-3 text-sm text-grade-danger">
+              The scan stopped: {scanError}
+            </p>
+          </div>
+        )}
+        <HomeView
+          api={api}
+          onScan={scan}
+          onViewResults={viewResults}
+          onQuickClean={() => setQuickCleanOpen(true)}
+          onOpenTool={openTool}
+          onSystemDrive={setSystemRoot}
+        />
+      </>
     );
   }
 
@@ -204,11 +191,13 @@ export function App({ api }: AppProps) {
       <Sidebar
         active={navFor(view)}
         devCleanupDisabled={systemRoot === null}
-        onNavigate={navigate}
+        onNavigate={openTool}
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="min-w-0 flex-1 overflow-y-auto">{content}</div>
-      {quickCleanOpen && <QuickCleanView api={api} onDone={closeQuickClean} onViewResults={viewResults} />}
+      {quickCleanOpen && (
+        <QuickCleanView api={api} onDone={() => setQuickCleanOpen(false)} onViewResults={viewResults} />
+      )}
       {settingsOpen && <SettingsDialog api={api} onClose={() => setSettingsOpen(false)} />}
       <UpdateBanner api={api} />
     </div>

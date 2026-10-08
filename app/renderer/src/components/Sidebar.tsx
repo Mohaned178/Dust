@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ComponentType, SVGProps } from 'react';
-import {
-  DashboardIcon,
-  GearIcon,
-  HardDriveIcon,
-  InfoIcon,
-  PackageIcon,
-  PanelLeftIcon,
-  PowerIcon,
-  UninstallIcon,
-} from './icons';
+import { CodeIcon, GearIcon, HomeIcon, InfoIcon, PanelLeftIcon, PowerIcon, UninstallIcon } from './icons';
 
-export type NavKey = 'dashboard' | 'dev-cleanup' | 'uninstall' | 'startup' | 'drives' | 'system-info';
+export type NavKey = 'dashboard' | 'dev-cleanup' | 'uninstall' | 'startup' | 'system-info';
 
 export interface SidebarProps {
   active: NavKey;
@@ -102,50 +93,49 @@ export function Sidebar({ active, devCleanupDisabled, onNavigate, onOpenSettings
         </button>
       </div>
 
-      <nav aria-label="Primary" className="flex flex-col gap-0.5 px-2.5 py-3">
+      <nav aria-label="Primary" className="flex flex-1 flex-col gap-0.5 px-2.5 py-3">
         <NavButton
-          icon={DashboardIcon}
-          label="Dashboard"
+          icon={HomeIcon}
+          label="Home"
           collapsed={collapsed}
           active={active === 'dashboard'}
           onClick={() => onNavigate('dashboard')}
         />
-        <NavButton
-          icon={PackageIcon}
-          label="Dev Cleanup"
-          collapsed={collapsed}
-          active={active === 'dev-cleanup'}
-          disabled={devCleanupDisabled}
-          onClick={() => onNavigate('dev-cleanup')}
-        />
+        {collapsed ? (
+          <div className="mx-2 my-2 border-t border-hairline" />
+        ) : (
+          <p className="mt-4 mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Tools</p>
+        )}
         <NavButton
           icon={UninstallIcon}
-          label="Deep Uninstall"
+          label="Uninstall apps"
           collapsed={collapsed}
           active={active === 'uninstall'}
           onClick={() => onNavigate('uninstall')}
         />
         <NavButton
           icon={PowerIcon}
-          label="Startup Manager"
+          label="Startup apps"
           collapsed={collapsed}
           active={active === 'startup'}
           onClick={() => onNavigate('startup')}
         />
         <NavButton
-          icon={HardDriveIcon}
-          label="Drives"
+          icon={CodeIcon}
+          label="Developer cleanup"
           collapsed={collapsed}
-          active={active === 'drives'}
-          onClick={() => onNavigate('drives')}
+          active={active === 'dev-cleanup'}
+          disabled={devCleanupDisabled}
+          onClick={() => onNavigate('dev-cleanup')}
         />
         <NavButton
           icon={InfoIcon}
-          label="System Info"
+          label="System info"
           collapsed={collapsed}
           active={active === 'system-info'}
           onClick={() => onNavigate('system-info')}
         />
+        <div className="flex-1" />
         <NavButton icon={GearIcon} label="Settings" collapsed={collapsed} onClick={onOpenSettings} />
       </nav>
     </aside>

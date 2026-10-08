@@ -2,11 +2,14 @@ import { basename, join } from 'node:path';
 import {
   UNINSTALL_PENDING_TTL_MS,
   Journal,
+  appCaution,
   buildRemovalPlan,
+  defaultDirectorySizeAsync,
   defaultRuleEnv,
   executeRemoval,
   fullRegistryPath,
   listRemovalApps,
+  normalizePlanPath,
   resetInstalledAppsCache,
   resetRegistrySnapshotCache,
   resolveUninstallerCommand,
@@ -37,7 +40,10 @@ import type {
   UninstallItemPreview,
   UninstallListResult,
   UninstallPreview,
+  UninstallPreviewOptions,
   UninstallPreviewResult,
+  UninstallRunRequest,
+  UninstallRunResult,
 } from '../../shared/ipc';
 
 export interface ScanLockLike {
@@ -63,11 +69,13 @@ export interface UninstallServiceDeps {
   startupActions?: StartupActions;
   resetAppsCache?: () => void;
   createJournal?: (options: { path: string; planId: string; appId: string }) => Pick<Journal, 'append'>;
+  measureDirectory?: (path: string) => Promise<number | null>;
 }
 
 export interface UninstallService {
   list(force?: boolean): Promise<UninstallListResult>;
-  preview(appId: string): Promise<UninstallPreviewResult>;
+  preview(appId: string, options?: UninstallPreviewOptions): Promise<UninstallPreviewResult>;
+  runUninstaller(request: UninstallRunRequest): Promise<UninstallRunResult>;
   execute(request: UninstallExecuteRequest): Promise<UninstallExecuteResult>;
   skipWaiting(): void;
   elevatedHandoff(jobId: string): { jobId: string; appId: string } | null;
@@ -94,6 +102,10 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   const pending = new Map<string, { plan: RemovalPlan; createdAt: number; request: UninstallExecuteRequest | null }>();
   const consumed = new Set<string>();
   let skipRequested = false;
+  const measureDirectory = deps.measureDirectory ?? defaultDirectorySizeAsync;
+  // Apps whose uninstaller ran this session, kept so their leftovers can still
+  // be scanned once the registry entry is gone.
+  const uninstalled = new Map<string, InstalledApp>();
 
   function emit(event: UninstallEvent): void {
     for (const listener of [...listeners]) {
@@ -136,11 +148,58 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
       version: app.version,
       installLocation: app.installLocation,
       estimatedSizeKb: app.estimatedSizeKb,
+      sizeBytes: sizes.get(sizeKey(app)) ?? null,
       hive: app.hive,
       kind: command.kind,
       requiresAdmin: uninstallerRequiresAdmin(app, planEnvFor(app)),
       hasUninstaller: app.uninstallString.trim().length > 0 && command.launchable,
+      caution: appCaution(app),
     };
+  }
+
+  // The registry's EstimatedSize is often missing or copied from an installer
+  // (two different games reporting the identical size), so install folders
+  // are measured in the background and streamed to the list as they finish.
+  const sizes = new Map<string, number>();
+  let sizing: Promise<void> | null = null;
+
+  function sizeKey(app: InstalledApp): string {
+    return `${app.id}|${app.installLocation.trim().toLowerCase()}`;
+  }
+
+  function measurable(location: string): string | null {
+    const normalized = normalizePlanPath(location);
+    if (normalized === null) return null;
+    const key = normalized.toLowerCase();
+    const roots = [
+      process.env.ProgramFiles,
+      process.env['ProgramFiles(x86)'],
+      env.programData,
+      env.windowsDir,
+      env.userProfile,
+      env.localAppData,
+      env.appData,
+    ]
+      .filter((root): root is string => typeof root === 'string' && root.length > 0)
+      .map((root) => root.replace(/[\\/]+$/, '').toLowerCase());
+    return roots.includes(key) ? null : normalized;
+  }
+
+  function measureSizes(apps: readonly InstalledApp[]): void {
+    if (sizing !== null) return;
+    const queue = apps.filter((app) => !sizes.has(sizeKey(app)) && measurable(app.installLocation) !== null);
+    if (queue.length === 0) return;
+    sizing = (async () => {
+      for (const app of queue) {
+        const location = measurable(app.installLocation)!;
+        const bytes = await measureDirectory(location).catch(() => null);
+        if (bytes === null) continue;
+        sizes.set(sizeKey(app), bytes);
+        emit({ type: 'app-size', appId: app.id, bytes });
+      }
+    })().finally(() => {
+      sizing = null;
+    });
   }
 
   function toPreview(plan: RemovalPlan, app: InstalledApp): UninstallPreview {
@@ -221,6 +280,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   async function list(force = false): Promise<UninstallListResult> {
     try {
       const snapshot = await listSnapshot(force);
+      measureSizes(snapshot.apps);
       return {
         ok: true,
         apps: snapshot.apps.map(toSummary),
@@ -233,17 +293,28 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     }
   }
 
-  async function preview(appId: string): Promise<UninstallPreviewResult> {
+  async function preview(appId: string, options: UninstallPreviewOptions = {}): Promise<UninstallPreviewResult> {
     prune();
     try {
-      const snapshot = await listSnapshot(false);
-      const app = snapshot.apps.find((entry) => entry.id === appId);
+      const leftoversOnly = options.leftoversOnly === true;
+      // After an uninstall the registry and app list have changed: read both fresh.
+      const snapshot = await listSnapshot(leftoversOnly);
+      const registered = snapshot.apps.find((entry) => entry.id === appId);
+      const app = registered ?? (leftoversOnly ? uninstalled.get(appId) : undefined);
       if (app === undefined) {
         return { ok: false, reason: 'not-found', message: 'This app is no longer installed.' };
       }
       const records = deps.records === undefined ? [] : await deps.records().catch(() => []);
-      const plan = await buildPlan({ app, apps: snapshot.apps, env: planEnvFor(app), startup: records });
+      const plan = await buildPlan({
+        app,
+        apps: snapshot.apps,
+        env: planEnvFor(app),
+        startup: records,
+        ...(leftoversOnly ? { skipUninstaller: true, uninstallKeyPresent: registered !== undefined } : {}),
+      });
+      // After the uninstaller ran, an empty scan is the good outcome: nothing left behind.
       if (
+        !leftoversOnly &&
         plan.uninstaller === null &&
         plan.leftovers.length === 0 &&
         plan.registry.length === 0 &&
@@ -327,6 +398,83 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     }
   }
 
+  // Step one of an uninstall: run the app's own uninstaller and wait for its
+  // whole process tree. Leftovers are scanned afterwards (preview with
+  // leftoversOnly), so only what the uninstaller actually left is offered.
+  async function runUninstaller(request: UninstallRunRequest): Promise<UninstallRunResult> {
+    let app: InstalledApp | undefined;
+    let plan: RemovalPlan;
+    try {
+      const snapshot = await listSnapshot(false);
+      app = snapshot.apps.find((entry) => entry.id === request.appId);
+      if (app === undefined) {
+        return { ok: false, reason: 'not-found', message: 'This app is no longer installed.' };
+      }
+      plan = await buildPlan({ app, apps: snapshot.apps, env: planEnvFor(app), uninstallerOnly: true });
+    } catch (error) {
+      return { ok: false, reason: 'failed', message: messageOf(error) };
+    }
+    if (plan.uninstaller === null || !plan.uninstaller.command.launchable) {
+      return {
+        ok: false,
+        reason: 'no-uninstaller',
+        message: `${app.displayName} has no uninstaller Dust can run.`,
+      };
+    }
+
+    const lock = deps.lock;
+    if (lock !== undefined) {
+      const acquired = lock.acquire('uninstall', app.installLocation || deps.systemRoot || '', now());
+      if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
+    }
+    uninstalled.set(app.id, app);
+    skipRequested = false;
+    const makeJournal =
+      deps.createJournal ?? ((options: { path: string; planId: string; appId: string }) => new Journal(options));
+    try {
+      const result = await executePlan(
+        {
+          plan,
+          selection: [],
+          includeUserData: false,
+          runUninstaller: true,
+          quiet: request.quiet,
+          degraded: !elevated,
+          elevated,
+        },
+        {
+          backupDir: deps.backupDir,
+          journalPath: deps.journalPath,
+          journal: makeJournal({ path: deps.journalPath, planId: plan.id, appId: plan.appId }),
+          now,
+          shouldStopWaiting: () => skipRequested,
+          onEvent: (event) => emit(removalEventToIpc(request.jobId, event)),
+        },
+      );
+      if (!result.ok) return { ok: false, reason: 'failed', message: 'The uninstaller could not be started.' };
+      const report = result.report.uninstaller;
+      return {
+        ok: true,
+        outcome: {
+          ran: report.ran,
+          exitCode: report.exitCode,
+          verifiedGone: report.verifiedGone,
+          rebootRequired: report.rebootCode,
+          skippedWaiting: report.skippedWaiting,
+          skippedReason: report.skippedReason,
+        },
+      };
+    } catch (error) {
+      return { ok: false, reason: 'failed', message: messageOf(error) };
+    } finally {
+      resetApps();
+      resetRegistrySnapshotCache();
+      sizes.delete(sizeKey(app));
+      deps.store.markAppsChanged(now());
+      lock?.release();
+    }
+  }
+
   function skipWaiting(): void {
     skipRequested = true;
   }
@@ -345,7 +493,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     };
   }
 
-  return { list, preview, execute, skipWaiting, elevatedHandoff, onEvent };
+  return { list, preview, runUninstaller, execute, skipWaiting, elevatedHandoff, onEvent };
 }
 
 function removalEventToIpc(jobId: string, event: RemovalEvent): UninstallEvent {

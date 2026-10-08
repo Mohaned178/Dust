@@ -168,12 +168,15 @@ describe('buildSilentOption', () => {
     });
   });
 
-  it('requires a non-empty, parseable quiet string', () => {
-    expect(buildSilentOption({ command: msi, quietUninstallString: '', windowsInstaller: true })).toBeNull();
-    expect(buildSilentOption({ command: msi, quietUninstallString: '   ', windowsInstaller: true })).toBeNull();
-    expect(
-      buildSilentOption({ command: msi, quietUninstallString: 'not a command', windowsInstaller: true }),
-    ).toBeNull();
+  it('uninstalls any MSI product quietly without needing a quiet string', () => {
+    for (const quietUninstallString of ['', '   ', 'not a command']) {
+      expect(buildSilentOption({ command: msi, quietUninstallString, windowsInstaller: false })?.args).toEqual([
+        '/x',
+        msi.msiProductCode,
+        '/qn',
+        '/norestart',
+      ]);
+    }
   });
 
   it('requires the MSI product code', () => {
@@ -187,13 +190,14 @@ describe('buildSilentOption', () => {
     ).toBeNull();
   });
 
-  it('never builds a silent command for non-MSI apps', () => {
-    const exe = parseUninstallCommand('"C:\\Foo\\uninst.exe" /S', { exists });
+  it("uses a non-MSI app's own quiet command only when it runs the same uninstaller", () => {
+    const exe = parseUninstallCommand('"C:\\Foo\\uninst.exe"', { exists });
     expect(
       buildSilentOption({ command: exe, quietUninstallString: '"C:\\Foo\\uninst.exe" /S', windowsInstaller: false }),
-    ).toBeNull();
+    ).toEqual({ args: ['/S'], source: 'quiet-string', wellFormed: true });
     expect(
-      buildSilentOption({ command: exe, quietUninstallString: '"C:\\Foo\\uninst.exe" /S', windowsInstaller: true }),
+      buildSilentOption({ command: exe, quietUninstallString: '"C:\\Other\\tool.exe" /S', windowsInstaller: false }),
     ).toBeNull();
+    expect(buildSilentOption({ command: exe, quietUninstallString: '', windowsInstaller: false })).toBeNull();
   });
 });

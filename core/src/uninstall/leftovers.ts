@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { defaultProtectedPaths } from '../cleaner/guard';
 import { vendorKey } from '../system/installed-apps';
 import type { InstalledApp } from '../system/installed-apps';
-import { matchAppName } from './apps';
+import { appIdentity, matchIdentity } from './identity';
+import type { AppIdentity, IdentityMatch } from './identity';
 import { assertUninstallTarget, defaultUninstallParents, normalizePlanPath } from './path-policy';
 import type { UninstallTargetDenial } from './path-policy';
 import { uninstallItemId } from './types';
 import type { KeptItem, LeftoverCandidate, LeftoverClass, UninstallGrade } from './types';
 
-export const LEFTOVER_MAX_DEPTH = 1;
+/** Root children are matched directly; vendor folders and containers one level deeper. */
+export const LEFTOVER_MAX_DEPTH = 2;
 
 export interface LeftoverRoots {
   localAppData: string;
@@ -31,6 +33,13 @@ export interface LeftoverDiscoveryOptions {
   dustInstallPath?: string;
   measure?: (path: string) => number | null;
   maxDepth?: number;
+  /** Start Menu "Programs" folders, searched for the app's folder and shortcuts. */
+  startMenu?: string[];
+  /**
+   * Microsoft, driver, security, and runtime software: every leftover is
+   * review-only and vendor folders are never proposed.
+   */
+  caution?: boolean;
 }
 
 export interface LeftoversResult {
@@ -67,6 +76,7 @@ interface CandidateInput {
   sharedWith: string[];
   syncRoot: boolean;
   adminRequired: boolean;
+  emptyParent?: string;
 }
 
 function canonical(value: string): string {
@@ -84,6 +94,13 @@ function defaultProgramFiles(): string[] {
   return [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
   );
+}
+
+export function defaultStartMenuRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  const roots: string[] = [];
+  if (env.APPDATA) roots.push(join(env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs'));
+  if (env.ProgramData) roots.push(join(env.ProgramData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'));
+  return roots;
 }
 
 function defaultOneDrive(home: string | undefined): string[] {
@@ -215,45 +232,87 @@ function installSkipReason(reason: UninstallTargetDenial): string {
   }
 }
 
-function matchDirName(name: string, app: InstalledApp): DirMatch | null {
-  const strength = matchAppName(name, app);
-  if (strength === null) return null;
-  if (strength === 'publisher') {
-    return { strength, evidence: `Folder name matches publisher ${app.publisher}` };
-  }
-  if (strength === 'partial') {
-    return { strength, evidence: `Folder name partially matches ${app.displayName}` };
-  }
-  return { strength: 'product', evidence: `Folder name matches ${app.displayName}` };
+function describeMatch(match: IdentityMatch, app: InstalledApp, shortcut: boolean): DirMatch {
+  const what = shortcut ? 'Shortcut' : 'Folder name';
+  if (match === 'product') return { strength: 'product', evidence: `${what} matches ${app.displayName}` };
+  if (match === 'exe')
+    return { strength: 'partial', evidence: `${what} matches the program file of ${app.displayName}` };
+  return { strength: 'publisher', evidence: `${what} matches publisher ${app.publisher}` };
 }
 
-function classify(rootClass: LeftoverClass, name: string): LeftoverClass {
+function isUserDataName(name: string): boolean {
   const key = vendorKey(name);
-  if (USER_DATA_PATTERNS.some((pattern) => key.includes(pattern))) return 'user-data';
+  return USER_DATA_PATTERNS.some((pattern) => key.includes(pattern));
+}
+
+// A leftover holding a profile or saves folder (Chrome's "User Data",
+// Firefox's "Profiles") is the user's data, whatever root it sits under.
+function holdsUserData(path: string): boolean {
+  let entries;
+  try {
+    entries = readdirSync(path, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => entry.isDirectory() && isUserDataName(entry.name));
+}
+
+function classify(rootClass: LeftoverClass, name: string, path: string): LeftoverClass {
+  if (isUserDataName(name)) return 'user-data';
+  if (rootClass !== 'install-dir' && rootClass !== 'temp' && holdsUserData(path)) return 'user-data';
   return rootClass;
 }
 
-function collectDirs(root: string, maxDepth: number): Array<{ path: string; name: string; link: boolean }> {
-  const out: Array<{ path: string; name: string; link: boolean }> = [];
-  const stack: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    let entries;
-    try {
-      entries = readdirSync(current.path, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const link = entry.isSymbolicLink();
-      if (!entry.isDirectory() && !link) continue;
-      const child = join(current.path, entry.name);
-      const depth = current.depth + 1;
-      out.push({ path: child, name: entry.name, link });
-      if (!link && depth < maxDepth) stack.push({ path: child, depth });
+// Drops candidates nested inside another candidate: the outer folder already
+// covers them, and counting both would double the reported size.
+function collapseNested(candidates: LeftoverCandidate[]): LeftoverCandidate[] {
+  const sorted = [...candidates].sort((a, b) => canonical(a.path).length - canonical(b.path).length);
+  const kept: LeftoverCandidate[] = [];
+  for (const candidate of sorted) {
+    if (kept.some((outer) => outer.link === null && underRoot(candidate.path, outer.path))) continue;
+    kept.push(candidate);
+  }
+  return kept;
+}
+
+interface ListedEntry {
+  path: string;
+  name: string;
+  link: boolean;
+  shortcut: boolean;
+}
+
+function listEntries(dir: string, shortcuts: boolean): ListedEntry[] {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: ListedEntry[] = [];
+  for (const entry of entries) {
+    const link = entry.isSymbolicLink();
+    if (entry.isDirectory() || link) {
+      out.push({ path: join(dir, entry.name), name: entry.name, link, shortcut: false });
+    } else if (shortcuts && /\.(lnk|url)$/i.test(entry.name)) {
+      out.push({
+        path: join(dir, entry.name),
+        name: entry.name.replace(/\.(lnk|url)$/i, ''),
+        link: false,
+        shortcut: true,
+      });
     }
   }
   return out;
+}
+
+// Folders that hold per-app folders without belonging to any vendor.
+const CONTAINER_NAMES = new Set(['programs']);
+
+interface ScanRoot {
+  path: string;
+  class: LeftoverClass;
+  shortcuts: boolean;
 }
 
 export function discoverLeftovers(
@@ -290,6 +349,7 @@ export function discoverLeftovers(
     let grade: UninstallGrade = input.match.strength === 'product' ? 'safe' : 'review';
     if (input.class === 'program-data' || input.class === 'user-data') grade = 'review';
     if (input.sharedWith.length > 0 || syncRoot || link !== null) grade = 'review';
+    if (options.caution === true) grade = 'review';
     const evidence = [input.match.evidence];
     if (input.class === 'program-data') evidence.push('Shared location: other apps may use this folder');
     if (input.class === 'user-data') evidence.push('User data: review before deleting');
@@ -308,6 +368,7 @@ export function discoverLeftovers(
       syncRoot,
       link,
       sharedWith: input.sharedWith,
+      ...(input.emptyParent === undefined ? {} : { emptyParent: input.emptyParent }),
     };
   }
 
@@ -364,35 +425,106 @@ export function discoverLeftovers(
     }
   }
 
-  for (const spec of ROOT_CLASSES) {
-    const root = options.roots[spec.key];
-    if (root.trim().length === 0 || !existsSync(root)) continue;
-    for (const entry of collectDirs(root, maxDepth)) {
-      const key = canonical(entry.path);
-      if (seen.has(key)) continue;
-      const match = matchDirName(entry.name, app);
-      if (match === null) continue;
-      seen.add(key);
-      if (options.dustInstallPath !== undefined && underRoot(entry.path, options.dustInstallPath)) {
-        skipped.push({ target: entry.path, reason: 'dust-location' });
+  const identity = appIdentity(app);
+  const otherIdentities: Array<{ app: InstalledApp; identity: AppIdentity }> = others.map((other) => ({
+    app: other,
+    identity: appIdentity(other),
+  }));
+  const otherInstallLocations = others
+    .map((other) => normalizePlanPath(other.installLocation.trim()))
+    .filter((location): location is string => location !== null);
+
+  // Another installed app claims this name too: its folder, not this one's.
+  function claimedBy(name: string, levels: readonly IdentityMatch[]): string[] {
+    return otherIdentities
+      .filter((other) => {
+        const match = matchIdentity(name, other.identity);
+        return match !== null && levels.includes(match);
+      })
+      .map((other) => other.app.displayName);
+  }
+
+  function propose(entry: ListedEntry, rootClass: LeftoverClass, match: IdentityMatch, emptyParent?: string): void {
+    const key = canonical(entry.path);
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (options.dustInstallPath !== undefined && underRoot(entry.path, options.dustInstallPath)) {
+      skipped.push({ target: entry.path, reason: 'dust-location' });
+      return;
+    }
+    if (protectedPaths.includes(key)) {
+      skipped.push({ target: entry.path, reason: 'protected-location' });
+      return;
+    }
+    if (otherInstallLocations.some((location) => underRoot(location, entry.path) || underRoot(entry.path, location))) {
+      skipped.push({ target: entry.path, reason: 'shared-install-location' });
+      return;
+    }
+    const candidate = makeCandidate({
+      path: entry.path,
+      class: entry.shortcut ? 'app-data' : classify(rootClass, entry.name, entry.path),
+      match: describeMatch(match, app, entry.shortcut),
+      sharedWith: claimedBy(entry.name, ['product', 'exe', 'vendor']),
+      syncRoot: false,
+      adminRequired: requiresAdmin(entry.path),
+      emptyParent,
+    });
+    if (entry.shortcut) candidate.evidence.push('Start menu shortcut');
+    candidates.push(candidate);
+  }
+
+  const scanRoots: ScanRoot[] = [
+    ...ROOT_CLASSES.map((spec) => ({ path: options.roots[spec.key], class: spec.class, shortcuts: false })),
+    ...programFiles.map((path) => ({ path, class: 'install-dir' as const, shortcuts: false })),
+    ...(options.startMenu ?? defaultStartMenuRoots()).map((path) => ({
+      path,
+      class: 'app-data' as const,
+      shortcuts: true,
+    })),
+  ];
+  const visitedRoots = new Set<string>();
+
+  for (const root of scanRoots) {
+    const rootKey = canonical(root.path);
+    if (rootKey.length === 0 || visitedRoots.has(rootKey) || !existsSync(root.path)) continue;
+    visitedRoots.add(rootKey);
+    for (const entry of listEntries(root.path, root.shortcuts)) {
+      if (entry.shortcut) {
+        if (matchIdentity(entry.name, identity) === 'product') propose(entry, root.class, 'product');
         continue;
       }
-      const sharedWith = others
-        .filter((other) => matchDirName(entry.name, other) !== null)
-        .map((other) => other.displayName);
-      candidates.push(
-        makeCandidate({
-          path: entry.path,
-          class: classify(spec.class, entry.name),
-          match,
-          sharedWith,
-          syncRoot: false,
-          adminRequired: requiresAdmin(entry.path),
-        }),
-      );
+      const match = matchIdentity(entry.name, identity);
+      if (match === 'product' || match === 'exe') {
+        propose(entry, root.class, match);
+        continue;
+      }
+      const container = CONTAINER_NAMES.has(entry.name.toLowerCase());
+      if ((match !== 'vendor' && !container) || entry.link || maxDepth < 2) continue;
+
+      // A vendor folder (or a plain container like LocalAppData\Programs):
+      // look one level in for this app's own folders.
+      const inside = listEntries(entry.path, root.shortcuts);
+      const own = inside.filter((child) => {
+        const childMatch = matchIdentity(child.name, identity);
+        return child.shortcut ? childMatch === 'product' : childMatch === 'product' || childMatch === 'exe';
+      });
+      // The vendor folder itself goes only when nothing else lives in it and
+      // no other installed app shares the vendor; it is then removed after
+      // its contents, and only if empty by then.
+      const vendorOnlyHere =
+        match === 'vendor' &&
+        !options.caution &&
+        own.length > 0 &&
+        own.length === inside.length &&
+        claimedBy(entry.name, ['product', 'exe', 'vendor']).length === 0;
+      for (const child of own) {
+        const childMatch = child.shortcut ? 'product' : (matchIdentity(child.name, identity) as IdentityMatch);
+        propose(child, root.class, childMatch, vendorOnlyHere ? entry.path : undefined);
+      }
     }
   }
 
-  candidates.sort((a, b) => a.path.localeCompare(b.path));
-  return { candidates, skipped };
+  const collapsed = collapseNested(candidates);
+  collapsed.sort((a, b) => a.path.localeCompare(b.path));
+  return { candidates: collapsed, skipped };
 }

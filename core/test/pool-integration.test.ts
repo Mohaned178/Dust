@@ -5,7 +5,7 @@ import { ScanCoordinator } from '../src/scan/coordinator';
 import { createNodeWorkerTransport } from '../src/scan/node-worker';
 import type { WorkerInit } from '../src/scan/protocol';
 import { AggregateTree } from '../src/model/tree';
-import { NodeFsEnumerator } from '../src/scanner/enumerator';
+import { createPlatformEnumerator } from '../src/scanner/win-enumerator';
 import { createExclusionPredicate } from '../src/scanner/exclusions';
 import { scanTree } from '../src/scanner/scanner';
 import { DEFAULT_POOL_LIMITS } from '../src/scan/limits';
@@ -73,7 +73,7 @@ describe('pool integration (real worker threads)', () => {
 
     const legacy = scanTree({
       root: fixture.root,
-      enumerator: new NodeFsEnumerator(),
+      enumerator: createPlatformEnumerator(),
       isExcluded: createExclusionPredicate(),
     });
 
@@ -116,7 +116,7 @@ describe('pool integration (real worker threads)', () => {
 
     const legacy = scanTree({
       root: fixture.root,
-      enumerator: new NodeFsEnumerator(),
+      enumerator: createPlatformEnumerator(),
       isExcluded: createExclusionPredicate(),
     });
 
@@ -153,7 +153,7 @@ describe('pool integration (real worker threads)', () => {
 
     const legacy = scanTree({
       root: fixture.root,
-      enumerator: new NodeFsEnumerator(),
+      enumerator: createPlatformEnumerator(),
       isExcluded: createExclusionPredicate(),
     });
 

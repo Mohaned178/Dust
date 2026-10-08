@@ -7,6 +7,7 @@ import type { EngineHostDeps } from '../src/main/host/engine-host';
 import type { ScanEvent } from '../src/shared/ipc';
 import { FakeSession, emptyScanResult, nextEvent } from './fakes';
 import { TempTree } from './fixtures';
+import { VolumeSnapshotStore } from '../src/main/host/volume-store';
 
 const SYSTEM = 'C:\\';
 const DATA = 'T:\\';
@@ -25,7 +26,7 @@ function folder(path: string, bytes = 10): FolderRecord {
   };
 }
 
-describe('system-drive policy', () => {
+describe('drive policy', () => {
   let tree: TempTree;
   let store: SnapshotStore;
 
@@ -61,11 +62,20 @@ describe('system-drive policy', () => {
     });
   }
 
-  it('refuses Analyze for a non-system volume', async () => {
-    const host = makeHost({ createSession: () => new FakeSession({ root: DATA }) });
+  it('analyzes any volume and keeps a separate snapshot per drive', async () => {
+    const volumeStore = new VolumeSnapshotStore(tree.root, SYSTEM);
+    const session = new FakeSession({ root: DATA });
+    const host = makeHost({ store: volumeStore, createSession: () => session });
+    const finished = nextEvent(host, 'finished');
 
-    expect(await host.startAnalyze(DATA)).toMatchObject({ ok: false, reason: 'not-system-drive' });
-    expect((await host.getDashboard()).scan).toBeNull();
+    expect(await host.startAnalyze(DATA)).toMatchObject({ ok: true });
+    session.finish(emptyScanResult(DATA, 'complete'));
+    await finished;
+
+    expect(volumeStore.load(DATA)).toMatchObject({ kind: 'ok', snapshot: { root: DATA } });
+    expect(volumeStore.load(SYSTEM).kind).toBe('missing');
+    const card = (await host.getDashboard()).volumes.find((volume) => volume.root === DATA);
+    expect(card?.lastAnalyzedAt).not.toBeNull();
   });
 
   it('allows Analyze for the system volume', async () => {
@@ -87,23 +97,24 @@ describe('system-drive policy', () => {
     });
   });
 
-  it('does not serve dev cleanup for a non-system root, even with prior data', async () => {
+  it('serves dev cleanup for whichever drive was analyzed', async () => {
+    const volumeStore = new VolumeSnapshotStore(tree.root, SYSTEM);
     const seedSession = new FakeSession({ root: DATA });
-    const seeder = makeHost({ systemRoot: DATA, createSession: () => seedSession });
+    const seeder = makeHost({ store: volumeStore, createSession: () => seedSession });
     const finished = nextEvent(seeder, 'finished');
     await seeder.startAnalyze(DATA);
     seedSession.finish(emptyScanResult(DATA, 'complete'));
     await finished;
-    expect(store.load().kind).toBe('ok');
 
-    const host = makeHost();
-    expect(host.getDevCleanup(DATA)).toMatchObject({ source: 'empty', groups: [] });
+    const host = makeHost({ store: volumeStore });
+    expect(host.getDevCleanup(DATA).source).toBe('snapshot');
+    expect(host.getDevCleanup(SYSTEM).source).toBe('empty');
   });
 
-  it('refuses pins outside the system drive', () => {
+  it('accepts pins on any drive', () => {
     const host = makeHost();
 
-    expect(host.setPin(join(DATA, 'dev'), true)).toMatchObject({ ok: false });
+    expect(host.setPin(join(DATA, 'dev'), true)).toMatchObject({ ok: true });
     expect(host.setPin(join(SYSTEM, 'dev'), true)).toMatchObject({ ok: true });
   });
 

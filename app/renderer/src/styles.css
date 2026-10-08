@@ -28,6 +28,15 @@
   --color-scrollbar-hover: #b3bac4;
   --color-window: #0a0a0b;
   --color-window-ink: #e5e5e5;
+  --color-map-1: #0f6e6e;
+  --color-map-2: #2b8a87;
+  --color-map-3: #4fa29d;
+  --color-map-4: #7dbcb6;
+  --color-map-5: #a9d3ce;
+  --color-map-6: #cfe6e3;
+  --color-map-files: #dfe3e8;
+  --color-map-ink-dark: #ffffff;
+  --color-map-ink-light: #0b3d3d;
   --font-mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 16px 40px -20px rgba(16, 24, 40, 0.22);
   --shadow-pop: 0 1px 2px rgba(16, 24, 40, 0.06), 0 24px 60px -24px rgba(16, 24, 40, 0.3);

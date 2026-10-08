@@ -12,6 +12,8 @@ export interface DashboardInput {
   volumes: VolumeInfo[];
   usage: VolumeUsage[];
   snapshot: SnapshotLoadResult;
+  /** Each volume's own snapshot; without it only the system snapshot is consulted. */
+  snapshotFor?: (root: string) => SnapshotLoadResult;
   scan: ScanState | null;
   systemRoot: string;
   appsChangedAt?: number | null;
@@ -30,7 +32,10 @@ export function buildDashboardState(input: DashboardInput): DashboardState {
     const usage = usageByVolume.get(volume.root.toLowerCase());
     const root = volume.root.toLowerCase();
     const liveMatch = liveVolume !== null && liveVolume.toLowerCase() === root;
-    const snapshotMatch = !liveMatch && snapshotVolume !== null && snapshotVolume.toLowerCase() === root;
+    const own = input.snapshotFor?.(volume.root);
+    const volumeSnapshot = own !== undefined ? (own.kind === 'ok' ? own.snapshot : null) : snapshot;
+    const ownVolume = volumeSnapshot ? volumeRootOf(volumeSnapshot.root) : snapshotVolume;
+    const snapshotMatch = !liveMatch && volumeSnapshot !== null && ownVolume !== null && ownVolume.toLowerCase() === root;
 
     let lastAnalyzedAt: number | null = null;
     let lastCleanedAt: number | null = null;
@@ -40,16 +45,17 @@ export function buildDashboardState(input: DashboardInput): DashboardState {
       lastAnalyzedAt = live.finishedAt;
       reclaimableBytes = live.reclaimableBytes;
       sessionOnly = true;
-    } else if (snapshotMatch && snapshot !== null) {
-      lastAnalyzedAt = snapshot.finishedAt;
-      lastCleanedAt = snapshot.cleanedAt;
-      reclaimableBytes = sumBytes(snapshot.categories);
+    } else if (snapshotMatch && volumeSnapshot !== null) {
+      lastAnalyzedAt = volumeSnapshot.finishedAt;
+      lastCleanedAt = volumeSnapshot.cleanedAt;
+      reclaimableBytes = sumBytes(volumeSnapshot.categories);
     }
 
     return {
       root: volume.root,
       label: volume.label,
       driveType: volume.driveType,
+      mediaType: volume.mediaType ?? 'unknown',
       role: root === systemVolume ? 'system' : 'browse',
       external: volume.driveType === 'removable' || volume.driveType === 'network',
       totalBytes: usage?.totalBytes ?? null,

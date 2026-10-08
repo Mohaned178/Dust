@@ -238,6 +238,7 @@ describe('registerIpcHandlers', () => {
       },
       elevatedHandoff: () => null,
       onEvent: () => () => {},
+      runUninstaller: async () => ({ ok: false as const, reason: 'not-found' as const, message: 'gone' }),
     };
     const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { uninstall });
     const registrar = new FakeRegistrar();

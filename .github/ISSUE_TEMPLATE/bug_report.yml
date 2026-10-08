@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in Dust does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. This form is for problems with Dust itself — for questions about building or running the repository, see the [troubleshooting section](https://github.com/Mohaned178/Dust/blob/master/README.md#troubleshooting) first.
+  - type: input
+    id: dust-version
+    attributes:
+      label: Dust version
+      description: Shown in Settings → About, or in the installer file name.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: For example, Windows 11 24H2 (build 26100).
+      placeholder: Windows 11 24H2 (build 26100)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Analyze
+        - Results
+        - Quick Clean
+        - Dev Cleanup
+        - Startup Manager
+        - Deep Uninstall
+        - System Info
+        - Settings
+        - Installer or uninstall
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, in order?
+      placeholder: |
+        1. Open Dev Cleanup
+        2. Select three Dead projects
+        3. Confirm the plan
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System info
+      description: Open System Info in Dust, click **Copy system info**, and paste it here. It contains no serial numbers, MAC addresses, or IP addresses.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. `%APPDATA%\Dust\perf.log` when `DUST_TIMING=1` is set, or anything else that helps.
+    validations:
+      required: false

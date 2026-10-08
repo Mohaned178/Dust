@@ -1,11 +1,12 @@
 import {
-  SnapshotStore,
   backupDirFor,
+  defaultRuleEnv,
   createWindowsStartupStore,
   getVolumeUsageAsync,
   journalPathFor,
   listVolumesAsync,
   pruneRegistryBackups,
+  systemDriveRoot,
 } from '@dust/core';
 import { BrowserWindow, app, dialog, ipcMain, session, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -28,7 +29,8 @@ import type { EngineHost } from './host/engine-host';
 import { createEngineHost } from './host/engine-host';
 import { reportSamples } from './host/instrument';
 import { createFilePublisherLoader, createStartupService } from './host/startup';
-import { createStorePaths, resolveWorkerPath } from './paths';
+import { resolveWorkerPath } from './paths';
+import { VolumeSnapshotStore } from './host/volume-store';
 import { hardenWebContents, installSessionSecurity } from './security';
 import {
   applyPendingStartupToggle,
@@ -365,7 +367,7 @@ void app
         }
       }
     }
-    const store = new SnapshotStore(createStorePaths(userDataDir));
+    const store = new VolumeSnapshotStore(userDataDir, systemDriveRoot(defaultRuleEnv()) ?? 'C:\\');
     const backupDir = backupDirFor(userDataDir);
     pruneRegistryBackups(backupDir);
     if (process.env.DUST_TIMING === '1') {
@@ -410,6 +412,7 @@ void app
     }
     const host = createEngineHost({
       store,
+      streamLiveRows: false,
       workerPath: resolveWorkerPath(__dirname),
       volumesCacheFile: join(userDataDir, 'volumes-cache.json'),
       installedAppsCacheFile: join(userDataDir, 'installed-apps-cache.json'),

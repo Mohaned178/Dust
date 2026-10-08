@@ -384,10 +384,12 @@ export function makeUninstallApp(overrides: Partial<UninstallAppSummary> = {}): 
     version: '1.2.3',
     installLocation: 'C:\\Users\\x\\AppData\\Roaming\\Spotify',
     estimatedSizeKb: 2048,
+    sizeBytes: null,
     hive: 'hkcu',
     kind: 'exe',
     requiresAdmin: false,
     hasUninstaller: true,
+    caution: null,
     ...overrides,
   };
 }
@@ -558,6 +560,7 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     listUninstallApps: async () => ({ ok: true, apps: [], trusted: true, elevated: false, loadedAt: 0 }),
     previewUninstall: async () => ({ ok: false, reason: 'not-found', message: 'not found' }),
     executeUninstall: async () => ({ ok: false, reason: 'unknown-plan' }),
+    runUninstaller: async () => ({ ok: false, reason: 'not-found', message: 'not found' }),
     skipUninstallWaiting: async () => {},
     getUninstallLaunchHint: async () => null,
     relaunchElevatedUninstall: async () => {},

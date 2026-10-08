@@ -61,9 +61,27 @@ export function isUninstallableApp(app: InstalledApp): boolean {
   return app.uninstallString.length > 0 || app.installLocation.length > 0;
 }
 
+// The same product is often registered twice (per-machine and WOW64, or an
+// MSI plus its bootstrapper). Keep one entry per name and version, preferring
+// the one that can actually be uninstalled and located.
+export function dedupeApps(apps: readonly InstalledApp[]): InstalledApp[] {
+  const score = (app: InstalledApp): number =>
+    (app.uninstallString.length > 0 ? 4 : 0) +
+    (app.installLocation.length > 0 ? 2 : 0) +
+    (app.estimatedSizeKb !== null ? 1 : 0);
+  const best = new Map<string, InstalledApp>();
+  for (const app of apps) {
+    const key = `${vendorKey(app.displayName)}|${app.version.trim().toLowerCase()}`;
+    const current = best.get(key);
+    if (current === undefined || score(app) > score(current)) best.set(key, app);
+  }
+  const kept = new Set(best.values());
+  return apps.filter((app) => kept.has(app));
+}
+
 export async function listRemovalApps(options: RemovalAppsOptions = {}): Promise<InstalledAppsSnapshot> {
   const snapshot = await listInstalledApps(options);
-  const apps = snapshot.apps.filter(isUninstallableApp).filter(
+  const apps = dedupeApps(snapshot.apps.filter(isUninstallableApp)).filter(
     (app) =>
       !isProtectedApp(app, {
         systemRoot: options.systemRoot,

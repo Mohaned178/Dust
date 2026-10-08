@@ -42,6 +42,7 @@ function setup(overrides: Partial<LeftoverDiscoveryOptions> = {}): Setup {
       installParents: [fixture.root],
       home: fixture.dir('profile'),
       programFiles: [],
+      startMenu: [],
       systemRoot: 'C:\\Windows',
       oneDrive: [],
       ...overrides,
@@ -87,28 +88,90 @@ describe('discoverLeftovers', () => {
     expect(install?.evidence.some((line) => line.includes('install location'))).toBe(true);
   });
 
-  it('treats a publisher-only match as a review leftover that is not selected by default', () => {
+  it('looks inside a vendor folder for the product folder, never proposing the vendor folder itself', () => {
     const { fixture, options } = setup();
-    fixture.dir('local/Acme');
+    fixture.dir('local/Acme/Music Player');
+    fixture.dir('local/Acme/Other Tool');
     const app = fooApp({ displayName: 'Music Player', publisher: 'Acme Software' });
 
     const result = discoverLeftovers(app, [], options);
-    const candidate = result.candidates.find((entry) => entry.path.endsWith('Acme'));
-    expect(candidate).toMatchObject({ grade: 'review', defaultSelected: false });
-    expect(candidate?.evidence.some((line) => line.includes('publisher'))).toBe(true);
+    const paths = result.candidates.map((entry) => entry.path);
+    expect(paths).toContain(join(fixture.root, 'local', 'Acme', 'Music Player'));
+    expect(paths).not.toContain(join(fixture.root, 'local', 'Acme'));
+    expect(paths.some((path) => path.endsWith('Other Tool'))).toBe(false);
+    // Another folder lives in the vendor folder, so it must stay.
+    expect(result.candidates.find((entry) => entry.path.endsWith('Music Player'))?.emptyParent).toBeUndefined();
   });
 
-  it('treats a partial name overlap as a review leftover', () => {
+  it('marks a vendor folder for removal once empty when it only holds this app', () => {
     const { fixture, options } = setup();
-    fixture.dir('local/Acme Stuff');
-    const app = fooApp({ displayName: 'Acme Music', publisher: 'Acme Software' });
+    fixture.dir('program-data/Acme/Music Player');
+    const app = fooApp({ displayName: 'Music Player', publisher: 'Acme Software' });
 
     const result = discoverLeftovers(app, [], options);
-    const candidate = result.candidates.find((entry) => entry.path.endsWith('Acme Stuff'));
-    expect(candidate).toMatchObject({ grade: 'review', defaultSelected: false });
+    const candidate = result.candidates.find((entry) => entry.path.endsWith('Music Player'));
+    expect(candidate?.emptyParent).toBe(join(fixture.root, 'program-data', 'Acme'));
   });
 
-  it('ignores unrelated folders and nested paths beyond the depth cap', () => {
+  it('never matches on a shared word: partial overlaps and vendor-wide folders are ignored', () => {
+    const { fixture, options } = setup();
+    fixture.dir('local/Acme Stuff');
+    fixture.dir('local/Microsoft');
+    fixture.dir('local/Server Tools');
+    const app = fooApp({ displayName: 'Microsoft ODBC Driver 17 for SQL Server', publisher: 'Microsoft Corporation' });
+
+    const result = discoverLeftovers(app, [], { ...options, installLocation: '' });
+    expect(result.candidates).toEqual([]);
+  });
+
+  it('finds per-user installs under LocalAppData\\Programs', () => {
+    const { fixture, options } = setup();
+    fixture.dir('local/Programs/Python/Python314');
+    const app = fooApp({ displayName: 'Python 3.14.3 (64-bit)', publisher: 'Python Software Foundation' });
+
+    const result = discoverLeftovers(app, [], { ...options, installLocation: '' });
+    expect(result.candidates.map((entry) => entry.path)).toContain(join(fixture.root, 'local', 'Programs', 'Python'));
+  });
+
+  it('finds an unregistered install folder under Program Files', () => {
+    const { fixture, options } = setup();
+    const programFiles = fixture.dir('pf');
+    fixture.file('pf/nodejs/node.exe', 'x');
+    fixture.dir('pf/VideoLAN/VLC');
+    const node = fooApp({ displayName: 'Node.js', publisher: 'Node.js Foundation', keyName: '{node}' });
+
+    const result = discoverLeftovers(node, [], { ...options, installLocation: '', programFiles: [programFiles] });
+    expect(result.candidates.find((entry) => entry.path === join(programFiles, 'nodejs'))).toMatchObject({
+      class: 'install-dir',
+      adminRequired: true,
+    });
+    expect(result.candidates.some((entry) => entry.path.includes('VideoLAN'))).toBe(false);
+  });
+
+  it('finds the Start menu folder and shortcuts', () => {
+    const { fixture, options } = setup();
+    const startMenu = fixture.dir('start');
+    fixture.file('start/FooApp/FooApp.lnk', 'x');
+    fixture.file('start/FooApp.lnk', 'x');
+    fixture.file('start/Unrelated.lnk', 'x');
+
+    const result = discoverLeftovers(fooApp(), [], { ...options, startMenu: [startMenu] });
+    const paths = result.candidates.map((entry) => entry.path);
+    expect(paths).toContain(join(startMenu, 'FooApp'));
+    expect(paths).toContain(join(startMenu, 'FooApp.lnk'));
+    expect(paths.some((path) => path.endsWith('Unrelated.lnk'))).toBe(false);
+  });
+
+  it('only proposes review leftovers for caution apps', () => {
+    const { fixture, options } = setup();
+    fixture.dir('local/FooApp');
+
+    const result = discoverLeftovers(fooApp(), [], { ...options, caution: true });
+    expect(result.candidates.length).toBeGreaterThan(0);
+    expect(result.candidates.every((entry) => entry.grade === 'review' && !entry.defaultSelected)).toBe(true);
+  });
+
+  it('ignores unrelated folders and nested paths outside vendor folders', () => {
     const { fixture, options } = setup();
     fixture.dir('local/Unrelated');
     fixture.dir('local/Container/FooApp');
@@ -157,10 +220,11 @@ describe('discoverLeftovers', () => {
 
   it('classifies save/profile folders as user data even under AppData\\Local', () => {
     const { fixture, options } = setup();
-    fixture.dir('local/FooApp Saves');
+    fixture.dir('local/SaveGames Manager');
+    const app = fooApp({ displayName: 'SaveGames Manager' });
 
-    const result = discoverLeftovers(fooApp(), [], options);
-    const candidate = result.candidates.find((entry) => entry.path.includes('FooApp Saves'));
+    const result = discoverLeftovers(app, [], { ...options, installLocation: '' });
+    const candidate = result.candidates.find((entry) => entry.path.includes('SaveGames Manager'));
     expect(candidate).toMatchObject({ class: 'user-data', defaultSelected: false });
   });
 

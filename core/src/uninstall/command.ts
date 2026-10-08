@@ -161,15 +161,20 @@ export function parseUninstallCommand(raw: string, options: ParseUninstallComman
 }
 
 export function buildSilentOption(input: SilentOptionInput): SilentOption | null {
-  if (!input.windowsInstaller) return null;
-  if (input.command.kind !== 'msi' || input.command.msiProductCode === null) return null;
+  // Any MSI product uninstalls quietly with /x /qn; no QuietUninstallString needed.
+  if (input.command.kind === 'msi' && input.command.msiProductCode !== null) {
+    return {
+      args: ['/x', input.command.msiProductCode, '/qn', '/norestart'],
+      source: 'msi-default',
+      wellFormed: true,
+    };
+  }
+  // Otherwise only the vendor's own quiet command, and only when it runs the
+  // same uninstaller executable as the regular one.
   const quiet = input.quietUninstallString.trim();
-  if (quiet.length === 0) return null;
+  if (quiet.length === 0 || input.command.kind !== 'exe') return null;
   const parsedQuiet = parseUninstallCommand(quiet, { exists: () => true });
-  if (parsedQuiet.kind === 'unknown' || parsedQuiet.kind === 'url') return null;
-  return {
-    args: ['/x', input.command.msiProductCode, '/qn', '/norestart'],
-    source: 'msi-default',
-    wellFormed: true,
-  };
+  if (parsedQuiet.kind !== 'exe') return null;
+  if (parsedQuiet.executable.toLowerCase() !== input.command.executable.toLowerCase()) return null;
+  return { args: parsedQuiet.args, source: 'quiet-string', wellFormed: true };
 }

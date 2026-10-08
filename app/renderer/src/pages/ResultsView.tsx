@@ -36,6 +36,8 @@ export interface ResultsViewProps {
   onOpenDevCleanup?: () => void;
   headingLevel?: 1 | 2;
   initialCategory?: CategoryId | null;
+  /** Rendered inside the Results page, which supplies the title. */
+  embedded?: boolean;
 }
 
 export function ResultsView({
@@ -45,6 +47,7 @@ export function ResultsView({
   onOpenDevCleanup,
   headingLevel = 1,
   initialCategory = null,
+  embedded = false,
 }: ResultsViewProps) {
   const storeRef = useRef<RowStore>(createRowStore(root));
   const [snapshotVersion, setSnapshotVersion] = useState(0);
@@ -491,22 +494,24 @@ export function ResultsView({
 
   return (
     <section aria-label="Results">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
-        <Heading className="text-2xl font-semibold tracking-tight text-ink">
-          Results <span className="font-normal text-ink-muted">—</span> <span className="font-mono">{root}</span>
-        </Heading>
-        {useLive ? (
-          live.finished !== null ? (
-            <p className="text-sm text-ink-muted">
-              {live.finished.status === 'cancelled' ? 'Partial — cancelled' : 'Analyzed just now'}
-            </p>
-          ) : (
-            <p className="text-sm text-ink-muted">scanning…</p>
-          )
-        ) : state?.finishedAt != null ? (
-          <p className="text-sm text-ink-muted">{analyzedLabel(state.finishedAt)}</p>
-        ) : null}
-      </header>
+      {!embedded && (
+        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+          <Heading className="text-2xl font-semibold tracking-tight text-ink">
+            Results <span className="font-normal text-ink-muted">—</span> <span className="font-mono">{root}</span>
+          </Heading>
+          {useLive ? (
+            live.finished !== null ? (
+              <p className="text-sm text-ink-muted">
+                {live.finished.status === 'cancelled' ? 'Partial — cancelled' : 'Analyzed just now'}
+              </p>
+            ) : (
+              <p className="text-sm text-ink-muted">scanning…</p>
+            )
+          ) : state?.finishedAt != null ? (
+            <p className="text-sm text-ink-muted">{analyzedLabel(state.finishedAt)}</p>
+          ) : null}
+        </header>
+      )}
 
       {notices.length > 0 && <div className="mt-6 space-y-2.5">{notices}</div>}
 
@@ -522,7 +527,7 @@ export function ResultsView({
         </p>
       ) : (
         <>
-          <section aria-label="Reclaimable summary" className="mt-8">
+          <section aria-label="Reclaimable summary" className={embedded ? '' : 'mt-8'}>
             {emptySafe ? (
               scanning ? (
                 <>

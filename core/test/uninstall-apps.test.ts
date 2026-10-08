@@ -57,7 +57,7 @@ describe('listRemovalApps', () => {
     resetInstalledAppsCache();
   });
 
-  it('filters hidden and protected apps from the raw registry snapshot', async () => {
+  it('filters hidden apps from the raw registry snapshot', async () => {
     const query = async (): Promise<string> =>
       JSON.stringify([
         {
@@ -91,7 +91,8 @@ describe('listRemovalApps', () => {
       systemRoot: 'C:\\Windows',
     });
     expect(result.trusted).toBe(true);
-    expect(result.apps.map((app) => app.displayName)).toEqual(['Spotify', 'NoUninstaller']);
+    // Microsoft software is listed (with a caution); system components and ghosts are not.
+    expect(result.apps.map((app) => app.displayName)).toEqual(['Spotify', 'Microsoft Edge', 'NoUninstaller']);
   });
 
   it('hides apps that live in protected locations', async () => {

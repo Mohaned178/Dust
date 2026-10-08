@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { lstatSync } from 'node:fs';
+import { lstatSync, rmdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { deletePathTree } from '../cleaner/executor';
 import { stageManyToRecycleBin, stageToRecycleBin } from '../cleaner/recycle';
@@ -9,6 +9,8 @@ import type { Journal } from './journal';
 import { assertUninstallTarget, defaultUninstallParents } from './path-policy';
 import type { UninstallTargetOptions } from './path-policy';
 import { missingAcknowledgements } from './plan';
+import { ProcessTreeTracker, listProcesses } from './process-tree';
+import type { ProcessEntry } from './process-tree';
 import type { VerifyResult } from './verify';
 import { waitForRemoval } from './verify';
 import type {
@@ -205,34 +207,71 @@ function cwdFor(executable: string): string | undefined {
   return dirname(executable);
 }
 
-function defaultUninstallerRunner(input: UninstallerRunInput): Promise<UninstallerRunOutcome> {
-  const child = spawn(input.command.executable, input.argv, {
-    cwd: input.cwd,
-    windowsHide: input.quiet,
-    stdio: 'ignore',
-  });
-  input.onSpawned(child.pid ?? null);
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (outcome: UninstallerRunOutcome): void => {
-      if (settled) return;
-      settled = true;
-      clearInterval(timer);
-      resolve(outcome);
-    };
-    const timer = setInterval(() => {
-      if (!input.shouldStopWaiting()) return;
-      try {
-        child.unref();
-      } catch {
-        /* the child may already be gone */
-      }
-      finish({ exitCode: null, skippedWaiting: true });
-    }, 500);
-    child.once('error', () => finish({ exitCode: null, skippedWaiting: false }));
-    child.once('exit', (code) => finish({ exitCode: code, skippedWaiting: false }));
-  });
+const TREE_POLL_MS = 1_000;
+
+export interface UninstallerRunnerDeps {
+  spawnProcess?: typeof spawn;
+  listProcesses?: () => ProcessEntry[] | null;
+  pollMs?: number;
 }
+
+// Runs the uninstaller and resolves when its whole process tree has exited,
+// not just the spawned process: self-relaunching uninstallers hand off to a
+// temp copy and exit immediately.
+export function createUninstallerRunner(runnerDeps: UninstallerRunnerDeps = {}): UninstallerRunner {
+  const spawnProcess = runnerDeps.spawnProcess ?? spawn;
+  const snapshot = runnerDeps.listProcesses ?? listProcesses;
+  const pollMs = runnerDeps.pollMs ?? TREE_POLL_MS;
+  return (input) => {
+    const child = spawnProcess(input.command.executable, input.argv, {
+      cwd: input.cwd,
+      windowsHide: input.quiet,
+      stdio: 'ignore',
+    });
+    input.onSpawned(child.pid ?? null);
+    const tracker = child.pid === undefined ? null : new ProcessTreeTracker(child.pid);
+    return new Promise((resolve) => {
+      let settled = false;
+      let exitCode: number | null = null;
+      let exited = false;
+      const finish = (outcome: UninstallerRunOutcome): void => {
+        if (settled) return;
+        settled = true;
+        clearInterval(timer);
+        resolve(outcome);
+      };
+      const check = (): void => {
+        if (input.shouldStopWaiting()) {
+          try {
+            child.unref();
+          } catch {
+            /* the child may already be gone */
+          }
+          finish({ exitCode, skippedWaiting: true });
+          return;
+        }
+        if (!exited) return;
+        const processes = tracker === null ? null : snapshot();
+        // Without a process list there is nothing more to wait on.
+        if (processes === null || !tracker!.update(processes)) finish({ exitCode, skippedWaiting: false });
+      };
+      const timer = setInterval(check, pollMs);
+      child.once('error', () => finish({ exitCode: null, skippedWaiting: false }));
+      child.once('exit', (code) => {
+        exitCode = code;
+        exited = true;
+        check();
+      });
+      // Adopt children early, while their parent is still alive and visible.
+      if (tracker !== null) {
+        const processes = snapshot();
+        if (processes !== null) tracker.update(processes);
+      }
+    });
+  };
+}
+
+const defaultUninstallerRunner = createUninstallerRunner();
 
 export async function executeRemoval(
   request: RemovalExecutionRequest,
@@ -543,6 +582,31 @@ export async function executeRemoval(
           break;
       }
       emit({ type: 'item', itemId: action.id, status: outcome.status, bytes: outcome.bytes });
+    }
+    // Vendor folders that held only this app's folders: remove them once
+    // emptied. rmdir is non-recursive, so anything still inside keeps them.
+    const removedPaths = new Set(
+      planned
+        .filter((action) => {
+          const status = outcomes.get(action.path)?.status;
+          return status === 'deleted' || status === 'recycled' || status === 'already-gone';
+        })
+        .map((action) => action.id),
+    );
+    const emptyParents = new Set(
+      selectedLeftovers
+        .filter((item) => item.emptyParent !== undefined && removedPaths.has(item.id))
+        .map((item) => item.emptyParent!),
+    );
+    for (const parent of emptyParents) {
+      const target = assertUninstallTarget(parent, policy);
+      if (!target.ok) continue;
+      try {
+        rmdirSync(target.path);
+        deps.journal.append('file-item', { path: target.path, mode: 'rmdir-empty' });
+      } catch {
+        /* not empty, or already gone: either way nothing to do */
+      }
     }
     deps.journal.append('files', {
       deleted: filesReport.deletedItems,

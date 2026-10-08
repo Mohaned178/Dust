@@ -5,6 +5,8 @@ export interface Entry {
   kind: NodeKind;
   size: number;
   mtimeMs: number;
+  /** On-disk allocation when the enumerator reports it; otherwise derived from the cluster size. */
+  allocated?: number;
 }
 
 export interface FolderRecord {

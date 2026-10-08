@@ -13,7 +13,7 @@ export interface NodeTransportOptions {
   execArgv?: string[];
 }
 
-export function createNodeWorkerTransport(init: WorkerInit, options: NodeTransportOptions = {}): WorkerTransport {
+export function createScanWorker(workerData: unknown, options: NodeTransportOptions = {}): Worker {
   const workerPath = options.workerPath ?? new URL('./worker-entry.ts', import.meta.url);
   if (!options.workerPath && !options.execArgv && String(workerPath).endsWith('.ts')) {
     throw new Error(
@@ -22,10 +22,11 @@ export function createNodeWorkerTransport(init: WorkerInit, options: NodeTranspo
         "explicitly, e.g. execArgv: ['--import', 'tsx'] in dev, or a compiled JS worker path in production.",
     );
   }
-  const worker = new Worker(workerPath, {
-    workerData: init,
-    execArgv: options.execArgv ?? [],
-  });
+  return new Worker(workerPath, { workerData, execArgv: options.execArgv ?? [] });
+}
+
+export function createNodeWorkerTransport(init: WorkerInit, options: NodeTransportOptions = {}): WorkerTransport {
+  const worker = createScanWorker(init, options);
   return {
     postMessage: (command) => worker.postMessage(command),
     onMessage: (handler) => worker.on('message', handler),
