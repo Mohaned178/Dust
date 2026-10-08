@@ -16,7 +16,7 @@ import { encodeBackupEnvelope, entryId, parseBackupEnvelope } from '@dust/core';
 import type { EngineHost } from '../src/main/host/engine-host';
 import { createStartupService, executableFromCommand } from '../src/main/host/startup';
 import { applyPendingStartupToggle, parsePendingStartupToggle } from '../src/main/startup-launch';
-import type { StartupEntry } from '../src/shared/ipc';
+import type { StartupDetailsEvent, StartupEntry } from '../src/shared/ipc';
 
 function emptyRun(): Record<RunSource, RunValue[]> {
   return { 'hkcu-run': [], 'hklm-run': [], 'hklm-run-wow64': [] };
@@ -148,27 +148,151 @@ describe('executableFromCommand', () => {
 });
 
 describe('createStartupService', () => {
-  it('decorates entries with publisher and icon data and live counts', async () => {
+  it('decorates entries with publisher and icon data by event and keeps live counts', async () => {
     const { store, registry } = memoryStore();
     registry.run['hkcu-run'] = [{ name: 'Discord', command: discordCommand }];
     const loadPublisher = vi.fn(async () => new Map([['C:\\Apps\\Discord\\Update.exe', 'Discord Inc.']]));
     const loadIcon = vi.fn(async () => 'data:image/png;base64,icon');
     const service = createStartupService({ store, loadPublisher, loadIcon });
+    const events: StartupDetailsEvent[] = [];
+    const arrived = new Promise<void>((resolve) => {
+      service.onDetails((event) => {
+        events.push(event);
+        if (events.some((entry) => entry.details.some((d) => d.publisher !== null && d.iconDataUrl !== null))) {
+          resolve();
+        }
+      });
+    });
 
     const result = await service.list();
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.state.counts).toEqual({ total: 1, enabled: 1, disabled: 0 });
-    expect(result.state.entries[0]).toMatchObject({
-      name: 'Discord',
+    expect(result.state.entries[0]).toMatchObject({ name: 'Discord', requiresAdmin: false });
+    await arrived;
+    const id = result.state.entries[0]!.id;
+    const merged = events.flatMap((event) => event.details).filter((detail) => detail.id === id);
+    expect(merged.at(-1)).toEqual({ id, publisher: 'Discord Inc.', iconDataUrl: 'data:image/png;base64,icon' });
+
+    const again = await service.list();
+    expect(again.ok && again.state.entries[0]).toMatchObject({
       publisher: 'Discord Inc.',
       iconDataUrl: 'data:image/png;base64,icon',
-      requiresAdmin: false,
     });
-    await service.list();
     expect(loadPublisher).toHaveBeenCalledTimes(1);
     expect(loadIcon).toHaveBeenCalledTimes(1);
+  });
+
+  describe('details after the list', () => {
+    const exe = 'C:\\Apps\\Discord\\Update.exe';
+
+    function pending<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    }
+
+    function setup() {
+      const { store, registry } = memoryStore();
+      registry.run['hkcu-run'] = [{ name: 'Discord', command: discordCommand }];
+      const publisher = pending<Map<string, string>>();
+      const icon = pending<string | null>();
+      const loadPublisher = vi.fn(() => publisher.promise);
+      const loadIcon = vi.fn(() => icon.promise);
+      const service = createStartupService({ store, loadPublisher, loadIcon });
+      return { service, publisher, icon, loadPublisher, loadIcon };
+    }
+
+    it('returns rows before publishers and icons load, then delivers them by id', async () => {
+      const { service, publisher, icon, loadPublisher, loadIcon } = setup();
+      const events: StartupDetailsEvent[] = [];
+      service.onDetails((event) => events.push(event));
+
+      const result = await service.list();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const id = result.state.entries[0]!.id;
+      expect(result.state.entries[0]).toMatchObject({ publisher: null, iconDataUrl: null });
+      expect(loadPublisher).toHaveBeenCalledTimes(1);
+      expect(loadIcon).toHaveBeenCalledWith(exe);
+      expect(events).toEqual([]);
+
+      publisher.resolve(new Map([[exe, 'Discord Inc.']]));
+      await vi.waitFor(() => expect(events).toHaveLength(1));
+      expect(events[0]).toEqual({ details: [{ id, publisher: 'Discord Inc.', iconDataUrl: null }] });
+
+      icon.resolve('data:image/png;base64,icon');
+      await vi.waitFor(() => expect(events).toHaveLength(2));
+      expect(events[1]).toEqual({
+        details: [{ id, publisher: 'Discord Inc.', iconDataUrl: 'data:image/png;base64,icon' }],
+      });
+    });
+
+    it('serves cached values on the next list without starting new loads', async () => {
+      const { service, publisher, icon, loadPublisher, loadIcon } = setup();
+      const events: StartupDetailsEvent[] = [];
+      service.onDetails((event) => events.push(event));
+      await service.list();
+      publisher.resolve(new Map([[exe, 'Discord Inc.']]));
+      icon.resolve('data:image/png;base64,icon');
+      await vi.waitFor(() => expect(events.length).toBeGreaterThanOrEqual(2));
+
+      const second = await service.list();
+
+      expect(second.ok && second.state.entries[0]).toMatchObject({
+        publisher: 'Discord Inc.',
+        iconDataUrl: 'data:image/png;base64,icon',
+      });
+      expect(loadPublisher).toHaveBeenCalledTimes(1);
+      expect(loadIcon).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not start a second load for a path whose load is still running', async () => {
+      const { service, loadPublisher, loadIcon } = setup();
+
+      await service.list();
+      await service.list();
+
+      expect(loadPublisher).toHaveBeenCalledTimes(1);
+      expect(loadIcon).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps working when a listener throws', async () => {
+      const { service, publisher, icon } = setup();
+      const seen: StartupDetailsEvent[] = [];
+      service.onDetails(() => {
+        throw new Error('broken listener');
+      });
+      service.onDetails((event) => seen.push(event));
+      await service.list();
+
+      publisher.resolve(new Map([[exe, 'Discord Inc.']]));
+      icon.resolve(null);
+
+      await vi.waitFor(() => expect(seen.length).toBeGreaterThanOrEqual(1));
+      const again = await service.list();
+      expect(again.ok && again.state.entries[0]).toMatchObject({ publisher: 'Discord Inc.' });
+    });
+
+    it('stops delivering events after unsubscribing', async () => {
+      const { service, publisher, icon } = setup();
+      const kept: StartupDetailsEvent[] = [];
+      const dropped: StartupDetailsEvent[] = [];
+      const off = service.onDetails((event) => dropped.push(event));
+      service.onDetails((event) => kept.push(event));
+      await service.list();
+      off();
+
+      publisher.resolve(new Map([[exe, 'Discord Inc.']]));
+      icon.resolve('data:image/png;base64,icon');
+
+      await vi.waitFor(() => expect(kept.length).toBeGreaterThanOrEqual(1));
+      expect(dropped).toEqual([]);
+    });
   });
 
   it('falls back to null publisher and icon when decoration fails', async () => {

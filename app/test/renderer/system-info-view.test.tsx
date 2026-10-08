@@ -287,4 +287,71 @@ describe('SystemInfoView', () => {
     expect(text).not.toContain('E:');
     expect(screen.getByRole('status')).toHaveTextContent('System info copied.');
   });
+
+  describe('while graphics are still loading', () => {
+    it('shows the loading row and asks again until the hardware arrives', async () => {
+      vi.useFakeTimers();
+      const getSystemInfo = vi
+        .fn<(force?: boolean) => Promise<ReturnType<typeof makeSystemInfo>>>()
+        .mockResolvedValueOnce(makeSystemInfo({ hardwarePending: true, gpus: [] }))
+        .mockResolvedValueOnce(makeSystemInfo({ hardwarePending: true, gpus: [] }))
+        .mockResolvedValue(makeSystemInfo({ hardwarePending: false }));
+      render(<SystemInfoView api={makeApi({ getSystemInfo })} />);
+      await flush();
+
+      const graphics = screen.getByRole('region', { name: 'Graphics' });
+      expect(within(graphics).getByText('Reading graphics hardware…')).toBeInTheDocument();
+      expect(getSystemInfo).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(750);
+      });
+      expect(getSystemInfo).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Reading graphics hardware…')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(750);
+      });
+      expect(getSystemInfo).toHaveBeenCalledTimes(3);
+      expect(screen.queryByText('Reading graphics hardware…')).toBeNull();
+      expect(screen.getByText('NVIDIA GeForce RTX 4070')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(getSystemInfo).toHaveBeenCalledTimes(3);
+    });
+
+    it('gives up asking after the poll limit', async () => {
+      vi.useFakeTimers();
+      const getSystemInfo = vi.fn(async () => makeSystemInfo({ hardwarePending: true, gpus: [] }));
+      render(<SystemInfoView api={makeApi({ getSystemInfo })} />);
+      await flush();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      const calls = getSystemInfo.mock.calls.length;
+      expect(calls).toBeGreaterThan(5);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(getSystemInfo.mock.calls.length).toBe(calls);
+    });
+
+    it('does not poll when nothing is pending', async () => {
+      vi.useFakeTimers();
+      const getSystemInfo = vi.fn(async () => makeSystemInfo());
+      render(<SystemInfoView api={makeApi({ getSystemInfo })} />);
+      await flush();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(getSystemInfo).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('Reading graphics hardware…')).toBeNull();
+    });
+  });
 });

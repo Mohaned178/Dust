@@ -58,6 +58,7 @@ export {
   listInstalledApps,
   matchInstalledApp,
   parseInstalledApps,
+  readInstalledAppsNative,
   resetInstalledAppsCache,
   vendorKey,
 } from './system/installed-apps';
@@ -121,6 +122,7 @@ export { RULES_VERSION } from './rules/version';
 export { getVolumeUsage, getVolumeUsageAsync, listFixedVolumes } from './system/volumes';
 export type { VolumeUsage } from './system/volumes';
 export {
+  MEDIA_TYPE_TTL_MS,
   createExternalPredicate,
   listVolumes,
   listVolumesAsync,
@@ -128,7 +130,17 @@ export {
   systemDriveRoot,
   volumeRootOf,
 } from './system/drive-type';
-export type { DriveType, VolumeInfo } from './system/drive-type';
+export type { DriveType, ListVolumesOptions, MediaType, VolumeInfo } from './system/drive-type';
+export {
+  RegistryUnavailableError,
+  listRegistrySubkeys,
+  readRegistryValues,
+  registryValueToBool,
+  registryValueToString,
+} from './system/win-registry';
+export type { RegistryHive, RegistryValue, RegistryValueType } from './system/win-registry';
+export { readPersistentCache, removePersistentCache, writePersistentCache } from './system/persistent-cache';
+export { readFileCompanyName, readFileCompanyNames } from './system/file-version';
 export { DEFAULT_CLUSTER_SIZE, roundUpToCluster, volumeClusterSize } from './system/cluster';
 export {
   entryId,
@@ -159,6 +171,7 @@ export {
   BACKUP_REGISTRY_KEYS,
   createPowerShellRegistryStore,
   parseRegistrySnapshot,
+  readNativeRegistrySnapshot,
   RUN_REGISTRY_KEYS,
 } from './startup/registry';
 export type { RegistrySnapshot, RegistryStore } from './startup/registry';
@@ -176,19 +189,29 @@ export type { StartupStore } from './startup/startup';
 export { createWindowsStartupStore } from './startup/index';
 export type { WindowsStartupStoreOptions } from './startup/index';
 export {
+  SYSTEM_HARDWARE_SCRIPT,
   SYSTEM_INFO_SCRIPT,
+  composeSystemInfo,
   createCpuUsageSampler,
   getSystemInfoStatic,
   mapProcessorArchitecture,
   normalizeOsArch,
   parseSystemInfoJson,
+  querySystemHardware,
   readCpuTimes,
   readMemoryInfo,
+  readSystemInfoBase,
 } from './system/system-info';
 export type {
+  ComposeSystemInfoOptions,
   CpuTimesSample,
   MemoryInfo,
+  NativeSystemInfo,
   ParsedSystemInfo,
+  SystemHardware,
+  SystemHardwareOptions,
+  SystemInfoBase,
+  SystemInfoBaseOptions,
   SystemInfoBios,
   SystemInfoBoard,
   SystemInfoCpu,

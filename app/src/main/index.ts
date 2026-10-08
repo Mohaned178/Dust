@@ -2,9 +2,7 @@ import {
   backupDirFor,
   defaultRuleEnv,
   createWindowsStartupStore,
-  getVolumeUsageAsync,
   journalPathFor,
-  listVolumesAsync,
   pruneRegistryBackups,
   systemDriveRoot,
 } from '@dust/core';
@@ -232,11 +230,20 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
   app.quit();
 }
 
+function describeError(error: unknown): string {
+  if (error instanceof Error) return String(error);
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function logMainError(userDataDir: string, scope: string, error: unknown): void {
   try {
     appendFileSync(
       join(userDataDir, 'error.log'),
-      `${new Date().toISOString()} [${scope}] ${String(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
+      `${new Date().toISOString()} [${scope}] ${describeError(error)}\n${error instanceof Error ? (error.stack ?? '') : ''}\n`,
       'utf8',
     );
   } catch {
@@ -416,6 +423,8 @@ void app
       workerPath: resolveWorkerPath(__dirname),
       volumesCacheFile: join(userDataDir, 'volumes-cache.json'),
       installedAppsCacheFile: join(userDataDir, 'installed-apps-cache.json'),
+      systemHardwareCacheFile: join(userDataDir, 'system-hardware-cache.json'),
+      prewarmAfterFirstDashboard: benchRoot === undefined,
       startup,
       dustInstallPath,
       uninstallDeps: {
@@ -510,9 +519,6 @@ void app
       updates.dispose();
       host.dispose();
     });
-    void listVolumesAsync()
-      .then((volumes) => getVolumeUsageAsync(volumes.map((volume) => volume.root)))
-      .catch(() => undefined);
     await loadRenderer(window);
     updates.start();
     hardenWebContents(window.webContents, {

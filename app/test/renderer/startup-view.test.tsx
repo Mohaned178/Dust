@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StartupView } from '../../renderer/src/pages/StartupView';
-import type { StartupEntry, StartupListResult, StartupNotice, StartupToggleResult } from '../../src/shared/ipc';
+import type {
+  StartupDetailsEvent,
+  StartupEntry,
+  StartupListResult,
+  StartupNotice,
+  StartupToggleResult,
+} from '../../src/shared/ipc';
 import { makeApi, makeStartupEntry, makeStartupState } from './fakes';
 
 function renderView(api = makeApi(), notice: StartupNotice | null = null) {
@@ -390,5 +396,124 @@ describe('StartupView', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Discord disabled');
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
     expect(onNoticeShown).toHaveBeenCalledTimes(1);
+  });
+
+  describe('startup details events', () => {
+    function makeBus() {
+      const handlers = new Set<(event: StartupDetailsEvent) => void>();
+      return {
+        onStartupEvent: (handler: (event: StartupDetailsEvent) => void) => {
+          handlers.add(handler);
+          return () => {
+            handlers.delete(handler);
+          };
+        },
+        emit: (event: StartupDetailsEvent) => {
+          for (const handler of [...handlers]) handler(event);
+        },
+        count: () => handlers.size,
+      };
+    }
+
+    function deferredList() {
+      let resolve!: (result: StartupListResult) => void;
+      const promise = new Promise<StartupListResult>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    }
+
+    const discord = makeStartupEntry({ id: 'a1b2c3d4e5f60718', name: 'Discord', publisher: null });
+    const steam = makeStartupEntry({ id: 'b2c3d4e5f6071829', name: 'Steam', publisher: null });
+
+    it('patches rows by id when a details event arrives', async () => {
+      const bus = makeBus();
+      renderView(
+        makeApi({
+          getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [discord, steam] }) }),
+          onStartupEvent: bus.onStartupEvent,
+        }),
+      );
+      await flush();
+      expect(screen.queryByText('Acme Inc.')).toBeNull();
+
+      act(() => {
+        bus.emit({ details: [{ id: steam.id, publisher: 'Acme Inc.', iconDataUrl: 'data:image/png;base64,abc' }] });
+      });
+
+      const steamRow = screen.getByText('Steam').closest('li')!;
+      expect(within(steamRow).getByText('Acme Inc.')).toBeInTheDocument();
+      expect(steamRow.querySelector('img')).toHaveAttribute('src', 'data:image/png;base64,abc');
+      const discordRow = screen.getByText('Discord').closest('li')!;
+      expect(within(discordRow).queryByText('Acme Inc.')).toBeNull();
+    });
+
+    it('still applies an event that arrived before the list reply', async () => {
+      const bus = makeBus();
+      const list = deferredList();
+      renderView(makeApi({ getStartup: () => list.promise, onStartupEvent: bus.onStartupEvent }));
+      await flush();
+      expect(bus.count()).toBe(1);
+
+      act(() => {
+        bus.emit({ details: [{ id: discord.id, publisher: 'Early Publisher', iconDataUrl: null }] });
+      });
+      await act(async () => list.resolve({ ok: true, state: makeStartupState({ entries: [discord, steam] }) }));
+
+      expect(screen.getByText('Early Publisher')).toBeInTheDocument();
+      expect(screen.getByText('Steam')).toBeInTheDocument();
+    });
+
+    it('keeps the fresh list when an event arrives during a background revalidation', async () => {
+      const bus = makeBus();
+      const first = render(
+        <StartupView
+          api={makeApi({
+            getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [discord] }) }),
+            onStartupEvent: bus.onStartupEvent,
+          })}
+          notice={null}
+          onNoticeShown={() => {}}
+        />,
+      );
+      await flush();
+      first.unmount();
+
+      const list = deferredList();
+      renderView(makeApi({ getStartup: () => list.promise, onStartupEvent: bus.onStartupEvent }));
+      expect(screen.getByText('Discord')).toBeInTheDocument();
+      expect(screen.queryByText('Steam')).toBeNull();
+
+      act(() => {
+        bus.emit({ details: [{ id: discord.id, publisher: 'Late Publisher', iconDataUrl: null }] });
+      });
+      expect(screen.getByText('Late Publisher')).toBeInTheDocument();
+
+      await act(async () => list.resolve({ ok: true, state: makeStartupState({ entries: [discord, steam] }) }));
+
+      expect(screen.getByText('Steam')).toBeInTheDocument();
+      expect(screen.getByText('Late Publisher')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Startup Manager' }).parentElement).toHaveTextContent('2 entries');
+    });
+
+    it('stops listening when the page unmounts', async () => {
+      const bus = makeBus();
+      const view = render(
+        <StartupView
+          api={makeApi({
+            getStartup: async () => ({ ok: true, state: makeStartupState({ entries: [discord] }) }),
+            onStartupEvent: bus.onStartupEvent,
+          })}
+          notice={null}
+          onNoticeShown={() => {}}
+        />,
+      );
+      await flush();
+      expect(bus.count()).toBe(1);
+
+      view.unmount();
+
+      expect(bus.count()).toBe(0);
+    });
   });
 });

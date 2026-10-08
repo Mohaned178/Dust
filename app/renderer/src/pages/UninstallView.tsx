@@ -6,6 +6,7 @@ import { UninstallWizard } from '../components/UninstallWizard';
 import { Alert, Badge, Button, FOCUS, PageHeader } from '../components/ui';
 import { RefreshIcon, SearchIcon } from '../components/icons';
 import { formatBytes } from '../format';
+import { useCachedResource } from '../page-cache';
 
 export interface UninstallViewProps {
   api: DustApi;
@@ -21,16 +22,27 @@ const CAUTION_LABEL: Record<NonNullable<UninstallAppSummary['caution']>, string>
   runtime: 'Runtime',
 };
 
+type AppList = Extract<UninstallListResult, { ok: true }>;
+
+async function fetchApps(api: DustApi, force: boolean): Promise<AppList> {
+  const result = await api.listUninstallApps(force);
+  if (!result.ok) throw new Error(result.message);
+  return result;
+}
+
 function sizeOf(app: UninstallAppSummary): number | null {
   if (app.sizeBytes !== null) return app.sizeBytes;
   return app.estimatedSizeKb === null ? null : app.estimatedSizeKb * 1024;
 }
 
 export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
-  const [list, setList] = useState<UninstallListResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: list,
+    error,
+    revalidating: loading,
+    reload,
+  } = useCachedResource<AppList>('uninstall-apps', () => fetchApps(api, false));
   const [sizes, setSizes] = useState<ReadonlyMap<string, number>>(new Map());
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [removing, setRemoving] = useState<UninstallAppSummary | null>(null);
@@ -48,24 +60,9 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
     setToast({ key: toastKey.current, message, durationMs: 5000 });
   }, []);
 
-  const load = useCallback(
-    (force: boolean) => {
-      setLoading(true);
-      api
-        .listUninstallApps(force)
-        .then((result) => {
-          setList(result);
-          setError(result.ok ? null : result.message);
-        })
-        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
-        .finally(() => setLoading(false));
-    },
-    [api],
-  );
-
-  useEffect(() => {
-    load(false);
-  }, [load]);
+  const refresh = useCallback(() => {
+    void reload(() => fetchApps(api, true));
+  }, [api, reload]);
 
   // Install-folder sizes are measured in the background and arrive one by one.
   useEffect(
@@ -95,13 +92,12 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
   useEffect(() => {
     if (pendingAppId === null || list === null) return;
     setPendingAppId(null);
-    if (!list.ok) return; // The error banner already explains why nothing opened.
     if (list.apps.some((app) => app.id === pendingAppId)) setFlowAppId(pendingAppId);
     else showToast('That app is no longer installed. Nothing was changed.');
   }, [pendingAppId, list, showToast]);
 
   const apps = useMemo(() => {
-    const raw = list !== null && list.ok ? list.apps : [];
+    const raw = list?.apps ?? [];
     return raw.map((app) => (sizes.has(app.id) ? { ...app, sizeBytes: sizes.get(app.id)! } : app));
   }, [list, sizes]);
 
@@ -118,7 +114,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
     );
   }, [apps, query, sort]);
 
-  const elevated = list !== null && list.ok && list.elevated;
+  const elevated = list?.elevated === true;
   const totalBytes = apps.reduce((sum, app) => sum + (sizeOf(app) ?? 0), 0);
 
   return (
@@ -128,7 +124,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           title="Uninstall apps"
           subtitle="Remove an app with its own uninstaller, then clear the folders and settings it leaves behind."
           actions={
-            <Button size="sm" onClick={() => load(true)} aria-label="Refresh app list">
+            <Button size="sm" onClick={refresh} aria-label="Refresh app list">
               <RefreshIcon className="h-4 w-4" />
               Refresh
             </Button>
@@ -140,7 +136,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
             tone="danger"
             className="mt-6"
             action={
-              <Button size="sm" disabled={loading} onClick={() => load(true)}>
+              <Button size="sm" disabled={loading} onClick={refresh}>
                 Try again
               </Button>
             }
@@ -188,11 +184,11 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
               <div key={index} className="h-16 animate-pulse rounded-xl border border-hairline bg-surface" />
             ))}
           </div>
-        ) : error !== null && apps.length === 0 ? null : list !== null && list.ok && list.trusted === false ? (
+        ) : error !== null && apps.length === 0 ? null : list !== null && list.trusted === false ? (
           <Empty
             text="Couldn't read installed apps."
             action={
-              <Button size="sm" onClick={() => load(true)}>
+              <Button size="sm" onClick={refresh}>
                 Try again
               </Button>
             }
@@ -227,7 +223,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           app={removing}
           elevated={elevated}
           onClose={() => setRemoving(null)}
-          onChanged={() => load(true)}
+          onChanged={refresh}
         />
       )}
 
@@ -238,7 +234,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           adoptJobId={adoptJobId}
           elevated={elevated}
           onClose={() => setAdoptJobId(null)}
-          onFinished={() => load(true)}
+          onFinished={refresh}
         />
       )}
 
@@ -248,7 +244,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           appId={flowAppId}
           elevated={elevated}
           onClose={() => setFlowAppId(null)}
-          onFinished={() => load(true)}
+          onFinished={refresh}
         />
       )}
 

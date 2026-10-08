@@ -349,6 +349,7 @@ export function makeSystemInfo(overrides: Partial<SystemInfoStatic> = {}): Syste
   return {
     capturedAt: new Date(2026, 8, 27, 14, 32).getTime(),
     hardwareAvailable: true,
+    hardwarePending: false,
     os: { name: 'Windows 11 Pro', version: '25H2', build: '26200.9457', arch: 'x64' },
     hostname: 'dev-machine',
     uptimeMs: (2 * 24 + 4) * 3_600_000,
@@ -570,6 +571,7 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     installUpdate: async () => {},
     onUpdateEvent: () => () => {},
     onUninstallEvent: () => () => {},
+    onStartupEvent: () => () => {},
     onScanEvent: () => () => {},
     ...overrides,
   };

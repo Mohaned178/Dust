@@ -9,6 +9,7 @@ import type {
   DashboardState,
   ScanEvent,
   StartAnalyzeResult,
+  StartupDetailsEvent,
   SystemInfoStatic,
   UninstallExecuteRequest,
   UninstallLaunchHint,
@@ -189,6 +190,7 @@ describe('registerIpcHandlers', () => {
         message: 'This startup entry no longer exists.',
       })),
       records: vi.fn(async () => []),
+      onDetails: vi.fn(() => () => {}),
     };
     const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { startup });
     const registrar = new FakeRegistrar();
@@ -215,6 +217,40 @@ describe('registerIpcHandlers', () => {
     expect(await registrar.invoke(IPC.startupHint)).toEqual(hint);
 
     unsubscribe();
+    host.dispose();
+  });
+
+  it('forwards startup details events and stops forwarding after the disposer', () => {
+    const listeners = new Set<(event: StartupDetailsEvent) => void>();
+    const startup = {
+      list: vi.fn(),
+      disable: vi.fn(),
+      enable: vi.fn(),
+      removeBackup: vi.fn(),
+      records: vi.fn(async () => []),
+      onDetails: vi.fn((listener: (event: StartupDetailsEvent) => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      }),
+    };
+    const { host } = makeHost(new FakeSession({ root: 'T:\\' }), { startup });
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    const dispose = registerIpcHandlers(
+      new FakeRegistrar(),
+      host,
+      { send: (channel, payload) => sent.push({ channel, payload }) },
+      { revealPath: async () => {}, relaunchElevated: async () => {} },
+    );
+    const event: StartupDetailsEvent = { details: [{ id: 'a1', publisher: 'Acme', iconDataUrl: null }] };
+
+    expect(listeners.size).toBe(1);
+    for (const listener of listeners) listener(event);
+    expect(sent).toEqual([{ channel: IPC.startupEvent, payload: event }]);
+
+    dispose();
+    expect(listeners.size).toBe(0);
     host.dispose();
   });
 
@@ -279,6 +315,7 @@ describe('registerIpcHandlers', () => {
     const snapshot: SystemInfoStatic = {
       capturedAt: 5,
       hardwareAvailable: true,
+      hardwarePending: false,
       os: { name: 'Windows 11 Pro', version: null, build: '26200.9457', arch: 'x64' },
       hostname: 'dev-machine',
       uptimeMs: 1000,

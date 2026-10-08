@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { RunSource, RunValue, StartupSource } from './types';
 import { RUN_SOURCES, STARTUP_SOURCES } from './types';
+import { readRegistryValues, registryValueToString } from '../system/win-registry';
+import type { RegistryValue } from '../system/win-registry';
 
 export const RUN_REGISTRY_KEYS: Record<RunSource, string> = {
   'hkcu-run': 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
@@ -45,7 +47,7 @@ export interface RegistryStore {
 const QUERY_TIMEOUT_MS = 20_000;
 const SNAPSHOT_TTL_MS = 30_000;
 
-const READ_SNAPSHOT_SCRIPT = [
+export const READ_SNAPSHOT_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
   'function Read-Run([string]$path) {',
   '  $props = Get-ItemProperty -Path $path',
@@ -154,6 +156,39 @@ function runPowerShell(script: string, env: Record<string, string> = {}): Promis
   });
 }
 
+const PROVIDER_PROPERTIES = new Set(['pspath', 'psparentpath', 'pspchildname', 'psdrive', 'psprovider']);
+
+function readNativeValues(key: string): Array<[string, RegistryValue]> {
+  const match = /^(HKLM|HKCU):\\(.*)$/.exec(key);
+  if (match === null) throw new Error(`Unsupported registry key ${key}`);
+  const values = readRegistryValues(match[1] as 'HKLM' | 'HKCU', match[2] ?? '');
+  if (values === null) return [];
+  return [...values]
+    .filter(([name]) => !PROVIDER_PROPERTIES.has(name.toLowerCase()))
+    .map(([name, value]) => [name.length === 0 ? '(default)' : name, value]);
+}
+
+export function readNativeRegistrySnapshot(): RegistrySnapshot {
+  const run = {} as Record<RunSource, RunValue[]>;
+  const backups: Array<{ source: RunSource; raw: string }> = [];
+  for (const source of RUN_SOURCES) {
+    run[source] = readNativeValues(RUN_REGISTRY_KEYS[source]).map(([name, value]) => ({
+      name,
+      command: registryValueToString(value),
+    }));
+    for (const [, value] of readNativeValues(BACKUP_REGISTRY_KEYS[source])) {
+      backups.push({ source, raw: registryValueToString(value) });
+    }
+  }
+  const windowsDisabled = {} as Record<StartupSource, string[]>;
+  for (const source of STARTUP_SOURCES) {
+    windowsDisabled[source] = readNativeValues(APPROVED_REGISTRY_KEYS[source])
+      .filter(([, value]) => value.type === 'binary' && (value.value as Buffer)[0]! % 2 === 1)
+      .map(([name]) => name);
+  }
+  return { run, backups, windowsDisabled };
+}
+
 function asArray<T>(value: unknown): T[] {
   if (value === null || value === undefined) return [];
   return Array.isArray(value) ? (value as T[]) : [value as T];
@@ -214,6 +249,11 @@ export function createPowerShellRegistryStore(): RegistryStore {
   }
 
   async function loadSnapshot(): Promise<RegistrySnapshot> {
+    try {
+      return readNativeRegistrySnapshot();
+    } catch {
+      // Falls through to the PowerShell read.
+    }
     const raw = await runPowerShell(READ_SNAPSHOT_SCRIPT);
     const snapshot = parseRegistrySnapshot(raw);
     if (snapshot === null) throw new Error('Could not read startup entries');

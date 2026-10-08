@@ -1430,6 +1430,7 @@ describe('createEngineHost', () => {
     const snapshot: SystemInfoStatic = {
       capturedAt: 5,
       hardwareAvailable: true,
+      hardwarePending: false,
       os: { name: 'Windows 11 Pro', version: null, build: '26200.9457', arch: 'x64' },
       hostname: 'dev-machine',
       uptimeMs: 1000,

@@ -228,6 +228,7 @@ describe('getSystemInfoStatic', () => {
     expect(snapshot).toEqual({
       capturedAt: 1234,
       hardwareAvailable: true,
+      hardwarePending: false,
       os: { name: 'Windows 11 Pro', version: '25H2', build: '26200.9457', arch: 'x64' },
       hostname: 'dev-machine',
       uptimeMs: (2 * 24 + 4) * 3600 * 1000,

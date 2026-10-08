@@ -8,6 +8,7 @@ import type {
   StartAnalyzeResult,
 } from '../../../src/shared/ipc';
 import { formatBytes, formatRelativeTime } from '../format';
+import { useCachedResource } from '../page-cache';
 import { Badge, Button, Card, FOCUS, Meter, PageHeader, SectionTitle } from '../components/ui';
 import { CodeIcon, HardDriveIcon, PowerIcon, UninstallIcon } from '../components/icons';
 
@@ -30,29 +31,11 @@ function usedBytes(volume: DashboardVolumeCard): number | null {
 }
 
 export function HomeView({ api, onScan, onViewResults, onQuickClean, onOpenTool, onSystemDrive }: HomeViewProps) {
-  const [state, setState] = useState<DashboardState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: state, error, reload } = useCachedResource<DashboardState>('dashboard', () => api.getDashboard());
   const [categories, setCategories] = useState<CategorySummaryRow[] | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [busyWith, setBusyWith] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    setError(null);
-    api
-      .getDashboard()
-      .then((next) => {
-        if (active) setState(next);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, reloadKey]);
 
   const system = state?.volumes.find((volume) => volume.role === 'system') ?? null;
   const systemRoot = system?.root ?? null;
@@ -107,12 +90,12 @@ export function HomeView({ api, onScan, onViewResults, onQuickClean, onOpenTool,
     if (target) await scan(target);
   }, [api, busyWith, scan, state]);
 
-  if (error !== null) {
+  if (state === null && error !== null) {
     return (
       <Page>
         <Card className="p-8 text-center">
           <p className="text-sm text-ink">Couldn&rsquo;t read your drives.</p>
-          <Button className="mt-4" onClick={() => setReloadKey((key) => key + 1)}>
+          <Button className="mt-4" onClick={() => void reload()}>
             Try again
           </Button>
         </Card>

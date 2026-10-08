@@ -15,6 +15,7 @@ import type {
   ScanEvent,
   SetPinResult,
   StartAnalyzeResult,
+  StartupDetailsEvent,
   StartupLaunchHint,
   StartupListResult,
   StartupRelaunchAction,
@@ -86,6 +87,13 @@ const api: DustApi = {
     ipcRenderer.on(IPC.uninstallEvent, listener);
     return () => {
       ipcRenderer.removeListener(IPC.uninstallEvent, listener);
+    };
+  },
+  onStartupEvent: (handler: (event: StartupDetailsEvent) => void) => {
+    const listener = (_event: unknown, payload: StartupDetailsEvent) => handler(payload);
+    ipcRenderer.on(IPC.startupEvent, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC.startupEvent, listener);
     };
   },
   onScanEvent: (handler: (event: ScanEvent) => void) => {

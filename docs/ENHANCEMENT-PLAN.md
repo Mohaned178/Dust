@@ -4,6 +4,9 @@ Handoff file for the next round of work. Read this first, then `git log -3` and 
 Written 2026-10-09 on branch `feat/ui-overhaul` (pushed, PR not opened yet). The previous round is
 `docs/UI-OVERHAUL-PLAN.md`; its visual checks are still open.
 
+**Status (2026-10-09):** workstream 1 (speed) and the crash-logging fix from 8 are done and committed locally (not
+pushed). Next: workstream 2 (Results).
+
 ## How to work through it
 
 - One workstream at a time, in the order in section 9, each in its own commit. Workstream 1 is a bug and should ship
@@ -82,15 +85,15 @@ the main process for its data only on mount. The main process then starts a new 
 ~0.3–0.5 s just to start) and the page shows a skeleton until **all** of it returns. System Info has a 5-minute cache,
 but its first visit is always cold. The Startup page waits for publishers **and** icons before showing any row.
 
-- [ ] **Prewarm after launch.** Once the window has shown and Home has loaded, start `systemInfo.get()`,
+- [x] **Prewarm after launch.** Once the window has shown and Home has loaded, start `systemInfo.get()`,
       `startupService.list()` and the volume list in the background (one after the other, not in parallel, so they do
       not compete with Home). Files: `app/src/main/index.ts`, `app/src/main/host/engine-host.ts`.
-- [ ] **Keep page data in the renderer.** A small per-page cache (module-level map or a context) so going back to a
+- [x] **Keep page data in the renderer.** A small per-page cache (module-level map or a context) so going back to a
       page shows the last data at once and refreshes quietly in the background (stale-while-revalidate). Files: the
       views in `app/renderer/src/pages/`, possibly a new `app/renderer/src/page-cache.ts`.
-- [ ] **Startup: show rows first, enrich later.** Return the entries as soon as the registry and the folders have
+- [x] **Startup: show rows first, enrich later.** Return the entries as soon as the registry and the folders have
       been read; send publishers and icons in a second response or an event. Files: `app/src/main/host/startup.ts`.
-- [ ] **Replace PowerShell where a direct call exists.** `koffi` is already a dependency:
+- [x] **Replace PowerShell where a direct call exists.** `koffi` is already a dependency:
   - Registry reads (startup Run keys, installed apps, OS version from `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion`,
     BIOS from `HKLM\HARDWARE\DESCRIPTION\System\BIOS`, CPU name from `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0`):
     `RegOpenKeyExW` / `RegEnumValueW` / `RegQueryValueExW`.
@@ -98,13 +101,28 @@ but its first visit is always cold. The Startup page waits for publishers **and*
   - File publisher: `GetFileVersionInfoW` + `VerQueryValueW` (`\StringFileInfo\...\CompanyName`).
   - Keep PowerShell only for what has no simple API (GPU list, physical disks). Run it once and cache it on disk,
     since hardware rarely changes.
-- [ ] **Fix the timing instrumentation.** `timed()` in `app/src/main/ipc.ts:46` measures only the synchronous part of
+- [x] **Fix the timing instrumentation.** `timed()` in `app/src/main/ipc.ts:46` measures only the synchronous part of
       a handler. For async handlers it logs the time to create the promise, not the time to resolve it, so every async
       IPC number in the timing log is wrong. Await when the result is a promise.
 
 **Done when:** opening System Info and Startup from Home shows content in under 200 ms after the first launch, and
 under 1 s on the very first visit. Add a test for the stale-while-revalidate cache and for startup rows arriving
 before icons.
+
+**Result (2026-10-09).** Measured in the dev app over the DevTools protocol, from the sidebar click until the page
+content is in the DOM:
+
+| Page        | Before, 1st visit | After, 1st visit | After, 1st visit once prewarm ran | 2nd visit |
+| ----------- | ----------------- | ---------------- | --------------------------------- | --------- |
+| System Info | 1.59–2.08 s       | 75–86 ms         | 17 ms                             | 7–16 ms   |
+| Startup     | 1.00–1.13 s       | 48–58 ms         | 28 ms                             | 6–20 ms   |
+
+Native calls (`core/scripts/compare-native.ts`, which also checks they return exactly what PowerShell returned):
+startup registry 2.5 ms (was 494 ms), installed apps 51 ms (792 ms), volume list 18 ms (1.9 s), publishers 6.5 ms
+(387 ms), System Info base 17 ms (1.8 s). PowerShell is left only for GPUs (about 0.45 s, cached on disk for 7 days in
+`system-hardware-cache.json` and refreshed once per run) and SSD/HDD media type (cached on disk for 7 days in
+`volumes-cache.json`; scan start waits for it if it is still unknown). On a first launch with no hardware cache, System
+Info shows everything except Graphics at once and fills Graphics in when the query returns.
 
 ---
 
@@ -304,7 +322,7 @@ space went, and a calm screen. The most common complaints are upsells, bundled s
 
 ## 8. Other issues found (not reported by the owner)
 
-- [ ] **Crash reasons are lost.** `%APPDATA%\Dust\error.log` records three renderer crashes (2026-10-03 twice,
+- [x] **Crash reasons are lost.** `%APPDATA%\Dust\error.log` records three renderer crashes (2026-10-03 twice,
       2026-10-07) as `[render-process-gone] [object Object]`. The details object is stringified wrongly; log
       `JSON.stringify(details)` (it holds `reason` and `exitCode`). The cause is `String(error)` in `logMainError`,
       `app/src/main/index.ts:235`, called from the handlers at lines 255–260. Then watch for the next crash.

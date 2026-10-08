@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SystemInfoLive, SystemInfoStatic } from '@dust/core';
-import type { DustApi } from '../../../src/shared/ipc';
+import type { DashboardState, DustApi } from '../../../src/shared/ipc';
 import { StartupToast } from '../components/StartupToast';
 import { RefreshIcon } from '../components/icons';
 import { Alert, Badge, Button, Card, Meter, PageHeader, SectionTitle } from '../components/ui';
 import { formatBytes } from '../format';
+import { useCachedResource } from '../page-cache';
 import {
   VRAM_CAVEAT,
   formatBios,
@@ -21,6 +22,8 @@ import {
 import type { StorageVolume } from '../system-info';
 
 const LIVE_INTERVAL_MS = 1500;
+const HARDWARE_POLL_MS = 750;
+const HARDWARE_POLL_LIMIT_MS = 30_000;
 
 export interface SystemInfoViewProps {
   api: DustApi;
@@ -107,40 +110,20 @@ function SkeletonBlock({ className }: { className: string }) {
   return <div className={`animate-pulse rounded-2xl border border-hairline bg-surface ${className}`} />;
 }
 
-function errorText(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
 export function SystemInfoView({ api }: SystemInfoViewProps) {
-  const [snapshot, setSnapshot] = useState<SystemInfoStatic | null>(null);
+  const info = useCachedResource<SystemInfoStatic>('system-info', () => api.getSystemInfo(false));
+  // Volumes come from the dashboard; a failure there only hides the Storage section.
+  const dashboard = useCachedResource<DashboardState>('dashboard', () => api.getDashboard());
   const [live, setLive] = useState<SystemInfoLive | null>(null);
-  const [storage, setStorage] = useState<StorageVolume[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toastKey, setToastKey] = useState(0);
-
-  const load = useCallback(
-    (force: boolean) => {
-      api
-        .getSystemInfo(force)
-        .then((next) => {
-          setSnapshot(next);
-          setError(null);
-        })
-        .catch((cause: unknown) => setError(errorText(cause)))
-        .finally(() => setRefreshing(false));
-      // Volumes come from the dashboard; a failure here only hides the Storage section.
-      api
-        .getDashboard()
-        .then((state) => setStorage(toStorageVolumes(state.volumes)))
-        .catch(() => {});
-    },
-    [api],
+  const { data: snapshot, error, reload: reloadInfo } = info;
+  const { reload: reloadDashboard } = dashboard;
+  const hardwarePending = snapshot?.hardwarePending === true;
+  const storage = useMemo(
+    () => (dashboard.data === null ? null : toStorageVolumes(dashboard.data.volumes)),
+    [dashboard.data],
   );
-
-  useEffect(() => {
-    load(false);
-  }, [load]);
 
   // Live values refresh only while the window is visible; coming back polls immediately.
   useEffect(() => {
@@ -174,15 +157,33 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
     };
   }, [api]);
 
+  // Graphics arrive after the rest of the page; ask again until they do.
+  useEffect(() => {
+    if (!hardwarePending) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - startedAt >= HARDWARE_POLL_LIMIT_MS) {
+        window.clearInterval(timer);
+        return;
+      }
+      void reloadInfo();
+    }, HARDWARE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hardwarePending, reloadInfo]);
+
+  const forceReload = useCallback(
+    () => Promise.all([reloadInfo(() => api.getSystemInfo(true)), reloadDashboard()]),
+    [api, reloadInfo, reloadDashboard],
+  );
+
   const refresh = useCallback(() => {
     setRefreshing(true);
-    load(true);
-  }, [load]);
+    void forceReload().finally(() => setRefreshing(false));
+  }, [forceReload]);
 
   const retry = useCallback(() => {
-    setError(null);
-    load(true);
-  }, [load]);
+    void forceReload();
+  }, [forceReload]);
 
   const copy = useCallback(() => {
     if (snapshot === null) return;
@@ -319,9 +320,7 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
         </LiveTile>
       </div>
 
-      {!snapshot.hardwareAvailable && (
-        <Alert className="mt-8">Hardware details unavailable on this machine.</Alert>
-      )}
+      {!snapshot.hardwareAvailable && <Alert className="mt-8">Hardware details unavailable on this machine.</Alert>}
 
       {storage !== null && storage.length > 0 && (
         <InfoSection title="Storage" className="mt-8">
@@ -347,6 +346,14 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
             {processorRows.map((row) => (
               <InfoRow key={row.label} label={row.label} value={row.value} />
             ))}
+          </InfoSection>
+        )}
+
+        {snapshot.hardwarePending && snapshot.gpus.length === 0 && (
+          <InfoSection title="Graphics">
+            <div role="status" aria-live="polite" className="px-5 py-3.5">
+              <p className="animate-pulse text-sm text-ink-muted">Reading graphics hardware…</p>
+            </div>
           </InfoSection>
         )}
 

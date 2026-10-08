@@ -43,23 +43,46 @@ export function setTimingLogPath(path: string): void {
   timingLogPath = path;
 }
 
+function logTiming(name: string, startedAt: number): void {
+  const line = `[dust:timing] ${name} ${(performance.now() - startedAt).toFixed(1)}ms\n`;
+  try {
+    if (timingLogPath !== null) appendFileSync(timingLogPath, line);
+    else console.log(line.trimEnd());
+  } catch {
+    /* timing must never break the app */
+  }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
 function timed<T>(name: string, fn: () => T): T {
   if (!timingEnabled) return fn();
   const startedAt = performance.now();
+  let result: T;
   try {
-    return fn();
-  } finally {
-    const line = `[dust:timing] ${name} ${(performance.now() - startedAt).toFixed(1)}ms\n`;
-    if (timingLogPath !== null) {
-      try {
-        appendFileSync(timingLogPath, line);
-      } catch {
-        /* timing must never break the app */
-      }
-    } else {
-      console.log(line.trimEnd());
-    }
+    result = fn();
+  } catch (error) {
+    logTiming(name, startedAt);
+    throw error;
   }
+  if (isThenable(result)) {
+    // Log once it settles; the caller still gets the original promise.
+    try {
+      const log = (): void => logTiming(name, startedAt);
+      result.then(log, log);
+    } catch {
+      /* timing must never break the app */
+    }
+  } else {
+    logTiming(name, startedAt);
+  }
+  return result;
 }
 
 export function registerIpcHandlers(
@@ -144,9 +167,13 @@ export function registerIpcHandlers(
   const offUninstall = host.onUninstallEvent((event) => {
     instrument('ipc.send', () => sender.send(IPC.uninstallEvent, event));
   });
+  const offStartup = host.onStartupEvent((event) => {
+    instrument('ipc.send', () => sender.send(IPC.startupEvent, event));
+  });
   return () => {
     offScan();
     offUninstall();
+    offStartup();
   };
 }
 

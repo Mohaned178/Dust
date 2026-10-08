@@ -192,18 +192,52 @@ describe('listVolumesAsync disk cache', () => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('serves persisted volumes without running PowerShell', async (ctx) => {
-    if (process.platform !== 'win32') {
-      ctx.skip();
-      return;
-    }
-    const dir = mkdtempSync(join(tmpdir(), 'dust-volumes-cache-'));
-    dirs.push(dir);
-    const path = join(dir, 'volumes.json');
-    writePersistentCache(path, [{ root: 'Q:\\', label: 'Fixture', driveType: 'fixed', mediaType: 'ssd' }], () => 1000);
+  it.runIf(process.platform === 'win32')(
+    'lists volumes natively and takes the media types from the persisted cache by root',
+    { timeout: 30_000 },
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'dust-volumes-cache-'));
+      dirs.push(dir);
+      const path = join(dir, 'volumes.json');
+      const system = systemDriveRoot();
+      expect(system).not.toBeNull();
 
-    resetVolumeCache();
-    const volumes = await listVolumesAsync({ cacheFile: path, diskTtlMs: 60_000, now: () => 2000 });
-    expect(volumes).toEqual([{ root: 'Q:\\', label: 'Fixture', driveType: 'fixed', mediaType: 'ssd' }]);
-  });
+      // The real fixed volumes, each with a persisted media type that differs from any real one by
+      // construction: the system drive is "hdd", every other fixed volume "ssd".
+      const real = await listVolumesAsync();
+      resetVolumeCache();
+      const persisted = real
+        .filter((volume) => volume.driveType === 'fixed')
+        .map((volume) => ({ ...volume, mediaType: volume.root === system ? ('hdd' as const) : ('ssd' as const) }));
+      writePersistentCache(path, persisted, () => 1000);
+
+      const volumes = await listVolumesAsync({ cacheFile: path, diskTtlMs: 60_000, now: () => 2000 });
+
+      const systemVolume = volumes.find((volume) => volume.root === system);
+      expect(systemVolume).toBeDefined();
+      expect(systemVolume?.driveType).toBe('fixed');
+      expect(systemVolume?.mediaType).toBe('hdd');
+      for (const volume of volumes.filter((entry) => entry.driveType === 'fixed' && entry.root !== system)) {
+        expect(volume.mediaType).toBe('ssd');
+      }
+      expect(volumes.map((volume) => volume.root).sort()).toEqual(real.map((volume) => volume.root).sort());
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'ignores persisted media types older than the TTL',
+    { timeout: 30_000 },
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'dust-volumes-cache-'));
+      dirs.push(dir);
+      const path = join(dir, 'volumes.json');
+      const system = systemDriveRoot();
+      writePersistentCache(path, [{ root: system!, label: null, driveType: 'fixed', mediaType: 'hdd' }], () => 1000);
+
+      resetVolumeCache();
+      const volumes = await listVolumesAsync({ cacheFile: path, diskTtlMs: 1000, now: () => 1_000_000 });
+
+      expect(volumes.find((volume) => volume.root === system)?.mediaType).toBe('unknown');
+    },
+  );
 });

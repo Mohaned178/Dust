@@ -1,8 +1,20 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { disableStartupEntry, enableStartupEntry, listStartupEntries, removeStartupBackup } from '@dust/core';
+import {
+  disableStartupEntry,
+  enableStartupEntry,
+  listStartupEntries,
+  readFileCompanyNames,
+  removeStartupBackup,
+} from '@dust/core';
 import type { StartupEntryRecord, StartupStore } from '@dust/core';
-import type { StartupEntry, StartupListResult, StartupListState, StartupToggleResult } from '../../shared/ipc';
+import type {
+  StartupDetailsEvent,
+  StartupEntry,
+  StartupListResult,
+  StartupListState,
+  StartupToggleResult,
+} from '../../shared/ipc';
 
 export const PUBLISHER_TTL_MS = 5 * 60_000;
 
@@ -12,6 +24,8 @@ export interface StartupService {
   enable(id: string): Promise<StartupToggleResult>;
   removeBackup(id: string): Promise<StartupToggleResult>;
   records(): Promise<StartupEntryRecord[]>;
+  /** Publishers and icons arrive after list() returns; this reports them as they become known. */
+  onDetails(listener: (event: StartupDetailsEvent) => void): () => void;
 }
 
 export interface StartupServiceDeps {
@@ -90,77 +104,123 @@ export function createStartupService(deps: StartupServiceDeps): StartupService {
   const loadIcon = deps.loadIcon ?? (async () => null);
   const publisherCache = new Map<string, string>();
   const iconCache = new Map<string, string | null>();
+  // After the TTL the old values stay on screen while they are loaded again.
+  const stalePublishers = new Set<string>();
+  const staleIcons = new Set<string>();
+  const publisherLoads = new Map<string, Promise<void>>();
+  const iconLoads = new Map<string, Promise<void>>();
+  const listeners = new Set<(event: StartupDetailsEvent) => void>();
+  let idsByPath = new Map<string, string[]>();
   let cacheLoadedAt = now();
 
-  function uniqueExecutables(records: StartupEntryRecord[]): string[] {
-    const paths = new Set<string>();
-    for (const record of records) {
-      const executable = executableFromCommand(record.command, env);
-      if (executable !== null) paths.add(executable);
-    }
-    return [...paths];
+  function publisherFor(path: string): string | null {
+    const publisher = publisherCache.get(path) ?? '';
+    return publisher.length > 0 ? publisher : null;
   }
 
-  async function refreshCaches(records: StartupEntryRecord[]): Promise<void> {
-    if (now() - cacheLoadedAt >= PUBLISHER_TTL_MS) {
-      publisherCache.clear();
-      iconCache.clear();
-      cacheLoadedAt = now();
-    }
-    const paths = uniqueExecutables(records);
+  function iconFor(path: string): string | null {
+    return iconCache.get(path) ?? null;
+  }
 
-    const missing = paths.filter((path) => !publisherCache.has(path));
-    if (missing.length > 0) {
-      try {
-        const loaded = await loadPublisher(missing);
-        for (const path of missing) publisherCache.set(path, loaded.get(path) ?? '');
-      } catch {
-        for (const path of missing) publisherCache.set(path, '');
+  function emitDetails(paths: string[]): void {
+    const details: StartupDetailsEvent['details'] = [];
+    for (const path of paths) {
+      for (const id of idsByPath.get(path) ?? []) {
+        details.push({ id, publisher: publisherFor(path), iconDataUrl: iconFor(path) });
       }
     }
+    if (details.length === 0) return;
+    for (const listener of [...listeners]) {
+      try {
+        listener({ details });
+      } catch {
+        /* a broken listener must not break the startup list */
+      }
+    }
+  }
 
+  async function loadPublishers(missing: string[]): Promise<void> {
+    let loaded: Map<string, string> | null = null;
+    try {
+      loaded = await loadPublisher(missing);
+    } catch {
+      /* unknown publishers are shown as blank */
+    }
+    const changed: string[] = [];
+    for (const path of missing) {
+      const value = loaded?.get(path) ?? '';
+      if (publisherCache.get(path) !== value) changed.push(path);
+      publisherCache.set(path, value);
+      stalePublishers.delete(path);
+      publisherLoads.delete(path);
+    }
+    emitDetails(changed);
+  }
+
+  async function loadIcons(missing: string[]): Promise<void> {
+    const changed: string[] = [];
     await Promise.all(
-      paths.map(async (path) => {
-        if (iconCache.has(path)) return;
+      missing.map(async (path) => {
         let icon: string | null;
         try {
           icon = await loadIcon(path);
         } catch {
           icon = null;
         }
+        if (iconCache.get(path) !== icon) changed.push(path);
         iconCache.set(path, icon);
+        staleIcons.delete(path);
+        iconLoads.delete(path);
       }),
     );
+    emitDetails(changed);
   }
 
-  async function toState(records: StartupEntryRecord[]): Promise<StartupListState> {
-    await refreshCaches(records);
-    return toStartupState(
-      records,
-      {
-        publisherFor: (path) => {
-          const publisher = publisherCache.get(path) ?? '';
-          return publisher.length > 0 ? publisher : null;
-        },
-        iconFor: (path) => iconCache.get(path) ?? null,
-      },
-      env,
-      now,
+  // Starts whatever is not known yet in the background; callers never wait for it.
+  function loadMissingDetails(records: StartupEntryRecord[]): void {
+    if (now() - cacheLoadedAt >= PUBLISHER_TTL_MS) {
+      cacheLoadedAt = now();
+      for (const path of publisherCache.keys()) stalePublishers.add(path);
+      for (const path of iconCache.keys()) staleIcons.add(path);
+    }
+    const ids = new Map<string, string[]>();
+    for (const record of records) {
+      const executable = executableFromCommand(record.command, env);
+      if (executable !== null) ids.set(executable, [...(ids.get(executable) ?? []), record.id]);
+    }
+    idsByPath = ids;
+    const paths = [...ids.keys()];
+
+    const missingPublishers = paths.filter(
+      (path) => !publisherLoads.has(path) && (!publisherCache.has(path) || stalePublishers.has(path)),
     );
+    if (missingPublishers.length > 0) {
+      const batch = loadPublishers(missingPublishers);
+      for (const path of missingPublishers) publisherLoads.set(path, batch);
+    }
+    const missingIcons = paths.filter((path) => !iconLoads.has(path) && (!iconCache.has(path) || staleIcons.has(path)));
+    if (missingIcons.length > 0) {
+      const batch = loadIcons(missingIcons);
+      for (const path of missingIcons) iconLoads.set(path, batch);
+    }
+  }
+
+  function toState(records: StartupEntryRecord[]): StartupListState {
+    loadMissingDetails(records);
+    return toStartupState(records, { publisherFor, iconFor }, env, now);
   }
 
   async function list(): Promise<StartupListResult> {
     try {
-      const records = await listStartupEntries(deps.store);
-      return { ok: true, state: await toState(records) };
+      return { ok: true, state: toState(await listStartupEntries(deps.store)) };
     } catch {
       return { ok: false, message: "Couldn't read startup entries." };
     }
   }
 
-  async function apply(result: Awaited<ReturnType<typeof disableStartupEntry>>): Promise<StartupToggleResult> {
+  function apply(result: Awaited<ReturnType<typeof disableStartupEntry>>): StartupToggleResult {
     if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
-    return { ok: true, state: await toState(result.entries) };
+    return { ok: true, state: toState(result.entries) };
   }
 
   return {
@@ -174,6 +234,12 @@ export function createStartupService(deps: StartupServiceDeps): StartupService {
       } catch {
         return [];
       }
+    },
+    onDetails: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }
@@ -204,6 +270,8 @@ export function createFilePublisherLoader(): (paths: string[]) => Promise<Map<st
   return async (paths) => {
     const map = new Map<string, string>();
     if (paths.length === 0 || process.platform !== 'win32') return map;
+    const native = readFileCompanyNames(paths);
+    if (native !== null) return native;
     const raw = await new Promise<string>((resolve, reject) => {
       execFile(
         powershellExecutable(),

@@ -70,6 +70,7 @@ import type {
   ScanEvent,
   SetPinResult,
   StartAnalyzeResult,
+  StartupDetailsEvent,
   StartupListResult,
   StartupToggleResult,
   UninstallEvent,
@@ -119,6 +120,7 @@ import { groupDevProjects, projectNameOf, toDevProjects } from './dev-cleanup';
 import { measureDirectories } from './targeted';
 
 const MAX_FOLDER_BATCH = 2000;
+const PREWARM_DELAY_MS = 300;
 
 export interface ScanSessionLike {
   start(): Promise<ScanResult>;
@@ -154,8 +156,11 @@ export interface EngineHostDeps {
   listInstalledApps?: () => Promise<InstalledAppsSnapshot>;
   startup?: StartupService;
   systemInfo?: SystemInfoService;
+  systemHardwareCacheFile?: string;
   uninstall?: UninstallService;
   uninstallDeps?: Omit<UninstallServiceDeps, 'lock'>;
+  /** After the first dashboard resolves, warm the volume, System Info and Startup data in the background. */
+  prewarmAfterFirstDashboard?: boolean;
 }
 
 export interface EngineHost {
@@ -183,6 +188,8 @@ export interface EngineHost {
   skipUninstallWaiting(): void;
   elevatedUninstallHandoff(jobId: string): { jobId: string; appId: string } | null;
   onUninstallEvent(listener: (event: UninstallEvent) => void): () => void;
+  onStartupEvent(listener: (event: StartupDetailsEvent) => void): () => void;
+  prewarm(): Promise<void>;
   onEvent(listener: (event: ScanEvent) => void): () => void;
   dispose(): void;
 }
@@ -229,6 +236,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const lock = new ScanLock();
   const guard = guardEnv(env, deps.dustInstallPath);
   const streamLiveRows = deps.streamLiveRows ?? true;
+  let disposed = false;
+  let prewarmScheduled = false;
+  let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
+  let prewarmRun: Promise<void> | null = null;
 
   function yieldToEventLoop(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
@@ -238,6 +249,17 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     if (deps.pool !== undefined) return deps.pool;
     if (!deps.workerPath) return false;
     return { workerPath: deps.workerPath, workers: defaultWorkersForVolume(volume.mediaType) };
+  }
+
+  // A first launch has no SSD/HDD answer yet, and an HDD must not get the SSD worker count.
+  async function withKnownMedia(volume: VolumeInfo): Promise<VolumeInfo> {
+    if (deps.listVolumes !== undefined || volume.driveType !== 'fixed' || volume.mediaType !== 'unknown') return volume;
+    try {
+      const fresh = await listVolumesAsync({ cacheFile: deps.volumesCacheFile, awaitMediaTypes: true });
+      return fresh.find((entry) => entry.root.toLowerCase() === volume.root.toLowerCase()) ?? volume;
+    } catch {
+      return volume;
+    }
   }
 
   let active: { runId: string; session: ScanSessionLike; settled: Promise<void> } | null = null;
@@ -283,8 +305,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     enable: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
     removeBackup: async () => ({ ok: false, reason: 'failed', message: unavailableStartupMessage }),
     records: async () => [],
+    onDetails: () => () => {},
   };
-  const systemInfoService = deps.systemInfo ?? createSystemInfoService();
+  const systemInfoService =
+    deps.systemInfo ?? createSystemInfoService({ hardwareCacheFile: deps.systemHardwareCacheFile });
   const unavailableUninstallMessage = 'Deep Uninstall is only available on Windows.';
   const unavailableUninstall: UninstallService = {
     list: async () => ({ ok: false, message: unavailableUninstallMessage }),
@@ -318,7 +342,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function getDashboard(): Promise<DashboardState> {
     const volumeList = await volumes.get();
     const usage = await getVolumeUsageFn(volumeList.map((volume) => volume.root));
-    return buildDashboardState({
+    const state = buildDashboardState({
       volumes: volumeList,
       usage,
       snapshot: deps.store.load(systemRoot),
@@ -335,6 +359,41 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
             }
           : null,
     });
+    schedulePrewarm();
+    return state;
+  }
+
+  function schedulePrewarm(): void {
+    if (!deps.prewarmAfterFirstDashboard || prewarmScheduled || disposed) return;
+    prewarmScheduled = true;
+    prewarmTimer = setTimeout(() => {
+      prewarmTimer = null;
+      void prewarm();
+    }, PREWARM_DELAY_MS);
+  }
+
+  // One after the other, so the warm-up does not compete with itself or with Home.
+  function prewarm(): Promise<void> {
+    if (disposed) return Promise.resolve();
+    prewarmRun ??= (async () => {
+      const steps: Array<() => Promise<unknown>> = [
+        async () => {
+          const volumeList = await volumes.get();
+          await getVolumeUsageFn(volumeList.map((volume) => volume.root));
+        },
+        () => systemInfoService.get(),
+        () => startupService.list(),
+      ];
+      for (const step of steps) {
+        if (disposed) return;
+        try {
+          await step();
+        } catch {
+          /* a failed warm-up only means the page loads on demand */
+        }
+      }
+    })();
+    return prewarmRun;
   }
 
   function liveSource(): PlanSource | null {
@@ -679,6 +738,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return uninstallService.onEvent(listener);
   }
 
+  function onStartupEvent(listener: (event: StartupDetailsEvent) => void): () => void {
+    return startupService.onDetails(listener);
+  }
+
   function messageOf(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
@@ -704,11 +767,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function startAnalyze(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
     const volumeList = requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
-    const target =
+    const found =
       requestedRoot === null
         ? undefined
         : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
-    if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
+    if (!found) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
+    const target = await withKnownMedia(found);
     const targetRoot = target.root;
 
     const acquired = lock.acquire('analyze', targetRoot, now());
@@ -906,11 +970,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   async function startBrowse(volume: string): Promise<StartAnalyzeResult> {
     const requestedRoot = volumeRootOf(volume);
     const volumeList = requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
-    const target =
+    const found =
       requestedRoot === null
         ? undefined
         : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
-    if (!target) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
+    if (!found) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
+    const target = await withKnownMedia(found);
     const targetRoot = target.root;
 
     const acquired = lock.acquire('browse', targetRoot, now());
@@ -1394,6 +1459,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   }
 
   function dispose(): void {
+    disposed = true;
+    if (prewarmTimer !== null) clearTimeout(prewarmTimer);
+    prewarmTimer = null;
     active?.session.cancel();
     listeners.clear();
   }
@@ -1423,6 +1491,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     skipUninstallWaiting,
     elevatedUninstallHandoff,
     onUninstallEvent,
+    onStartupEvent,
+    prewarm,
     onEvent,
     dispose,
   };

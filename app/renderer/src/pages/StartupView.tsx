@@ -10,6 +10,8 @@ import { StartupAdminDialog } from '../components/StartupAdminDialog';
 import { StartupEnableDialog } from '../components/StartupEnableDialog';
 import { StartupRow } from '../components/StartupRow';
 import { StartupToast } from '../components/StartupToast';
+import { useCachedResource } from '../page-cache';
+import { applyStartupDetails, pruneStartupDetails, recordStartupDetails } from '../startup-details';
 
 export interface StartupViewProps {
   api: DustApi;
@@ -36,17 +38,22 @@ function countsFor(entries: StartupEntry[]): StartupListState['counts'] {
   };
 }
 
-function moveEntry(state: StartupListState, id: string, next: boolean): StartupListState {
-  const entries = state.entries.map((entry) =>
-    entry.id === id
-      ? {
-          ...entry,
-          state: next ? ('enabled' as const) : ('disabled' as const),
-          disabledKind: next ? null : ('dust' as const),
-        }
-      : entry,
-  );
+function patchEntry(state: StartupListState, id: string, patch: Partial<StartupEntry>): StartupListState {
+  const entries = state.entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
   return { ...state, entries, counts: countsFor(entries) };
+}
+
+function moveEntry(state: StartupListState, id: string, next: boolean): StartupListState {
+  return patchEntry(state, id, {
+    state: next ? 'enabled' : 'disabled',
+    disabledKind: next ? null : 'dust',
+  });
+}
+
+async function fetchStartup(api: DustApi): Promise<StartupListState> {
+  const result = await api.getStartup();
+  if (!result.ok) throw new Error(result.message);
+  return pruneStartupDetails(result.state);
 }
 
 function errorText(cause: unknown): string {
@@ -54,8 +61,12 @@ function errorText(cause: unknown): string {
 }
 
 export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
-  const [state, setState] = useState<StartupListState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: state,
+    error: loadError,
+    mutate,
+  } = useCachedResource<StartupListState>('startup', () => fetchStartup(api));
+  const [actionError, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [adminEntry, setAdminEntry] = useState<StartupEntry | null>(null);
@@ -67,23 +78,34 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
   const toastKey = useRef(0);
   const noticeShown = useRef(false);
 
-  const load = useCallback(() => {
-    api
-      .getStartup()
-      .then((result) => {
-        if (result.ok) {
-          setState(result.state);
-          setError(null);
-        } else {
-          setError(result.message);
-        }
-      })
-      .catch((cause: unknown) => setError(errorText(cause)));
-  }, [api]);
+  const [detailsVersion, setDetailsVersion] = useState(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // The cached state stays as the main process sent it; details are laid over it only for display.
+  const shown = useMemo(
+    () => (state === null ? null : applyStartupDetails(state)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the version marks changes to the overlay
+    [state, detailsVersion],
+  );
+  const error = actionError ?? loadError;
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Every change goes through here so the next visit starts from the latest state.
+  const setState = useCallback(
+    (next: StartupListState) => {
+      stateRef.current = next;
+      mutate(next);
+    },
+    [mutate],
+  );
+
+  useEffect(
+    () =>
+      api.onStartupEvent((event) => {
+        recordStartupDetails(event.details);
+        setDetailsVersion((version) => version + 1);
+      }),
+    [api],
+  );
 
   const showToast = useCallback((message: string, durationMs: number, action?: { label: string; run: () => void }) => {
     toastKey.current += 1;
@@ -99,7 +121,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
         if (!result.ok) {
           setError(result.message);
         } else {
-          setState(result.state);
+          setState(pruneStartupDetails(result.state));
           showToast(`${entry.name} enabled`, 3000);
         }
       } catch (cause) {
@@ -108,25 +130,31 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
         setBusyId(null);
       }
     },
-    [api, showToast],
+    [api, setState, showToast],
   );
 
   const runToggle = useCallback(
     async (entry: StartupEntry, next: boolean) => {
-      const previous = state;
+      // Undo only this entry, so details that arrived meanwhile stay.
+      const revert = () => {
+        const current = stateRef.current;
+        if (current !== null) {
+          setState(patchEntry(current, entry.id, { state: entry.state, disabledKind: entry.disabledKind }));
+        }
+      };
       setBusyId(entry.id);
       setError(null);
-      if (previous !== null) setState(moveEntry(previous, entry.id, next));
+      if (stateRef.current !== null) setState(moveEntry(stateRef.current, entry.id, next));
       try {
         const result: StartupToggleResult = next
           ? await api.enableStartupEntry(entry.id)
           : await api.disableStartupEntry(entry.id);
         if (!result.ok) {
-          setState(previous);
+          revert();
           setError(result.message);
           return;
         }
-        setState(result.state);
+        setState(pruneStartupDetails(result.state));
         if (!next) {
           showToast(`${entry.name} disabled`, 5000, {
             label: 'Undo',
@@ -138,13 +166,13 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
           showToast(`${entry.name} enabled`, 3000);
         }
       } catch (cause) {
-        setState(previous);
+        revert();
         setError(errorText(cause));
       } finally {
         setBusyId(null);
       }
     },
-    [api, showToast, state, undo],
+    [api, setState, showToast, undo],
   );
 
   const toggle = useCallback(
@@ -193,7 +221,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
         showToast("Windows didn't allow this change.", 5000);
         return;
       }
-      setState(result.state);
+      setState(pruneStartupDetails(result.state));
       setEnableBusy(false);
       setEnableEntry(null);
       showToast(`Turned on ${enableEntry.name} — starts at next sign-in.`, 3000);
@@ -202,7 +230,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
       setEnableEntry(null);
       showToast("Windows didn't allow this change.", 5000);
     }
-  }, [api, enableEntry, showToast]);
+  }, [api, enableEntry, setState, showToast]);
 
   useEffect(() => {
     if (notice === null || noticeShown.current || state === null) return;
@@ -242,15 +270,15 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
   }, [adminEntry, api]);
 
   const enabled = useMemo(
-    () => sortByName((state?.entries ?? []).filter((entry) => entry.state === 'enabled')),
-    [state],
+    () => sortByName((shown?.entries ?? []).filter((entry) => entry.state === 'enabled')),
+    [shown],
   );
   const disabled = useMemo(
-    () => sortByName((state?.entries ?? []).filter((entry) => entry.state === 'disabled')),
-    [state],
+    () => sortByName((shown?.entries ?? []).filter((entry) => entry.state === 'disabled')),
+    [shown],
   );
 
-  if (state === null) {
+  if (shown === null) {
     return (
       <main className="dust-dashboard flex min-h-screen items-center justify-center bg-canvas px-6 text-sm text-ink-muted">
         {error ?? 'Loading startup entries.'}
@@ -263,7 +291,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
       <header className="mx-auto w-full max-w-4xl px-6 pt-10 sm:px-8 sm:pt-12">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Startup Manager</h1>
         <p className="mt-1.5 text-sm text-ink-muted">
-          <span className="font-mono text-ink">{state.counts.total}</span> entries
+          <span className="font-mono text-ink">{shown.counts.total}</span> entries
         </p>
       </header>
 
@@ -277,7 +305,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
           </p>
         )}
 
-        {state.counts.total === 0 ? (
+        {shown.counts.total === 0 ? (
           <p className="rounded-xl border border-hairline bg-surface px-4 py-14 text-center text-sm text-ink-muted">
             No startup entries found.
           </p>
@@ -285,7 +313,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
           <div className="space-y-8">
             <StartupSection
               title="Enabled"
-              count={state.counts.enabled}
+              count={shown.counts.enabled}
               entries={enabled}
               empty="Nothing here."
               busyId={busyId}
@@ -293,7 +321,7 @@ export function StartupView({ api, notice, onNoticeShown }: StartupViewProps) {
             />
             <StartupSection
               title="Disabled"
-              count={state.counts.disabled}
+              count={shown.counts.disabled}
               entries={disabled}
               empty="No disabled entries."
               busyId={busyId}
@@ -351,10 +379,7 @@ interface StartupSectionProps {
 
 function StartupSection({ title, count, entries, empty, busyId, onToggle }: StartupSectionProps) {
   return (
-    <section
-      aria-label={title}
-      className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card"
-    >
+    <section aria-label={title} className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card">
       <div className="flex items-center gap-3 px-4 py-3.5">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         <span className="text-sm text-ink-muted">{count}</span>

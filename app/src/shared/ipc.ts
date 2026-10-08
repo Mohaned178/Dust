@@ -33,6 +33,7 @@ export const IPC = {
   startupDisable: 'dust:startup:disable',
   startupEnable: 'dust:startup:enable',
   startupHint: 'dust:startup:hint',
+  startupEvent: 'dust:startup:event',
   systemInfoGet: 'dust:system-info:get',
   systemInfoLive: 'dust:system-info:live',
   relaunchElevated: 'dust:app:relaunch-elevated',
@@ -388,6 +389,11 @@ export interface StartupListState {
   loadedAt: number;
 }
 
+/** Publishers and icons that became known after the entries were listed. */
+export interface StartupDetailsEvent {
+  details: Array<{ id: string; publisher: string | null; iconDataUrl: string | null }>;
+}
+
 export type StartupListResult = { ok: true; state: StartupListState } | { ok: false; message: string };
 
 export type StartupToggleRefusal =
@@ -579,5 +585,6 @@ export interface DustApi {
   installUpdate(): Promise<void>;
   onUpdateEvent(handler: (status: UpdateStatus) => void): () => void;
   onUninstallEvent(handler: (event: UninstallEvent) => void): () => void;
+  onStartupEvent(handler: (event: StartupDetailsEvent) => void): () => void;
   onScanEvent(handler: (event: ScanEvent) => void): () => void;
 }

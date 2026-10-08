@@ -4,6 +4,8 @@ import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { UninstallHive } from '../uninstall/types';
 import { readPersistentCache, removePersistentCache, writePersistentCache } from './persistent-cache';
+import { listRegistrySubkeys, readRegistryValues, registryValueToBool, registryValueToString } from './win-registry';
+import type { RegistryHive, RegistryValue } from './win-registry';
 
 export interface InstalledApp {
   id: string;
@@ -49,7 +51,7 @@ export const INSTALLED_APPS_DISK_TTL_MS = 12 * 60 * 60_000;
 
 const QUERY_TIMEOUT_MS = 15_000;
 
-const QUERY_SCRIPT = [
+export const INSTALLED_APPS_QUERY_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
   '$roots = @(',
   "  [pscustomobject]@{ hive = 'hklm'; path = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' },",
@@ -194,7 +196,10 @@ export function parseInstalledApps(raw: string): InstalledApp[] | null {
     return null;
   }
   if (value === null) return [];
-  const list = Array.isArray(value) ? value : [value];
+  return normalizeInstalledApps(Array.isArray(value) ? value : [value]);
+}
+
+function normalizeInstalledApps(list: readonly unknown[]): InstalledApp[] {
   const out: InstalledApp[] = [];
   const seen = new Set<string>();
   for (const entry of list) {
@@ -241,7 +246,7 @@ function queryInstalledAppsJson(): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       executable,
-      ['-NoProfile', '-NonInteractive', '-Command', QUERY_SCRIPT],
+      ['-NoProfile', '-NonInteractive', '-Command', INSTALLED_APPS_QUERY_SCRIPT],
       { encoding: 'utf8', timeout: QUERY_TIMEOUT_MS, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
       (error, stdout) => {
         if (error) {
@@ -258,10 +263,87 @@ let cache: { at: number; snapshot: InstalledAppsSnapshot } | null = null;
 let inFlight: Promise<InstalledAppsSnapshot> | null = null;
 let diskCacheFile: string | null = null;
 
-async function load(query: () => Promise<string>): Promise<InstalledAppsSnapshot> {
+const UNINSTALL_ROOTS: ReadonlyArray<{ hive: UninstallHive; registryHive: RegistryHive; path: string }> = [
+  { hive: 'hklm', registryHive: 'HKLM', path: 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' },
+  {
+    hive: 'hklm-wow64',
+    registryHive: 'HKLM',
+    path: 'Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  },
+  { hive: 'hkcu', registryHive: 'HKCU', path: 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' },
+];
+
+function nativeEstimatedSize(value: RegistryValue | undefined): number | string | null {
+  if (value === undefined) return null;
+  if (value.type === 'dword' || value.type === 'qword') return value.value as number;
+  if (value.type === 'string' || value.type === 'expand-string') return value.value as string;
+  return null;
+}
+
+function nativeUninstallable(value: RegistryValue | undefined): boolean {
+  if (value === undefined) return true;
+  if (value.type === 'dword' || value.type === 'qword') return value.value !== 0;
+  if (value.type === 'string' || value.type === 'expand-string') return value.value !== '0';
+  return true;
+}
+
+function isTruthy(value: RegistryValue | undefined): boolean {
+  if (value === undefined) return false;
+  if (value.type === 'dword' || value.type === 'qword') return value.value !== 0;
+  return registryValueToBool(value);
+}
+
+/** The same records the PowerShell query emits, read straight from the registry. */
+function readNativeUninstallRecords(): Array<Record<string, unknown>> {
+  const records: Array<Record<string, unknown>> = [];
+  for (const root of UNINSTALL_ROOTS) {
+    const subkeys = listRegistrySubkeys(root.registryHive, root.path);
+    if (subkeys === null) continue;
+    for (const keyName of subkeys) {
+      const values = readRegistryValues(root.registryHive, `${root.path}\\${keyName}`);
+      if (values === null) continue;
+      const displayName = values.get('DisplayName');
+      if (!isTruthy(displayName)) continue;
+      records.push({
+        hive: root.hive,
+        keyName,
+        DisplayName: registryValueToString(displayName),
+        Publisher: registryValueToString(values.get('Publisher')),
+        InstallLocation: registryValueToString(values.get('InstallLocation')),
+        DisplayVersion: registryValueToString(values.get('DisplayVersion')),
+        InstallDate: registryValueToString(values.get('InstallDate')),
+        EstimatedSize: nativeEstimatedSize(values.get('EstimatedSize')),
+        UninstallString: registryValueToString(values.get('UninstallString')),
+        QuietUninstallString: registryValueToString(values.get('QuietUninstallString')),
+        DisplayIcon: registryValueToString(values.get('DisplayIcon')),
+        WindowsInstaller: registryValueToBool(values.get('WindowsInstaller')),
+        SystemComponent: registryValueToBool(values.get('SystemComponent')),
+        NoRemove: registryValueToBool(values.get('NoRemove')),
+        Uninstallable: nativeUninstallable(values.get('Uninstallable')),
+        ParentKeyName: registryValueToString(values.get('ParentKeyName')),
+        ReleaseType: registryValueToString(values.get('ReleaseType')),
+      });
+    }
+  }
+  return records;
+}
+
+/** Installed apps read natively; throws RegistryUnavailableError when that is not possible. */
+export function readInstalledAppsNative(): InstalledApp[] {
+  return normalizeInstalledApps(readNativeUninstallRecords());
+}
+
+async function load(query: (() => Promise<string>) | undefined): Promise<InstalledAppsSnapshot> {
   if (process.platform !== 'win32') return { apps: [], trusted: false };
+  if (query === undefined) {
+    try {
+      return { apps: readInstalledAppsNative(), trusted: true };
+    } catch {
+      // Falls through to the PowerShell query.
+    }
+  }
   try {
-    const raw = await query();
+    const raw = await (query ?? queryInstalledAppsJson)();
     const apps = parseInstalledApps(raw);
     if (apps === null) return { apps: [], trusted: false };
     return { apps, trusted: true };
@@ -289,7 +371,7 @@ export async function listInstalledApps(options: InstalledAppsOptions = {}): Pro
     }
   }
 
-  const pending = load(options.query ?? queryInstalledAppsJson);
+  const pending = load(options.query);
   inFlight = pending;
   try {
     const snapshot = await pending;
