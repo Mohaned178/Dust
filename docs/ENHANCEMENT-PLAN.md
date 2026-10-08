@@ -6,11 +6,59 @@ Written 2026-10-09 on branch `feat/ui-overhaul` (pushed, PR not opened yet). The
 
 ## How to work through it
 
-- One workstream per PR, in the order below. Workstream 1 is a bug and should ship first.
+- One workstream at a time, in the order in section 9, each in its own commit. Workstream 1 is a bug and should ship
+  first.
 - Same split as last time: Opus plans and reviews each diff, Sonnet (high) implements, Sonnet (medium) writes tests,
   Haiku does code search and simple edits. Implementation agents do not edit test files.
 - After each workstream: `npm run typecheck`, `npx eslint .`, app and core tests, then run the app (`npm run dev:app`)
   and look at the changed screen in light and dark mode.
+
+### Starting a session
+
+Open a fresh chat (`/clear`), set the main model to **Opus 5.5** (`/model opus`) at **high effort** (`/effort high`),
+then paste this prompt. Claude only uses subagents when asked, so the prompt asks for the split explicitly.
+
+```
+Start docs/ENHANCEMENT-PLAN.md on branch feat/ui-overhaul.
+
+Read the plan first, then git log -5 and git status. Work through it in the plan's
+suggested order, one workstream at a time, starting with workstream 1 (speed) plus
+the crash-logging fix from section 8.
+
+Use subagents with this split:
+- You (Opus): plan each workstream, write the task briefs, and review every diff
+  before accepting it. Reject anything that doesn't meet the "Done when" criteria.
+- Sonnet, high effort: implementation. Implementation agents must not edit test
+  files; they report which tests they expect to fail.
+- Sonnet, medium effort: writing and updating tests after each implementation.
+- Haiku: code search, verifying file paths and cache locations, and simple edits.
+
+After each workstream:
+1. Run npm run typecheck, npx eslint ., and the app and core tests.
+2. Re-measure where the plan has numbers (workstream 1: time System Info and
+   Startup page loads before and after).
+3. Update the checkboxes and the status line in docs/ENHANCEMENT-PLAN.md.
+4. Commit that workstream on its own (conventional commit message), but don't
+   push. Then stop and give me a short summary plus what I should check visually
+   with npm run dev:app.
+
+Decisions already made: System Info becomes PC Health; keep the petrol-blue
+palette and change only the review amber; fonts are Segoe UI Variable and
+Cascadia Mono. Ask me before anything the plan doesn't cover.
+```
+
+To resume later, use the same prompt but replace "starting with workstream 1 …" with "continue from the first
+unchecked workstream".
+
+### Which model for which work
+
+| Work                                                                                      | Model                   | Why                                                        |
+| ----------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------- |
+| Main session: planning, task briefs, reviewing every diff                                 | Opus 5.5, high          | Has to catch mistakes, so it needs the strongest judgement |
+| Workstreams 1 (speed), 2 (Results), 3 (Dev cleanup), 5 (Startup), 6 (PC Health), 7 (Home) | Sonnet, high            | Real redesign and logic changes                            |
+| Workstream 4 (icons), most of section 8 (log rotation, deleting dead code)                | Sonnet medium, or Haiku | Small, well-defined changes                                |
+| Checking the cache paths in 3b on a real machine                                          | Haiku                   | Only needs to look up folders                              |
+| Tests                                                                                     | Sonnet, medium          | Mostly follows existing patterns                           |
 
 ## Status legend
 
