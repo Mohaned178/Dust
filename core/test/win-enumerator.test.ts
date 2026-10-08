@@ -104,6 +104,7 @@ describe.runIf(onWindows)('WindowsDirInfoEnumerator', () => {
     expect(actual.entryErrors).toBe(0);
   });
 
+  // Creating 1500 files is slow under parallel load.
   it('pages through directories larger than one buffer', () => {
     for (let index = 0; index < 1500; index += 1) {
       fixture.file(`many/file-with-a-fairly-long-name-${index}.txt`, 'x');
@@ -115,7 +116,7 @@ describe.runIf(onWindows)('WindowsDirInfoEnumerator', () => {
 
     expect(actual.entries).toHaveLength(1500);
     expect(normalize(actual.entries)).toEqual(normalize(expected.entries));
-  });
+  }, 20_000);
 
   it('reports MFT-resident files as occupying no clusters', () => {
     fixture.file('tiny.txt', 'abc');

@@ -52,6 +52,17 @@ export function recoveryLabel(item: CleanItemPreview): string {
   return item.recovery.kind === 'regenerate' ? 'Rebuild with' : item.recovery.text;
 }
 
+/**
+ * The acknowledgement gate. Every irreversible item in the rule set is graded
+ * `review` (Recycle Bin, node_modules with no manifest), so review-grade items
+ * and Recycle Bin emptying are what "cannot be recovered" means. Safe `junk`
+ * items (temp files, shader caches) are rebuilt by the apps that own them and
+ * do not need a prompt.
+ */
+export function needsAcknowledgement(items: CleanItemPreview[]): boolean {
+  return items.some((item) => item.grade === 'review' || item.action === 'empty-recycle-bin');
+}
+
 export function refusedReasonText(reason: string): string {
   switch (reason) {
     case 'duplicate':

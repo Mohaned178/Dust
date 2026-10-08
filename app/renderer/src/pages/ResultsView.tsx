@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import type { CategoryId } from '@dust/core';
 import { CATEGORY_LABELS, RESULTS_SCOPE_NOTE } from '../../../src/shared/categories';
 import type { CleanItemPreview, DustApi, ResultsCategoriesState, ResultsState } from '../../../src/shared/ipc';
@@ -9,10 +8,10 @@ import { ContributorList } from '../components/ContributorList';
 import type { Contributor } from '../components/ContributorList';
 import { TreeTable } from '../components/TreeTable';
 import { CleanFlow } from '../components/CleanFlow';
-import { CloseIcon, InfoIcon } from '../components/icons';
+import { CloseIcon } from '../components/icons';
+import { Alert, Button, Card, FOCUS } from '../components/ui';
 import { formatBytes, formatCount, formatRelativeTime } from '../format';
 import { recordRendererSample } from '../instrument';
-import { useLiveScan } from '../live-scan';
 import {
   ancestorKeys,
   createRowStore,
@@ -25,35 +24,37 @@ import {
 } from '../tree';
 import type { RowNode, RowStore, SortState } from '../tree';
 
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
 const CONTRIBUTOR_CAP = 250;
 
 export interface ResultsViewProps {
   api: DustApi;
   root: string;
-  runId: string | null;
   onOpenDevCleanup?: () => void;
   headingLevel?: 1 | 2;
   initialCategory?: CategoryId | null;
   /** Rendered inside the Results page, which supplies the title. */
   embedded?: boolean;
+  /** Called with every snapshot this view loads, including the reload after a clean. */
+  onLoaded?: (state: ResultsState) => void;
+  /** Called when a (re)load fails. */
+  onLoadFailed?: () => void;
 }
 
 export function ResultsView({
   api,
   root,
-  runId,
   onOpenDevCleanup,
   headingLevel = 1,
   initialCategory = null,
   embedded = false,
+  onLoaded,
+  onLoadFailed,
 }: ResultsViewProps) {
-  const storeRef = useRef<RowStore>(createRowStore(root));
-  const [snapshotVersion, setSnapshotVersion] = useState(0);
+  // Each snapshot builds a fresh store, so its identity is the memo key.
+  const [store, setStore] = useState<RowStore>(() => createRowStore(root));
   const [state, setState] = useState<ResultsCategoriesState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reconciled, setReconciled] = useState(false);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [sort, setSort] = useState<SortState>({ key: 'size', desc: true });
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | null>(initialCategory);
@@ -69,12 +70,9 @@ export function ResultsView({
   const reloadSeqRef = useRef(0);
   const seededRef = useRef(false);
   const announceAtRef = useRef(Number.NEGATIVE_INFINITY);
-
-  const live = useLiveScan(api, root, runId, 'analyze');
-  const liveMode = runId !== null;
-  const useLive = liveMode && !reconciled;
-  const store = useLive ? live.store : storeRef.current;
-  const version = useLive ? live.version : snapshotVersion;
+  // The page may pass fresh closures every render; reload must stay stable.
+  const callbacksRef = useRef({ onLoaded, onLoadFailed });
+  callbacksRef.current = { onLoaded, onLoadFailed };
 
   const announce = useCallback((message: string, force = false) => {
     const now = performance.now();
@@ -85,8 +83,9 @@ export function ResultsView({
 
   const applySnapshot = useCallback(
     (next: ResultsState) => {
-      storeRef.current = createRowStore(root);
-      upsertRows(storeRef.current, next.rows);
+      const nextStore = createRowStore(root);
+      upsertRows(nextStore, next.rows);
+      setStore(nextStore);
       setState({
         source: next.source,
         root: next.root,
@@ -96,10 +95,8 @@ export function ResultsView({
         depthLimited: next.depthLimited,
         categories: next.categories,
       });
-      setSnapshotVersion((value) => value + 1);
-      setReconciled(true);
       if (!seededRef.current) {
-        setExpanded(defaultExpanded(storeRef.current));
+        setExpanded(defaultExpanded(nextStore));
         seededRef.current = true;
       }
     },
@@ -115,15 +112,17 @@ export function ResultsView({
       .then((next) => {
         if (reloadSeqRef.current !== seq) return;
         applySnapshot(next);
+        callbacksRef.current.onLoaded?.(next);
       })
       .catch(() => {
         if (reloadSeqRef.current !== seq) return;
         setError('Couldn\u2019t load results. Reload to try again.');
+        callbacksRef.current.onLoadFailed?.();
       });
   }, [api, applySnapshot, root]);
 
   useEffect(() => {
-    storeRef.current = createRowStore(root);
+    setStore(createRowStore(root));
     setState(null);
     setError(null);
     seededRef.current = false;
@@ -134,30 +133,12 @@ export function ResultsView({
     setSelected(new Set());
     setKept(new Set());
     setBulkOpen(false);
-    setReconciled(false);
-    if (runId === null) reload();
-  }, [reload, root, runId]);
+    reload();
+  }, [reload, root]);
 
   useEffect(() => {
     setCategoryFilter(initialCategory);
   }, [initialCategory]);
-
-  useEffect(() => {
-    if (runId !== null || reconciled) return;
-    if (live.phase !== 'done') return;
-    const seq = reloadSeqRef.current + 1;
-    reloadSeqRef.current = seq;
-    api
-      .getResults(root)
-      .then((next) => {
-        if (reloadSeqRef.current !== seq) return;
-        applySnapshot(next);
-        setReconciled(true);
-      })
-      .catch(() => {
-        /* Keep the live results when the snapshot cannot be reconciled. */
-      });
-  }, [api, applySnapshot, live.phase, reconciled, root, runId]);
 
   useEffect(() => {
     return api.onScanEvent((next) => {
@@ -168,36 +149,27 @@ export function ResultsView({
     });
   }, [api, reload, root]);
 
-  useEffect(() => {
-    if (!liveMode) return;
-    const reclaimable = live.categories.reduce((sum, row) => sum + row.bytes, 0);
-    if (reclaimable <= 0) return;
-    announce(`Scanning — ${formatBytes(reclaimable)} reclaimable so far.`);
-  }, [announce, live.categories, live.categoriesVersion, liveMode]);
-
-  useEffect(() => {
-    if (!liveMode || live.finished === null) return;
-    announce(
-      live.finished.status === 'complete'
-        ? `Scan complete — ${formatBytes(live.finished.reclaimableBytes ?? 0)} reclaimable.`
-        : 'Scan stopped — results are partial.',
-      true,
-    );
-  }, [announce, live.finished, liveMode]);
-
-  const allContributors = useMemo(() => {
+  // Every cleanup target in the store, whatever the category filter says.
+  // Selection reads this so it survives filter changes.
+  const everyContributor = useMemo(() => {
     const startedAt = performance.now();
     const out: Contributor[] = [];
     for (const node of store.nodes.values()) {
       const action = node.action;
       if (action === null) continue;
-      if (categoryFilter !== null && action.category !== categoryFilter) continue;
       out.push({ path: node.path, name: node.name, bytes: node.bytes, grade: action.grade, action });
     }
     out.sort((a, b) => b.bytes - a.bytes || a.path.localeCompare(b.path));
     recordRendererSample('results.contributors', performance.now() - startedAt);
     return out;
-  }, [categoryFilter, store, version]);
+  }, [store]);
+  const allContributors = useMemo(
+    () =>
+      categoryFilter === null
+        ? everyContributor
+        : everyContributor.filter((row) => row.action.category === categoryFilter),
+    [categoryFilter, everyContributor],
+  );
 
   const safe = useMemo(() => allContributors.filter((row) => row.grade === 'safe'), [allContributors]);
   const review = useMemo(() => allContributors.filter((row) => row.grade === 'review'), [allContributors]);
@@ -229,28 +201,29 @@ export function ResultsView({
 
   const figureBytes = reviewToo ? safeBytes + reviewBytes : safeBytes;
   const figureCount = reviewToo ? safe.length + review.length : safe.length;
-  const scanning = useLive && live.phase !== 'done' && live.phase !== 'failed' && allContributors.length === 0;
   const emptySafe = safe.length === 0 && !reviewToo;
 
+  // Selection is not scoped to the category filter: switching filters must not
+  // drop rows the user already ticked from the bulk bar or the clean request.
   const selection = useMemo(() => {
     const paths: string[] = [];
     let bytes = 0;
-    for (const row of allContributors) {
+    for (const row of everyContributor) {
       if (selected.has(pathKey(row.path))) {
         paths.push(row.path);
         bytes += row.bytes;
       }
     }
     return { paths, bytes, count: paths.length };
-  }, [allContributors, selected]);
+  }, [everyContributor, selected]);
 
   const categoryVisible = useMemo(() => {
     const startedAt = performance.now();
     const next = filterPaths(store, categoryFilter);
     recordRendererSample('results.filterPaths', performance.now() - startedAt);
     return next;
-  }, [categoryFilter, store, version]);
-  const matchSet = useMemo(() => matchedPaths(store, categoryFilter), [categoryFilter, store, version]);
+  }, [categoryFilter, store]);
+  const matchSet = useMemo(() => matchedPaths(store, categoryFilter), [categoryFilter, store]);
 
   const searchSet = useMemo(() => {
     if (query === '') return null;
@@ -262,7 +235,7 @@ export function ResultsView({
     }
     const ancestors = ancestorKeys(store, matched);
     return new Set<string>([...matched, ...ancestors]);
-  }, [query, store, version]);
+  }, [query, store]);
   const treeFilter = useMemo(() => {
     if (searchSet === null) return categoryVisible;
     if (categoryVisible === null) return searchSet;
@@ -283,7 +256,7 @@ export function ResultsView({
     const next = flattenVisible(store, treeExpanded, sort, treeFilter, query === '' ? matchSet : null);
     recordRendererSample('results.flattenVisible', performance.now() - startedAt);
     return next;
-  }, [version, treeExpanded, sort, treeFilter, matchSet, query, treeOpen, store]);
+  }, [treeExpanded, sort, treeFilter, matchSet, query, treeOpen, store]);
   const dangerCount = useMemo(() => flatRows.filter((entry) => entry.row.grade === 'danger').length, [flatRows]);
   const tableRows = useMemo(() => {
     const startedAt = performance.now();
@@ -304,15 +277,15 @@ export function ResultsView({
     }
     recordRendererSample('results.tableRows', performance.now() - startedAt);
     return next;
-  }, [flatRows, showDanger, version, root, store]);
-  const totalBytes = useMemo(() => store.nodes.get(pathKey(root))?.bytes ?? 0, [version, root, store]);
+  }, [flatRows, showDanger, root, store]);
+  const totalBytes = useMemo(() => store.nodes.get(pathKey(root))?.bytes ?? 0, [root, store]);
 
-  const categories = useLive ? live.categories : (state?.categories ?? []);
-  const stripCategories = useMemo(
-    () => (onOpenDevCleanup !== undefined ? categories : categories.filter((row) => row.category !== 'npm-projects')),
-    [categories, onOpenDevCleanup],
-  );
-  const source = useLive ? 'live' : state === null ? (liveMode ? 'live' : 'loading') : state.source;
+  const categories = state?.categories;
+  const stripCategories = useMemo(() => {
+    const rows = categories ?? [];
+    return onOpenDevCleanup !== undefined ? rows : rows.filter((row) => row.category !== 'npm-projects');
+  }, [categories, onOpenDevCleanup]);
+  const source = state === null ? 'loading' : state.source;
 
   const toggle = useCallback((path: string) => {
     setExpanded((current) => {
@@ -397,46 +370,29 @@ export function ResultsView({
             Results <span className="font-normal text-ink-muted">—</span> <span className="font-mono">{root}</span>
           </Heading>
         </header>
-        <div role="alert" className="mt-8 rounded-2xl border border-hairline bg-surface px-4 py-14 text-center">
-          <p className="text-sm text-ink">{error}</p>
-          <button
-            type="button"
-            onClick={reload}
-            className={`mt-4 inline-flex items-center rounded-lg border border-hairline bg-surface px-3.5 py-2 text-sm font-medium text-ink transition-colors duration-150 ${EASE} hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-          >
-            Try again
-          </button>
-        </div>
+        <Alert
+          tone="danger"
+          className="mt-8"
+          action={
+            <Button size="sm" onClick={reload}>
+              Try again
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       </section>
     );
   }
 
-  const notices: ReactNode[] = [];
-  if (useLive) {
-    if (scanning) {
-      notices.push(
-        <Notice key="scanning">
-          Scanning <span className="font-mono">{root}</span> — these figures are partial until the scan finishes.
-        </Notice>,
-      );
-    } else if (live.finished?.status === 'cancelled') {
-      notices.push(<Notice key="cancelled-live">The scan was cancelled — results are partial.</Notice>);
-    }
-  }
-  if (!useLive && source === 'snapshot' && state?.finishedAt != null) {
+  const notices: string[] = [];
+  if (source === 'snapshot' && state?.finishedAt != null) {
     notices.push(
-      <Notice key="snapshot">
-        Snapshot from {formatRelativeTime(state.finishedAt)} — the tree is limited to depth 4 plus top contributors.
-        Rescan for the full tree.
-      </Notice>,
+      `Snapshot from ${formatRelativeTime(state.finishedAt)} — the tree is limited to depth 4 plus top contributors. Rescan for the full tree.`,
     );
   }
-  if (!liveMode && state?.rulesStale === true) {
-    notices.push(<Notice key="stale">Rules updated — rescan for accuracy.</Notice>);
-  }
-  if (!liveMode && state?.status === 'cancelled') {
-    notices.push(<Notice key="cancelled">The last scan was cancelled — results are partial.</Notice>);
-  }
+  if (state?.rulesStale === true) notices.push('Rules updated — rescan for accuracy.');
+  if (state?.status === 'cancelled') notices.push('The last scan was cancelled — results are partial.');
 
   const filteredTreeEmpty =
     categoryFilter !== null && tableRows.length === 0 ? (
@@ -467,9 +423,7 @@ export function ResultsView({
 
   const contributorEmpty = (
     <div className="px-4 py-14 text-center">
-      {scanning ? (
-        <p className="text-sm text-ink-muted">Reclaimable folders appear here as the scan finds them.</p>
-      ) : query !== '' ? (
+      {query !== '' ? (
         <p className="text-sm text-ink-muted">No contributors match “{search.trim()}”.</p>
       ) : emptySafe ? (
         <>
@@ -478,13 +432,9 @@ export function ResultsView({
               ? `${formatCount(review.length)} ${review.length === 1 ? 'item needs' : 'items need'} review.`
               : 'Nothing matched a cleanup rule.'}
           </p>
-          <button
-            type="button"
-            onClick={() => (review.length > 0 ? setReviewToo(true) : setTreeOpen(true))}
-            className={`mt-4 inline-flex items-center rounded-lg border border-hairline bg-surface px-3.5 py-2 text-sm font-medium text-ink transition-colors duration-150 ${EASE} hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-          >
+          <Button className="mt-4" onClick={() => (review.length > 0 ? setReviewToo(true) : setTreeOpen(true))}>
             {review.length > 0 ? 'Review too' : 'Browse everything'}
-          </button>
+          </Button>
         </>
       ) : (
         <p className="text-sm text-ink-muted">Nothing to clean here.</p>
@@ -499,21 +449,19 @@ export function ResultsView({
           <Heading className="text-2xl font-semibold tracking-tight text-ink">
             Results <span className="font-normal text-ink-muted">—</span> <span className="font-mono">{root}</span>
           </Heading>
-          {useLive ? (
-            live.finished !== null ? (
-              <p className="text-sm text-ink-muted">
-                {live.finished.status === 'cancelled' ? 'Partial — cancelled' : 'Analyzed just now'}
-              </p>
-            ) : (
-              <p className="text-sm text-ink-muted">scanning…</p>
-            )
-          ) : state?.finishedAt != null ? (
+          {state?.finishedAt != null ? (
             <p className="text-sm text-ink-muted">{analyzedLabel(state.finishedAt)}</p>
           ) : null}
         </header>
       )}
 
-      {notices.length > 0 && <div className="mt-6 space-y-2.5">{notices}</div>}
+      {notices.length > 0 && (
+        <div className="mt-6 space-y-2.5">
+          {notices.map((notice) => (
+            <Alert key={notice}>{notice}</Alert>
+          ))}
+        </div>
+      )}
 
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {announcement}
@@ -522,30 +470,21 @@ export function ResultsView({
       {source === 'loading' ? (
         <ResultsLoading />
       ) : source === 'empty' ? (
-        <p className="mt-8 rounded-2xl border border-hairline bg-surface px-4 py-14 text-center text-sm text-ink-muted">
+        <Card className="mt-8 px-4 py-14 text-center text-sm text-ink-muted">
           No results yet — run an Analyze from the dashboard.
-        </p>
+        </Card>
       ) : (
         <>
           <section aria-label="Reclaimable summary" className={embedded ? '' : 'mt-8'}>
             {emptySafe ? (
-              scanning ? (
-                <>
-                  <p className="text-xl font-semibold tracking-tight text-ink">Scanning…</p>
-                  <p className="mt-1.5 text-sm text-ink-muted">
-                    Reclaimable folders appear here as the scan finds them.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-semibold tracking-tight text-ink">Nothing safe to clean here</p>
-                  <p className="mt-1.5 text-sm text-ink-muted">
-                    {review.length > 0
-                      ? 'Turn on Review too to see what needs a closer look, or browse the full tree below.'
-                      : 'Browse everything below to look for reclaimable folders.'}
-                  </p>
-                </>
-              )
+              <>
+                <p className="text-xl font-semibold tracking-tight text-ink">Nothing safe to clean here</p>
+                <p className="mt-1.5 text-sm text-ink-muted">
+                  {review.length > 0
+                    ? 'Turn on Review too to see what needs a closer look, or browse the full tree below.'
+                    : 'Browse everything below to look for reclaimable folders.'}
+                </p>
+              </>
             ) : (
               <>
                 <p className="font-mono text-[2.5rem] font-semibold leading-none tracking-tight text-ink">
@@ -781,15 +720,6 @@ function ResultsLoading() {
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Notice({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
-      <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-      <p className="min-w-0">{children}</p>
     </div>
   );
 }

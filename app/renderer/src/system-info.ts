@@ -6,6 +6,7 @@ import type {
   SystemInfoOs,
   SystemInfoStatic,
 } from '@dust/core';
+import type { DashboardVolumeCard } from '../../src/shared/ipc';
 import { formatBytes } from './format';
 
 export const VRAM_CAVEAT = 'Reported by Windows. May be inaccurate for GPUs with more than 4 GB.';
@@ -103,7 +104,41 @@ export function formatBios(bios: SystemInfoBios): string | null {
   return bios.version ?? bios.date;
 }
 
-export function formatSystemInfoText(snapshot: SystemInfoStatic, live: SystemInfoLive | null): string {
+export interface StorageVolume {
+  /** Drive letter without the trailing backslash, e.g. `C:`. */
+  drive: string;
+  label: string | null;
+  media: 'SSD' | 'HDD' | null;
+  usedBytes: number | null;
+  totalBytes: number | null;
+}
+
+/** Fixed (internal) volumes only; removable, network and optical drives are not part of "this PC". */
+export function toStorageVolumes(volumes: readonly DashboardVolumeCard[]): StorageVolume[] {
+  return volumes
+    .filter((volume) => volume.driveType === 'fixed')
+    .map((volume) => ({
+      drive: volume.root.replace(/\\$/, ''),
+      label: volume.label,
+      media: volume.mediaType === 'ssd' ? 'SSD' : volume.mediaType === 'hdd' ? 'HDD' : null,
+      usedBytes:
+        volume.totalBytes === null || volume.freeBytes === null ? null : Math.max(volume.totalBytes - volume.freeBytes, 0),
+      totalBytes: volume.totalBytes,
+    }));
+}
+
+export function formatStorageLine(volume: StorageVolume): string {
+  const tags = [volume.label, volume.media].filter((part): part is string => part !== null && part.length > 0);
+  const head = tags.length === 0 ? volume.drive : `${volume.drive} (${tags.join(', ')})`;
+  if (volume.usedBytes === null || volume.totalBytes === null) return head;
+  return `${head}: ${formatBytes(volume.usedBytes)} used of ${formatBytes(volume.totalBytes)}`;
+}
+
+export function formatSystemInfoText(
+  snapshot: SystemInfoStatic,
+  live: SystemInfoLive | null,
+  storage: readonly StorageVolume[] = [],
+): string {
   const blocks: string[][] = [['Dust System Info', `Captured: ${formatCapturedAt(snapshot.capturedAt)}`]];
 
   const system: string[] = [];
@@ -123,6 +158,8 @@ export function formatSystemInfoText(snapshot: SystemInfoStatic, live: SystemInf
     compute.push(`RAM: ${formatMemory(live.memTotalBytes)} total · ${formatMemory(live.memUsedBytes)} used`);
   }
   if (compute.length > 0) blocks.push(compute);
+
+  if (storage.length > 0) blocks.push(storage.map((volume) => `Disk ${formatStorageLine(volume)}`));
 
   if (snapshot.gpus.length > 0) {
     blocks.push(snapshot.gpus.map((gpu) => `GPU: ${formatGpuLine(gpu)}`));

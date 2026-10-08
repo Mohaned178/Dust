@@ -52,11 +52,12 @@ describe('Sidebar', () => {
   });
 
   it('renders the primary navigation with the active item marked', () => {
-    renderSidebar({ active: 'drives' });
+    renderSidebar({ active: 'startup' });
 
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
-    expect(screen.getByRole('button', { name: 'Drives' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'Startup apps' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('button', { name: 'Drives' })).toBeNull();
   });
 
   it('navigates and opens settings from the nav', () => {
@@ -64,68 +65,72 @@ describe('Sidebar', () => {
     const onOpenSettings = vi.fn();
     renderSidebar({ onNavigate, onOpenSettings });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dev Cleanup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    expect(onNavigate).toHaveBeenCalledWith('dashboard');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Developer cleanup' }));
     expect(onNavigate).toHaveBeenCalledWith('dev-cleanup');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Deep Uninstall' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall apps' }));
     expect(onNavigate).toHaveBeenCalledWith('uninstall');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Startup Manager' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Startup apps' }));
     expect(onNavigate).toHaveBeenCalledWith('startup');
 
-    fireEvent.click(screen.getByRole('button', { name: 'System Info' }));
+    fireEvent.click(screen.getByRole('button', { name: 'System info' }));
     expect(onNavigate).toHaveBeenCalledWith('system-info');
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('disables dev cleanup when there is no system drive', () => {
+  it('disables developer cleanup when there is no system drive', () => {
     renderSidebar({ devCleanupDisabled: true });
 
-    expect(screen.getByRole('button', { name: 'Dev Cleanup' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Developer cleanup' })).toBeDisabled();
   });
 
   it('collapses to an icon rail and persists the choice', () => {
     const { unmount } = renderSidebar();
 
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Home')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
 
-    expect(screen.queryByText('Dashboard')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.queryByText('Home')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
     expect(window.localStorage.getItem('dust.sidebar.collapsed')).toBe('1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Home')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     unmount();
 
     renderSidebar();
-    expect(screen.queryByText('Dashboard')).toBeNull();
+    expect(screen.queryByText('Home')).toBeNull();
   });
 
   it('reveals a collapsed rail label when the nav item takes focus', () => {
     renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
-    expect(screen.queryByText('Dashboard')).toBeNull();
+    expect(screen.queryByText('Home')).toBeNull();
 
-    const dashboard = screen.getByRole('button', { name: 'Dashboard' });
-    fireEvent.focus(dashboard);
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    const home = screen.getByRole('button', { name: 'Home' });
+    fireEvent.focus(home);
+    expect(screen.getByText('Home')).toBeInTheDocument();
 
-    fireEvent.blur(dashboard);
-    expect(screen.queryByText('Dashboard')).toBeNull();
+    fireEvent.blur(home);
+    expect(screen.queryByText('Home')).toBeNull();
   });
 
-  it('shows Deep Uninstall as a real navigation item with no coming-soon group', () => {
+  it('shows the tools as real navigation items with no coming-soon group', () => {
     renderSidebar();
 
     expect(screen.queryByText('Coming soon')).toBeNull();
     expect(screen.queryByText('Soon')).toBeNull();
+    expect(screen.getByText('Tools')).toBeInTheDocument();
 
-    const item = screen.getByRole('button', { name: 'Deep Uninstall' });
+    const item = screen.getByRole('button', { name: 'Uninstall apps' });
     expect(item).not.toHaveAttribute('aria-current');
   });
 
@@ -135,12 +140,11 @@ describe('Sidebar', () => {
     const controls = screen.getAllByRole('button');
     expect(controls.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
       'Collapse sidebar',
-      'Dashboard',
-      'Dev Cleanup',
-      'Deep Uninstall',
-      'Startup Manager',
-      'Drives',
-      'System Info',
+      'Home',
+      'Uninstall apps',
+      'Startup apps',
+      'Developer cleanup',
+      'System info',
       'Settings',
     ]);
   });

@@ -1,17 +1,25 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { CloseIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { FOCUS } from './ui';
 
 export interface CleanDialogProps {
   label: string;
   onClose: () => void;
   children: ReactNode;
   dismissible?: boolean;
+  /** `lg` widens the panel for multi-step flows with long lists. */
+  size?: 'md' | 'lg';
+  /** Fixed bar above the scrolling body; leaves room for the close button. */
+  header?: ReactNode;
 }
 
-export function CleanDialog({ label, onClose, children, dismissible = true }: CleanDialogProps) {
+const WIDTH = { md: 'max-w-[34rem]', lg: 'max-w-2xl' } as const;
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export function CleanDialog({ label, onClose, children, dismissible = true, size = 'md', header }: CleanDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,10 +41,15 @@ export function CleanDialog({ label, onClose, children, dismissible = true }: Cl
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable === undefined || focusable.length === 0) return;
+      const dialog = dialogRef.current;
+      if (dialog === null) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(FOCUSABLE);
+      // Steps that swap their buttons out can leave focus on <body>; pull it back in.
+      if (focusable.length === 0 || !dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (focusable[0] ?? dialog).focus();
+        return;
+      }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) {
@@ -53,7 +66,7 @@ export function CleanDialog({ label, onClose, children, dismissible = true }: Cl
 
   return (
     <div
-      className="dust-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-sm sm:p-6"
+      className="dust-backdrop fixed inset-0 z-50 flex items-center justify-center bg-backdrop p-4 backdrop-blur-sm sm:p-6"
       onClick={(event) => {
         if (dismissible && event.target === event.currentTarget) onClose();
       }}
@@ -64,7 +77,7 @@ export function CleanDialog({ label, onClose, children, dismissible = true }: Cl
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="dust-dialog dust-panel relative flex max-h-[calc(100vh-2rem)] w-full max-w-[34rem] flex-col overflow-hidden rounded-2xl border border-hairline bg-surface shadow-pop focus:outline-none"
+        className={`dust-dialog dust-panel relative flex max-h-[calc(100vh-2rem)] w-full ${WIDTH[size]} flex-col overflow-hidden rounded-2xl border border-hairline bg-surface shadow-pop focus:outline-none`}
       >
         {dismissible && (
           <button
@@ -76,7 +89,10 @@ export function CleanDialog({ label, onClose, children, dismissible = true }: Cl
             <CloseIcon className="h-[18px] w-[18px]" />
           </button>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-7 pt-8">{children}</div>
+        {header !== undefined && <div className="shrink-0 border-b border-hairline px-7 pb-4 pr-16 pt-6">{header}</div>}
+        <div className={`min-h-0 flex-1 overflow-y-auto px-7 pb-7 ${header === undefined ? 'pt-8' : 'pt-6'}`}>
+          {children}
+        </div>
       </div>
     </div>
   );

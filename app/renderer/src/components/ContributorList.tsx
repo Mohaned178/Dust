@@ -6,10 +6,10 @@ import type { CleanItemPreview, ResultAction } from '../../../src/shared/ipc';
 import { formatBytes, formatCount } from '../format';
 import { pathKey, pathParent } from '../tree';
 import { recoveryText } from '../clean';
+import { CopyButton } from './CopyButton';
 import { GradePill, gradeWord } from './GradePill';
 import { ChevronRightIcon, FolderIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { Button, FOCUS } from './ui';
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
 
 export interface Contributor {
@@ -132,7 +132,7 @@ export function ContributorList({
           const parent = pathParent(row.path);
           return (
             <li key={row.path}>
-              <div className="flex items-start gap-3 px-3 py-2.5 transition-colors duration-150 hover:bg-canvas/60 sm:px-4">
+              <div className="group flex items-start gap-3 px-3 py-2.5 transition-colors duration-150 hover:bg-canvas/60 sm:px-4">
                 <input
                   type="checkbox"
                   aria-label={`Select ${row.name}`}
@@ -173,6 +173,19 @@ export function ContributorList({
                     }`}
                   />
                 </button>
+                {/* A sibling of the row button, never nested in it; revealed on hover or focus, always tabbable. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Keep ${row.name}`}
+                  onClick={() => {
+                    if (open) setOpenKey(null);
+                    onKeep(row.path);
+                  }}
+                  className="-my-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                >
+                  Keep
+                </Button>
               </div>
               {open && (
                 <Drill
@@ -232,13 +245,9 @@ function Drill({
         ) : recovery.status === 'error' ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <p className="text-xs text-ink-muted">Couldn’t load recovery details.</p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className={`shrink-0 rounded-lg border border-hairline bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-            >
+            <Button size="sm" onClick={onRetry}>
               Try again
-            </button>
+            </Button>
           </div>
         ) : recovery.item === null ? (
           <p className="text-xs text-ink-muted">Recovery details will appear before you clean.</p>
@@ -248,13 +257,9 @@ function Drill({
       </div>
 
       <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={onKeep}
-          className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors duration-150 ${EASE} hover:bg-canvas hover:text-ink ${FOCUS}`}
-        >
+        <Button variant="ghost" size="sm" onClick={onKeep}>
           Keep
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -270,15 +275,7 @@ function Recovery({ item }: { item: CleanItemPreview }) {
           <code className="min-w-0 break-all rounded-md border border-hairline bg-surface px-2 py-0.5 font-mono text-xs text-ink">
             {item.recovery.text}
           </code>
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard?.writeText(item.recovery.text).catch(() => {});
-            }}
-            className={`shrink-0 rounded-lg border border-hairline bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-          >
-            Copy
-          </button>
+          <CopyButton text={item.recovery.text} label={`Copy rebuild command for ${item.path}`} />
         </span>
       )}
       {item.adminRequired && <span className="text-xs text-ink-muted">Needs administrator rights.</span>}
@@ -292,13 +289,9 @@ function KeptLine({ count, onUndo }: { count: number; onUndo: () => void }) {
       <span>
         {count} {count === 1 ? 'item' : 'items'} kept
       </span>
-      <button
-        type="button"
-        onClick={onUndo}
-        className={`rounded-lg px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent-soft ${FOCUS}`}
-      >
+      <Button variant="ghost" size="sm" onClick={onUndo}>
         Undo
-      </button>
+      </Button>
     </div>
   );
 }

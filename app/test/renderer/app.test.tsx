@@ -1,27 +1,21 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../renderer/src/App';
-import type { ScanEvent } from '../../src/shared/ipc';
-import { makeApi, makeCategories, makeResultsState } from './fakes';
+import { finishedEvent, makeApi, makeCategories, makeResultsState, makeScanBus } from './fakes';
 
 describe('App', () => {
-  it('moves from the dashboard through a scan and back', async () => {
-    const handlers: Array<(event: ScanEvent) => void> = [];
+  it('moves from Home through a scan, cancels, and lands on the results', async () => {
+    const bus = makeScanBus();
     const cancelScan = vi.fn(async () => {});
-    const api = makeApi({
-      cancelScan,
-      onScanEvent: (handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-    });
+    const api = makeApi({ cancelScan, onScanEvent: bus.onScanEvent });
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Re-analyze C:\\' }));
-    expect(await screen.findByText(/Analyzing/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByRole('heading', { name: 'C:\\' })).toBeInTheDocument();
+    expect(screen.getByText('Scanning')).toBeInTheDocument();
 
-    await act(async () => {
-      handlers[0]?.({
+    act(() => {
+      bus.emit({
         type: 'progress',
         runId: 'run-1',
         progress: {
@@ -36,130 +30,137 @@ describe('App', () => {
     });
     expect(screen.getByText('1,234')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel scan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(cancelScan).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
 
-    await act(async () => {
-      handlers[0]?.({
-        type: 'finished',
-        runId: 'run-1',
-        status: 'cancelled',
-        startedAt: 0,
-        finishedAt: 2000,
-        filesScanned: 1234,
-        bytesSeen: 2048,
-        errors: 1,
-        projects: 0,
-        reclaimableBytes: 0,
-        saved: true,
-      });
-    });
-    expect(await screen.findByText('Scan cancelled')).toBeInTheDocument();
+    act(() => bus.emit(finishedEvent('run-1', 'cancelled')));
+    expect(await screen.findByRole('heading', { name: /Results for C:/ })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '← Home' }));
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
   });
 
-  it('browses a non-system volume from the Drives surface and shows results after finishing', async () => {
-    const handlers: Array<(event: ScanEvent) => void> = [];
-    const startBrowse = vi.fn(async () => ({ ok: true as const, runId: 'browse-1' }));
-    const browseRows = [
-      {
-        path: 'E:\\Games',
-        name: 'Games',
-        parent: 'E:\\',
-        bytes: 512,
-        allocatedBytes: 4096,
-        fileCount: 2,
-        folderCount: 0,
-        linkCount: 0,
-        newestMtimeMs: 0,
-        errorCount: 0,
-        partial: false,
-        complete: true,
-        childCount: 0,
-      },
-    ];
+  it('still reaches the results when finished is emitted before startAnalyze resolves', async () => {
+    const bus = makeScanBus();
+    const getResults = vi.fn(async (root: string) => makeResultsState({ root }));
     const api = makeApi({
-      startBrowse,
-      getBrowseResults: async (root) => ({ source: 'live', root, finishedAt: 1, status: 'complete', rows: browseRows }),
-      onScanEvent: (handler) => {
-        handlers.push(handler);
-        return () => {};
+      getResults,
+      onScanEvent: bus.onScanEvent,
+      startAnalyze: async () => {
+        bus.emit({ type: 'started', runId: 'run-fast', root: 'C:\\', startedAt: 0 });
+        bus.emit(finishedEvent('run-fast'));
+        return { ok: true, runId: 'run-fast' };
       },
     });
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Drives' }));
-    expect(await screen.findByRole('heading', { name: 'Drives' })).toBeInTheDocument();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Browse E:\\' }));
-    expect(await screen.findByText(/Browsing/)).toBeInTheDocument();
-    expect(startBrowse).toHaveBeenCalledWith('E:\\');
-
-    await act(async () => {
-      for (const handler of handlers) {
-        handler({ type: 'browse-folders', runId: 'browse-1', folders: browseRows });
-      }
-    });
-    expect(await screen.findByText('Waiting for first results…')).toBeInTheDocument();
-
-    await act(async () => {
-      for (const handler of handlers) {
-        handler({
-          type: 'browse-finished',
-          runId: 'browse-1',
-          status: 'complete',
-          startedAt: 0,
-          finishedAt: 2000,
-          filesScanned: 2,
-          bytesSeen: 512,
-          errors: 0,
-        });
-      }
-    });
-
-    expect(await screen.findByText(/Browse mode/)).toBeInTheDocument();
-    expect(await screen.findByText('Games')).toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'Safety' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByRole('heading', { name: /Results for C:/ })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
+    expect(getResults).toHaveBeenCalledWith('C:\\');
   });
 
-  it('opens the results view from the hero', async () => {
+  it('returns Home with the failure when failed is emitted before startAnalyze resolves', async () => {
+    const bus = makeScanBus();
+    const api = makeApi({
+      onScanEvent: bus.onScanEvent,
+      startAnalyze: async () => {
+        bus.emit({ type: 'failed', runId: 'run-bad', message: 'disk went away' });
+        return { ok: true, runId: 'run-bad' };
+      },
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByText(/The scan stopped: disk went away/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
+  });
+
+  it('shows Finishing… instead of Cancel once the scan is finalizing', async () => {
+    const bus = makeScanBus();
+    const api = makeApi({ onScanEvent: bus.onScanEvent });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toBeEnabled();
+
+    act(() => bus.emit({ type: 'finalizing', runId: 'run-1' }));
+    expect(screen.getByRole('button', { name: 'Finishing…' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('replays finalizing seen before the scan screen mounted', async () => {
+    const bus = makeScanBus();
+    const api = makeApi({
+      onScanEvent: bus.onScanEvent,
+      startAnalyze: async () => {
+        bus.emit({ type: 'finalizing', runId: 'run-late' });
+        return { ok: true, runId: 'run-late' };
+      },
+    });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByRole('button', { name: 'Finishing…' })).toBeDisabled();
+  });
+
+  it('keeps Home and offers to wait or cancel when a scan is already running', async () => {
+    const api = makeApi({ startAnalyze: async () => ({ ok: false, reason: 'busy', running: 'analyze' }) });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Scan C:\\' }));
+    expect(await screen.findByText('A scan is already running.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
+  });
+
+  it('opens the results view from the drive card', async () => {
     const getResults = vi.fn(async (root: string) => makeResultsState({ root }));
     const api = makeApi({ getResults });
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
-    expect(await screen.findByRole('heading', { name: /Results/ })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Results' }));
+    expect(await screen.findByRole('heading', { name: /Results for C:/ })).toBeInTheDocument();
     expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
     expect(getResults).toHaveBeenCalledWith('C:\\');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }));
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '← Home' }));
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
   });
 
-  it('opens the results view filtered to a category card', async () => {
+  it('rescans from the results page', async () => {
+    const startAnalyze = vi.fn(async () => ({ ok: true as const, runId: 'run-2' }));
+    const api = makeApi({ startAnalyze });
+    render(<App api={api} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Results' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescan' }));
+    await waitFor(() => expect(startAnalyze).toHaveBeenCalledWith('C:\\'));
+    expect(await screen.findByText('Scanning')).toBeInTheDocument();
+  });
+
+  it('opens the results view filtered to a ready-to-clean category', async () => {
     const api = makeApi();
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Temp — 256 KB reclaimable/ }));
-    expect(await screen.findByRole('heading', { name: /Results/ })).toBeInTheDocument();
+    const ready = await screen.findByRole('region', { name: 'Ready to clean' });
+    expect(ready).toHaveTextContent('Ready to clean on C:\\');
+    fireEvent.click(await screen.findByRole('button', { name: /^Temp/ }));
+    expect(await screen.findByRole('heading', { name: /Results for C:/ })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^Temp/, pressed: true })).toBeInTheDocument();
   });
 
-  it('opens Quick Clean from the hero', async () => {
+  it('opens Quick Clean from Ready to clean', async () => {
     const api = makeApi();
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Quick Clean for C:\\' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review and clean' }));
     expect(await screen.findByRole('dialog', { name: 'Quick Clean' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Quick Clean' })).toBeNull());
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
   });
 
   it('opens settings from the sidebar', async () => {
@@ -180,18 +181,28 @@ describe('App', () => {
     const api = makeApi({ getResults: async (root) => makeResultsState({ root, categories }) });
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'View results for C:\\' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Results' }));
     fireEvent.click(await screen.findByRole('button', { name: /npm projects/ }));
 
     expect(await screen.findByRole('heading', { name: 'Dev Cleanup' })).toBeInTheDocument();
     expect(await screen.findByText('dead-app')).toBeInTheDocument();
   });
 
+  it('opens Developer cleanup from the sidebar once the system drive is known', async () => {
+    const api = makeApi();
+    render(<App api={api} />);
+
+    const item = screen.getByRole('button', { name: 'Developer cleanup' });
+    await waitFor(() => expect(item).toBeEnabled());
+    fireEvent.click(item);
+    expect(await screen.findByRole('heading', { name: 'Dev Cleanup' })).toBeInTheDocument();
+  });
+
   it('opens System Info from the sidebar', async () => {
     const api = makeApi();
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'System Info' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'System info' }));
     expect(await screen.findByRole('heading', { name: 'System Info' })).toBeInTheDocument();
     expect(await screen.findByText('Windows 11 Pro 25H2')).toBeInTheDocument();
   });

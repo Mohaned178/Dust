@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { Button } from './ui';
 
 export interface CopyButtonProps {
   text: string;
@@ -30,13 +29,8 @@ export function CopyButton({ text, label }: CopyButtonProps) {
   };
 
   return (
-    <button
-      type="button"
-      aria-label={copied ? 'Copied' : label}
-      onClick={copy}
-      className={`shrink-0 rounded-lg border border-hairline bg-surface px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-    >
+    <Button variant="secondary" size="sm" aria-label={copied ? 'Copied' : label} onClick={copy}>
       {copied ? 'Copied' : 'Copy'}
-    </button>
+    </Button>
   );
 }

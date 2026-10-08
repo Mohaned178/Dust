@@ -11,7 +11,8 @@ import { HomeView } from './pages/HomeView';
 import type { ToolKey } from './pages/HomeView';
 import { QuickCleanView } from './pages/QuickCleanView';
 import { ResultsPage } from './pages/ResultsPage';
-import { ScanProgress } from './pages/ScanProgress';
+import { applyScanEvent, emptyScanRun, ScanProgress } from './pages/ScanProgress';
+import type { ScanRunRecord } from './pages/ScanProgress';
 import { StartupView } from './pages/StartupView';
 import { SystemInfoView } from './pages/SystemInfoView';
 import { UninstallView } from './pages/UninstallView';
@@ -57,9 +58,28 @@ export function App({ api }: AppProps) {
   const launchHandled = useRef(false);
   const usedByRoot = useRef(new Map<string, number | null>());
 
+  // What each recent scan run has reported. The scan screen mounts only after
+  // startAnalyze resolves, by which time a fast scan may already have finished;
+  // this listener has been on since mount, so it still has the whole story.
+  const runs = useRef(new Map<string, ScanRunRecord>());
+  const getRun = useCallback((runId: string) => runs.current.get(runId), []);
+
   useEffect(
     () =>
       api.onScanEvent((next) => {
+        if ('runId' in next) {
+          let record = runs.current.get(next.runId);
+          if (record === undefined) {
+            record = emptyScanRun();
+            runs.current.set(next.runId, record);
+            // Only the current run matters; keep a couple spare for ordering races.
+            for (const oldest of runs.current.keys()) {
+              if (runs.current.size <= 3) break;
+              runs.current.delete(oldest);
+            }
+          }
+          applyScanEvent(record, next);
+        }
         const startedAt = performance.now();
         recordRendererSample('app.event', performance.now() - startedAt);
         bumpRendererCount(`app.event.${next.type}`);
@@ -137,6 +157,7 @@ export function App({ api }: AppProps) {
         root={view.root}
         runId={view.runId}
         usedBytes={view.usedBytes}
+        getRun={getRun}
         onFinished={(root) => viewResults(root)}
         onFailed={(message) => {
           setScanError(message);

@@ -87,6 +87,8 @@ describe('deleteUnprotectedPath', () => {
     });
   });
 
+  // Copying node.exe and starting it (plus antivirus scanning the new exe) is
+  // slow under parallel load; the readiness wait allows up to 15 s.
   it('skips locked files, deletes the rest, and reports partial', async () => {
     fixture.dir('junk');
     const locked = join(fixture.root, 'junk', 'sleeper.exe');
@@ -127,5 +129,5 @@ describe('deleteUnprotectedPath', () => {
         }
       });
     }
-  });
+  }, 30_000);
 });

@@ -3,7 +3,7 @@ import type { DustApi, UninstallAppSummary, UninstallLaunchHint, UninstallListRe
 import { StartupToast } from '../components/StartupToast';
 import { UninstallFlow } from '../components/UninstallFlow';
 import { UninstallWizard } from '../components/UninstallWizard';
-import { Badge, Button, FOCUS, PageHeader } from '../components/ui';
+import { Alert, Badge, Button, FOCUS, PageHeader } from '../components/ui';
 import { RefreshIcon, SearchIcon } from '../components/icons';
 import { formatBytes } from '../format';
 
@@ -28,25 +28,37 @@ function sizeOf(app: UninstallAppSummary): number | null {
 
 export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
   const [list, setList] = useState<UninstallListResult | null>(null);
+  const [loading, setLoading] = useState(true);
   const [sizes, setSizes] = useState<ReadonlyMap<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [removing, setRemoving] = useState<UninstallAppSummary | null>(null);
   const [adoptJobId, setAdoptJobId] = useState<string | null>(null);
+  // Set by the elevated relaunch hint. The removal flow only opens once the app
+  // list says whether this instance really is elevated.
+  const [pendingAppId, setPendingAppId] = useState<string | null>(null);
+  const [flowAppId, setFlowAppId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ key: number; message: string; durationMs: number } | null>(null);
   const toastKey = useRef(0);
   const hintShown = useRef(false);
 
+  const showToast = useCallback((message: string) => {
+    toastKey.current += 1;
+    setToast({ key: toastKey.current, message, durationMs: 5000 });
+  }, []);
+
   const load = useCallback(
     (force: boolean) => {
+      setLoading(true);
       api
         .listUninstallApps(force)
         .then((result) => {
           setList(result);
           setError(result.ok ? null : result.message);
         })
-        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+        .finally(() => setLoading(false));
     },
     [api],
   );
@@ -73,15 +85,20 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
       setAdoptJobId(hint.runningJobId);
       return;
     }
-    if (hint.stalePending) {
-      toastKey.current += 1;
-      setToast({
-        key: toastKey.current,
-        message: "The last uninstall didn't start. Nothing was changed.",
-        durationMs: 5000,
-      });
+    if (hint.appId !== null) {
+      setPendingAppId(hint.appId);
+      return;
     }
-  }, [hint, onHintShown]);
+    if (hint.stalePending) showToast("The last uninstall didn't start. Nothing was changed.");
+  }, [hint, onHintShown, showToast]);
+
+  useEffect(() => {
+    if (pendingAppId === null || list === null) return;
+    setPendingAppId(null);
+    if (!list.ok) return; // The error banner already explains why nothing opened.
+    if (list.apps.some((app) => app.id === pendingAppId)) setFlowAppId(pendingAppId);
+    else showToast('That app is no longer installed. Nothing was changed.');
+  }, [pendingAppId, list, showToast]);
 
   const apps = useMemo(() => {
     const raw = list !== null && list.ok ? list.apps : [];
@@ -119,9 +136,17 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
         />
 
         {error !== null && (
-          <p role="alert" className="mt-6 rounded-xl border border-notice-border bg-notice px-4 py-3 text-sm text-ink">
+          <Alert
+            tone="danger"
+            className="mt-6"
+            action={
+              <Button size="sm" disabled={loading} onClick={() => load(true)}>
+                Try again
+              </Button>
+            }
+          >
             {error}
-          </p>
+          </Alert>
         )}
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -157,14 +182,21 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           </div>
         </div>
 
-        {list === null ? (
+        {loading && apps.length === 0 ? (
           <div className="mt-5 space-y-2">
             {[0, 1, 2, 3, 4].map((index) => (
               <div key={index} className="h-16 animate-pulse rounded-xl border border-hairline bg-surface" />
             ))}
           </div>
-        ) : list.ok && list.trusted === false ? (
-          <Empty text="Couldn't read installed apps." />
+        ) : error !== null && apps.length === 0 ? null : list !== null && list.ok && list.trusted === false ? (
+          <Empty
+            text="Couldn't read installed apps."
+            action={
+              <Button size="sm" onClick={() => load(true)}>
+                Try again
+              </Button>
+            }
+          />
         ) : apps.length === 0 ? (
           <Empty text="No apps found." />
         ) : visible.length === 0 ? (
@@ -206,6 +238,16 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
           adoptJobId={adoptJobId}
           elevated={elevated}
           onClose={() => setAdoptJobId(null)}
+          onFinished={() => load(true)}
+        />
+      )}
+
+      {flowAppId !== null && (
+        <UninstallFlow
+          api={api}
+          appId={flowAppId}
+          elevated={elevated}
+          onClose={() => setFlowAppId(null)}
           onFinished={() => load(true)}
         />
       )}
@@ -255,10 +297,11 @@ function AppRow({ app, elevated, onRemove }: { app: UninstallAppSummary; elevate
   );
 }
 
-function Empty({ text }: { text: string }) {
+function Empty({ text, action }: { text: string; action?: React.ReactNode }) {
   return (
-    <p className="mt-5 rounded-2xl border border-hairline bg-surface px-4 py-14 text-center text-sm text-ink-muted">
-      {text}
-    </p>
+    <div className="mt-5 rounded-2xl border border-hairline bg-surface px-4 py-14 text-center text-sm text-ink-muted">
+      <p>{text}</p>
+      {action !== undefined && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
   );
 }

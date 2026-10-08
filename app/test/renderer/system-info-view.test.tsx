@@ -167,6 +167,90 @@ describe('SystemInfoView', () => {
     expect(getSystemInfoLive.mock.calls.length).toBe(calls);
   });
 
+  it('lists fixed volumes under Storage and leaves out removable ones', async () => {
+    render(<SystemInfoView api={makeApi()} />);
+    await flush();
+
+    const storage = screen.getByRole('region', { name: 'Storage' });
+    expect(within(storage).getByText('C:')).toBeInTheDocument();
+    expect(within(storage).getByText('System')).toBeInTheDocument();
+    expect(within(storage).getByText('512 MB of 1.0 GB')).toBeInTheDocument();
+    expect(within(storage).getByRole('meter', { name: 'C: used space' })).toBeInTheDocument();
+    expect(within(storage).queryByText('E:')).toBeNull();
+  });
+
+  it('omits Storage when the dashboard cannot be read', async () => {
+    render(
+      <SystemInfoView
+        api={makeApi({
+          getDashboard: async () => {
+            throw new Error('no volumes');
+          },
+        })}
+      />,
+    );
+    await flush();
+
+    expect(screen.getByRole('region', { name: 'This PC' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Storage' })).toBeNull();
+  });
+
+  describe('visibility', () => {
+    function setVisibility(state: 'visible' | 'hidden') {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => state === 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }
+
+    afterEach(() => {
+      Reflect.deleteProperty(document, 'visibilityState');
+      Reflect.deleteProperty(document, 'hidden');
+    });
+
+    it('pauses live polling while the window is hidden and resumes with an immediate poll', async () => {
+      vi.useFakeTimers();
+      const getSystemInfoLive = vi.fn(async () => makeSystemInfoLive());
+      render(<SystemInfoView api={makeApi({ getSystemInfoLive })} />);
+      await flush();
+
+      expect(getSystemInfoLive).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(getSystemInfoLive).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        setVisibility('hidden');
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(getSystemInfoLive).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        setVisibility('visible');
+      });
+      expect(getSystemInfoLive).toHaveBeenCalledTimes(3);
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(getSystemInfoLive).toHaveBeenCalledTimes(4);
+    });
+
+    it('does not start polling when the window is already hidden', async () => {
+      vi.useFakeTimers();
+      setVisibility('hidden');
+      const getSystemInfoLive = vi.fn(async () => makeSystemInfoLive());
+      render(<SystemInfoView api={makeApi({ getSystemInfoLive })} />);
+      await flush();
+
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(getSystemInfoLive).not.toHaveBeenCalled();
+    });
+  });
+
   it('refreshes the snapshot on demand', async () => {
     const getSystemInfo = vi.fn(async (force?: boolean) =>
       makeSystemInfo({
@@ -199,6 +283,8 @@ describe('SystemInfoView', () => {
     expect(text).toContain('CPU: AMD Ryzen 7 5800X (8 cores / 16 threads)');
     expect(text).toContain('RAM: 32 GB total · 18.4 GB used');
     expect(text).toContain('GPU: NVIDIA GeForce RTX 4070 (Driver 560.94, VRAM 8 GB)');
+    expect(text).toContain('Disk C:');
+    expect(text).not.toContain('E:');
     expect(screen.getByRole('status')).toHaveTextContent('System info copied.');
   });
 });

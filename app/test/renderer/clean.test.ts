@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recoveryLabel, recoveryText, refusedReasonText } from '../../renderer/src/clean';
+import { needsAcknowledgement, recoveryLabel, recoveryText, refusedReasonText } from '../../renderer/src/clean';
 import type { CleanItemPreview } from '../../src/shared/ipc';
 
 function preview(overrides: Partial<CleanItemPreview> = {}): CleanItemPreview {
@@ -43,5 +43,20 @@ describe('refusedReasonText', () => {
 
   it('falls back to a neutral phrase for unknown reasons', () => {
     expect(refusedReasonText('something-new')).toBe('Left untouched');
+  });
+});
+
+describe('needsAcknowledgement', () => {
+  it('is false for an empty or all-safe plan', () => {
+    expect(needsAcknowledgement([])).toBe(false);
+    expect(needsAcknowledgement([preview(), preview({ path: 'C:\b' })])).toBe(false);
+  });
+
+  it('is true when any item is review grade', () => {
+    expect(needsAcknowledgement([preview(), preview({ grade: 'review' })])).toBe(true);
+  });
+
+  it('is true for emptying the Recycle Bin even when graded safe', () => {
+    expect(needsAcknowledgement([preview({ action: 'empty-recycle-bin' })])).toBe(true);
   });
 });

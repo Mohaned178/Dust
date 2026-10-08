@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CategoryId } from '@dust/core';
-import type { DustApi, ResultsCategoriesState } from '../../../src/shared/ipc';
-import { formatBytes, formatRelativeTime } from '../format';
+import type { DustApi, ResultRow, ResultsState } from '../../../src/shared/ipc';
+import { formatRelativeTime } from '../format';
+import { sameRoot } from '../tree';
 import { ResultsView } from './ResultsView';
 import { SpaceMap } from '../components/SpaceMap';
-import { Button, PageHeader, Tabs } from '../components/ui';
+import { Button, FOCUS, PageHeader, Tabs } from '../components/ui';
 import { GridIcon, ListIcon, RefreshIcon } from '../components/icons';
 
 export type ResultsTab = 'clean' | 'map';
@@ -19,6 +20,13 @@ export interface ResultsPageProps {
   onOpenDevCleanup: (root: string) => void;
 }
 
+interface LoadedResults {
+  root: string;
+  rows: ResultRow[];
+  finishedAt: number | null;
+  status: ResultsState['status'];
+}
+
 export function ResultsPage({
   api,
   root,
@@ -29,26 +37,31 @@ export function ResultsPage({
   onOpenDevCleanup,
 }: ResultsPageProps) {
   const [tab, setTab] = useState<ResultsTab>(initialTab);
-  const [summary, setSummary] = useState<ResultsCategoriesState | null>(null);
+  // Both panels stay mounted once opened, so selection, kept items, search and
+  // expanded folders survive a tab switch. The map is only built on first open.
+  const [mapOpened, setMapOpened] = useState(initialTab === 'map');
+  // ResultsView owns the fetch (and the reload after a clean); the map and the
+  // header read the same snapshot instead of asking the main process again.
+  const [loaded, setLoaded] = useState<LoadedResults | null>(null);
+  const [failedRoot, setFailedRoot] = useState<string | null>(null);
 
   useEffect(() => {
     setTab(initialTab);
+    setMapOpened(initialTab === 'map');
   }, [initialTab, root]);
 
   useEffect(() => {
-    let active = true;
-    api
-      .getResultCategories(root)
-      .then((state) => {
-        if (active) setSummary(state);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [api, root]);
+    if (tab === 'map') setMapOpened(true);
+  }, [tab]);
 
-  const reclaimable = (summary?.categories ?? []).reduce((sum, row) => sum + row.bytes, 0);
+  const handleLoaded = useCallback((state: ResultsState) => {
+    setLoaded({ root: state.root, rows: state.rows, finishedAt: state.finishedAt, status: state.status });
+    setFailedRoot(null);
+  }, []);
+  const handleLoadFailed = useCallback(() => setFailedRoot(root), [root]);
+
+  const current = loaded !== null && sameRoot(loaded.root, root) ? loaded : null;
+  const showMap = mapOpened || tab === 'map';
 
   return (
     <main className="min-h-full bg-canvas text-ink">
@@ -56,17 +69,17 @@ export function ResultsPage({
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 rounded text-sm font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={`mb-4 rounded text-sm font-medium text-accent hover:underline ${FOCUS}`}
         >
           ← Home
         </button>
         <PageHeader
           title={<>Results for {root}</>}
           subtitle={
-            summary?.finishedAt != null
-              ? `Scanned ${formatRelativeTime(summary.finishedAt)}${
-                  reclaimable > 0 ? ` · up to ${formatBytes(reclaimable)} can be cleaned` : ''
-                }${summary.status === 'cancelled' ? ' · scan was cancelled, results are partial' : ''}`
+            current?.finishedAt != null
+              ? `Scanned ${formatRelativeTime(current.finishedAt)}${
+                  current.status === 'cancelled' ? ' · scan was cancelled, results are partial' : ''
+                }`
               : undefined
           }
           actions={
@@ -80,6 +93,7 @@ export function ResultsPage({
         <div className="mt-6">
           <Tabs<ResultsTab>
             label="Results views"
+            idPrefix="results"
             value={tab}
             onChange={setTab}
             items={[
@@ -89,21 +103,29 @@ export function ResultsPage({
           />
         </div>
 
-        <div className="mt-6">
-          {tab === 'clean' ? (
-            <ResultsView
+        <div role="tabpanel" id="results-panel-clean" aria-labelledby="results-tab-clean" hidden={tab !== 'clean'} className="mt-6">
+          <ResultsView
+            key={root}
+            api={api}
+            root={root}
+            embedded
+            initialCategory={initialCategory}
+            onOpenDevCleanup={() => onOpenDevCleanup(root)}
+            onLoaded={handleLoaded}
+            onLoadFailed={handleLoadFailed}
+          />
+        </div>
+        {showMap && (
+          <div role="tabpanel" id="results-panel-map" aria-labelledby="results-tab-map" hidden={tab !== 'map'} className="mt-6">
+            <SpaceMap
               key={root}
               api={api}
               root={root}
-              runId={null}
-              embedded
-              initialCategory={initialCategory}
-              onOpenDevCleanup={() => onOpenDevCleanup(root)}
+              rows={current?.rows ?? null}
+              failed={failedRoot !== null && sameRoot(failedRoot, root)}
             />
-          ) : (
-            <SpaceMap api={api} root={root} />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </main>
   );

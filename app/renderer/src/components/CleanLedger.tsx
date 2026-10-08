@@ -2,8 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { formatBytes } from '../format';
 import { ChevronRightIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+import { FOCUS } from './ui';
 
 export interface CleanLedgerRow {
   id: string;

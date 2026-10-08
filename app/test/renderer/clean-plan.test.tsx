@@ -60,9 +60,9 @@ describe('CleanPlan', () => {
   });
 
   it('confirms and cancels', () => {
-    const { onConfirm, onCancel } = setup({}, { acknowledge: true });
+    const { onConfirm, onCancel } = setup();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -89,7 +89,7 @@ describe('CleanPlan', () => {
       </CleanDialog>,
     );
 
-    expect(screen.getByRole('button', { name: 'Confirm & Clean' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete 4.9 KB' })).toBeDisabled();
     expect(screen.getByText('I understand some items cannot be recovered')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
@@ -108,7 +108,36 @@ describe('CleanPlan', () => {
         />
       </CleanDialog>,
     );
-    expect(screen.getByRole('button', { name: 'Confirm & Clean' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Delete 4.9 KB' })).toBeEnabled();
+  });
+
+  it('needs no acknowledgement for an all-safe plan', () => {
+    const { onConfirm } = setup();
+
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    const confirm = screen.getByRole('button', { name: 'Delete 9.8 KB' });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires the acknowledgement for an empty-recycle-bin item even when safe', () => {
+    const recycle: CleanItemPreview = {
+      ruleId: 'recycle-bin',
+      category: 'recycle-bin',
+      path: 'C:\\$Recycle.Bin',
+      name: '$Recycle.Bin',
+      bytes: 100,
+      grade: 'safe',
+      recovery: { kind: 'junk', text: 'Emptied items are permanently gone' },
+      evidence: '3 items on C:',
+      action: 'empty-recycle-bin',
+      adminRequired: false,
+    };
+    setup({ items: [recycle], totals: { bytes: 100, items: 1, reviewBytes: 0, reviewItems: 0 } });
+
+    expect(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete 100 B' })).toBeDisabled();
   });
 
   it('offers Explorer for the Recycle Bin and relaunch for admin items', () => {

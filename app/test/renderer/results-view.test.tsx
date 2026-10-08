@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ResultsView } from '../../renderer/src/pages/ResultsView';
-import { flushLiveScan, ingestScanEvent } from '../../renderer/src/live-scan';
 import type { CategorySummaryRow, CleanExecuteRequest, ResultRow, ResultsState, ScanEvent } from '../../src/shared/ipc';
 import { makeApi, makeCategories, makeCleanPreview, makeResultsRows, makeResultsState } from './fakes';
 
@@ -44,7 +43,7 @@ describe('ResultsView', () => {
           resolveResults = resolve;
         }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     expect(screen.getByText('Loading results…')).toBeInTheDocument();
     expect(screen.queryByText(/No results yet/)).toBeNull();
@@ -57,7 +56,7 @@ describe('ResultsView', () => {
 
   it('renders the summary, the filter chips and the snapshot banner', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Filter by category' })).toBeInTheDocument();
@@ -74,7 +73,7 @@ describe('ResultsView', () => {
       getResults: async () =>
         makeResultsState({ categories: withNpmCache(), rows: [...makeResultsRows(), npmCacheRow] }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Select npm-cache' })).toBeInTheDocument();
@@ -92,7 +91,7 @@ describe('ResultsView', () => {
       getResults: async () =>
         makeResultsState({ categories: withNpmCache(), rows: [...makeResultsRows(), npmCacheRow] }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     const input = await screen.findByPlaceholderText('Search paths and names');
     expect(input).toHaveAccessibleName('Search paths and names');
@@ -115,7 +114,7 @@ describe('ResultsView', () => {
 
   it('unfolds a contributor to show why, the rule, recovery, and Keep', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Why Temp is graded Safe' }));
 
@@ -131,7 +130,7 @@ describe('ResultsView', () => {
 
   it('announces the async recovery load in the polite region', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Why Temp is graded Safe' }));
 
@@ -141,7 +140,7 @@ describe('ResultsView', () => {
   it('reveals a path through the relocated tree', async () => {
     const revealPath = vi.fn(async () => {});
     const api = makeApi({ getResults: async () => makeResultsState(), revealPath });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Browse everything/ }));
     fireEvent.click((await screen.findAllByRole('button', { name: /^Explore/ }))[0]!);
@@ -150,14 +149,14 @@ describe('ResultsView', () => {
 
   it('shows an empty state when there are no results', async () => {
     const api = makeApi({ getResults: async () => makeResultsState({ source: 'empty', rows: [], categories: [] }) });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     expect(await screen.findByText(/No results yet/)).toBeInTheDocument();
   });
 
   it('hides danger rows behind the Show danger toggle inside the tree', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     await screen.findByRole('checkbox', { name: 'Select Temp' });
     fireEvent.click(screen.getByRole('button', { name: /Browse everything/ }));
@@ -168,65 +167,6 @@ describe('ResultsView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Hide danger/ }));
     expect(screen.queryByText('Windows')).toBeNull();
-  });
-
-  it('merges live folder and match events into the contributor list during a scan', async () => {
-    const getResults = vi.fn(async () => makeResultsState());
-    const api = makeApi({ getResults });
-    render(<ResultsView api={api} root="C:\\" runId="run-1" />);
-
-    act(() => {
-      ingestScanEvent({
-        type: 'folders',
-        runId: 'run-1',
-        folders: [
-          {
-            path: 'C:\\Temp',
-            name: 'Temp',
-            parent: 'C:\\',
-            bytes: 512,
-            allocatedBytes: 4096,
-            fileCount: 2,
-            folderCount: 0,
-            linkCount: 0,
-            newestMtimeMs: 0,
-            errorCount: 0,
-            partial: false,
-            complete: true,
-            childCount: 0,
-            grade: 'safe',
-            gradeReason: 'Temporary files — apps recreate them as needed',
-            action: null,
-          },
-        ],
-      });
-      flushLiveScan();
-    });
-    expect(screen.queryByRole('checkbox', { name: 'Select Temp' })).toBeNull();
-
-    act(() => {
-      ingestScanEvent({
-        type: 'matches',
-        runId: 'run-1',
-        matches: [
-          {
-            path: 'C:\\Temp',
-            bytes: 512,
-            ruleId: 'system-temp',
-            category: 'temp',
-            grade: 'safe',
-            evidence: 'live evidence',
-          },
-        ],
-      });
-      flushLiveScan();
-    });
-    expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
-    expect(screen.getAllByText('512 B').length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Why Temp is graded Safe' }));
-    expect(await screen.findByText('live evidence')).toBeInTheDocument();
-    expect(getResults).not.toHaveBeenCalled();
   });
 
   it('selects contributors and cleans them through the preview dialog', async () => {
@@ -247,17 +187,17 @@ describe('ResultsView', () => {
       },
     }));
     const api = makeApi({ getResults: async () => makeResultsState(), executeClean });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Temp' }));
-    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent('Clean 1 selected');
+    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent('1 selected');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview & clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
     const dialog = await screen.findByRole('dialog', { name: 'Clean 1 selected' });
     expect(dialog).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
+    expect(screen.queryByRole('checkbox', { name: 'I understand some items cannot be recovered' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
 
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
     expect(executeClean.mock.calls[0]?.[0]).toMatchObject({ planId: 'plan-1' });
@@ -274,7 +214,7 @@ describe('ResultsView', () => {
         return () => {};
       },
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Temp' }));
     expect(getResults).toHaveBeenCalledTimes(1);
 
@@ -282,35 +222,7 @@ describe('ResultsView', () => {
       handlers[0]?.({ type: 'cleaned', cleanId: 'clean-1', root: 'C:\\' });
     });
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Preview & clean' })).toBeNull());
-  });
-
-  it('drops cleaned rows from the live results view', async () => {
-    const getResults = vi.fn(async () =>
-      makeResultsState({ rows: makeResultsRows().filter((row) => row.path !== 'C:\\Temp') }),
-    );
-    const handlers: Array<(event: ScanEvent) => void> = [];
-    const api = makeApi({
-      getResults,
-      onScanEvent: (handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-    });
-    render(<ResultsView api={api} root="C:\\" runId="run-clean" />);
-
-    act(() => {
-      ingestScanEvent({ type: 'folders', runId: 'run-clean', folders: makeResultsRows() });
-      flushLiveScan();
-    });
-    expect(await screen.findByRole('checkbox', { name: 'Select Temp' })).toBeInTheDocument();
-    expect(getResults).not.toHaveBeenCalled();
-
-    await act(async () => {
-      for (const handler of handlers) handler({ type: 'cleaned', cleanId: 'clean-1', root: 'C:\\' });
-    });
-    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Select Temp' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Preview & delete' })).toBeNull());
   });
 
   it('opens Dev Cleanup from the npm projects chip', async () => {
@@ -319,7 +231,7 @@ describe('ResultsView', () => {
       row.category === 'npm-projects' ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] } : row,
     );
     const api = makeApi({ getResults: async () => makeResultsState({ categories }) });
-    render(<ResultsView api={api} root="C:\\" runId={null} onOpenDevCleanup={onOpenDevCleanup} />);
+    render(<ResultsView api={api} root="C:\\" onOpenDevCleanup={onOpenDevCleanup} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /npm projects/ }));
     expect(onOpenDevCleanup).toHaveBeenCalledTimes(1);
@@ -331,7 +243,7 @@ describe('ResultsView', () => {
       row.category === 'npm-projects' ? { ...row, bytes: 4096, items: 1, ruleIds: ['npm-project-modules'] } : row,
     );
     const api = makeApi({ getResults: async () => makeResultsState({ categories }) });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     await screen.findByRole('checkbox', { name: 'Select Temp' });
     expect(screen.queryByRole('button', { name: /npm projects/ })).toBeNull();
@@ -342,12 +254,12 @@ describe('ResultsView', () => {
     const api = makeApi({
       getResults: async () => makeResultsState({ rows: [...makeResultsRows(), npmCacheRow] }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     await screen.findByRole('checkbox', { name: 'Select Temp' });
     fireEvent.click(screen.getByRole('checkbox', { name: /Select all safe/ }));
 
-    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent('Clean 2 selected');
+    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent('2 selected');
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Deselect all/ }));
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Selection' })).toBeNull());
@@ -357,7 +269,7 @@ describe('ResultsView', () => {
     const api = makeApi({
       getResults: async () => makeResultsState({ rows: [...makeResultsRows(), npmCacheRow] }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Why Temp is graded Safe' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
@@ -365,7 +277,7 @@ describe('ResultsView', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Select all safe/ }));
     const selection = screen.getByRole('status', { name: 'Selection' });
-    expect(selection).toHaveTextContent('Clean 1 selected');
+    expect(selection).toHaveTextContent('1 selected');
     expect(selection).toHaveTextContent('1.0 KB');
   });
 
@@ -378,7 +290,7 @@ describe('ResultsView', () => {
         : { ok: true as const, preview: makeCleanPreview() };
     });
     const api = makeApi({ getResults: async () => makeResultsState(), previewClean });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Why Temp is graded Safe' }));
     expect(await screen.findByText('Couldn’t load recovery details.')).toBeInTheDocument();
@@ -406,7 +318,7 @@ describe('ResultsView', () => {
     });
     const rowsWithTempName = (name: string) =>
       makeResultsRows().map((row) => (row.path === 'C:\\Temp' ? { ...row, name } : row));
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
     await act(async () => {
@@ -432,20 +344,22 @@ describe('ResultsView', () => {
       getResults: async () => makeResultsState(),
       previewClean: async () => ({ ok: false as const, reason: 'busy' as const, running: 'analyze' as const }),
     });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Temp' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Preview & clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
     expect(await screen.findByText('A scan is already running. Cancel it first.')).toBeInTheDocument();
     expect(screen.queryByText('Building the cleanup plan.')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('A scan is already running. Cancel it first.');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' }).find((node) => node.textContent === 'Close')!);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('shows an empty contributor state for a category with no loaded rows', async () => {
     const api = makeApi({ getResults: async () => makeResultsState({ categories: withNpmCache(4096) }) });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     await screen.findByRole('checkbox', { name: 'Select Temp' });
     fireEvent.click(screen.getByRole('button', { name: /npm cache/ }));
@@ -461,7 +375,7 @@ describe('ResultsView', () => {
     const getResults = vi.fn(async () => makeResultsState());
     getResults.mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
     const api = makeApi({ getResults });
-    render(<ResultsView api={api} root="C:\\" runId={null} />);
+    render(<ResultsView api={api} root="C:\\" />);
 
     expect(await screen.findByText('Couldn\u2019t load results. Reload to try again.')).toBeInTheDocument();
     expect(screen.queryByText(/EPERM/)).toBeNull();
@@ -471,27 +385,38 @@ describe('ResultsView', () => {
     expect(getResults).toHaveBeenCalledTimes(2);
   });
 
-  it('announces streamed scan updates in a polite live region', async () => {
-    const api = makeApi({ getResults: async () => makeResultsState() });
-    render(<ResultsView api={api} root="C:\\" runId="run-1" />);
-
-    act(() => {
-      ingestScanEvent({ type: 'categories', runId: 'run-1', categories: makeCategories() });
+  it('keeps a selected row counted and sent to the clean flow after the category filter changes', async () => {
+    const previewClean = vi.fn(async () => ({ ok: true as const, preview: makeCleanPreview() }));
+    const api = makeApi({
+      getResults: async () =>
+        makeResultsState({ categories: withNpmCache(), rows: [...makeResultsRows(), npmCacheRow] }),
+      previewClean,
     });
+    render(<ResultsView api={api} root="C:\\" />);
 
-    const status = screen.getByText('Scanning — 256 KB reclaimable so far.');
-    expect(status).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Temp' }));
+    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent('1 selected');
+
+    fireEvent.click(screen.getByRole('button', { name: /npm cache/ }));
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Select Temp' })).toBeNull());
+    const bar = screen.getByRole('status', { name: 'Selection' });
+    expect(bar).toHaveTextContent('1 selected');
+    expect(bar).toHaveTextContent('256 KB');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
+    await waitFor(() => expect(previewClean).toHaveBeenCalledTimes(1));
+    expect(previewClean).toHaveBeenCalledWith({ scope: 'row', root: 'C:\\\\', paths: ['C:\\Temp'] });
   });
 
   it('closes the bulk dialog when the root changes', async () => {
     const api = makeApi({ getResults: async () => makeResultsState() });
-    const { rerender } = render(<ResultsView api={api} root="C:\\" runId={null} />);
+    const { rerender } = render(<ResultsView api={api} root="C:\\" />);
 
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Temp' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Preview & clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
     expect(await screen.findByRole('dialog', { name: 'Clean 1 selected' })).toBeInTheDocument();
 
-    rerender(<ResultsView api={api} root="D:\\" runId={null} />);
+    rerender(<ResultsView api={api} root="D:\\" />);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

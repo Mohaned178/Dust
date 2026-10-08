@@ -5,10 +5,8 @@ import { groupResultsByCategory } from '../clean';
 import { CleanLedger } from './CleanLedger';
 import type { CleanLedgerRow } from './CleanLedger';
 import { CopyButton } from './CopyButton';
-import { CheckIcon, InfoIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const PRIMARY = `inline-flex w-full items-center justify-center rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-strong ${FOCUS}`;
+import { CheckIcon } from './icons';
+import { Alert, Button } from './ui';
 
 export interface CleanSummaryProps {
   report: CleanReport;
@@ -74,20 +72,19 @@ export function CleanSummary({ report, onDone, doneLabel = 'View Updated Disk' }
         </p>
       )}
       {caveats.length > 0 && (
-        <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
-          <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <div className="min-w-0 space-y-1">
+        <Alert tone="review" className="mt-3">
+          <div className="space-y-1">
             {caveats.map((line) => (
               <p key={line}>{line}</p>
             ))}
           </div>
-        </div>
+        </Alert>
       )}
 
       <div className="mt-6">
-        <button type="button" onClick={onDone} className={PRIMARY}>
+        <Button variant="primary" size="lg" onClick={onDone} className="w-full">
           {doneLabel}
-        </button>
+        </Button>
       </div>
     </>
   );

@@ -21,12 +21,7 @@ import { CopyButton } from './CopyButton';
 import { GradePill } from './GradePill';
 import { UninstallPhaseList } from './UninstallPhaseList';
 import type { PhaseState } from './UninstallPhaseList';
-import { InfoIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const PRIMARY = `inline-flex items-center justify-center rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
-const SECONDARY = `inline-flex items-center justify-center rounded-lg border border-hairline bg-surface px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
-const COMPACT = `inline-flex items-center justify-center rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`;
+import { Alert, Button, FOCUS } from './ui';
 
 type Stage = 'building' | 'plan' | 'running' | 'report' | 'error';
 
@@ -373,17 +368,14 @@ export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose
           {error !== null && <ErrorNotice message={error} />}
 
           <div className="mt-6 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className={SECONDARY}>
-              Cancel
-            </button>
-            <button
-              type="button"
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={totals.items === 0 || (reviewItems.length > 0 && !acknowledge)}
               onClick={() => void execute()}
-              className={PRIMARY}
             >
               Uninstall
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -400,12 +392,9 @@ export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose
           </div>
 
           {reboot && (
-            <div
-              role="note"
-              className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-            >
+            <Alert className="mt-4">
               This app finishes uninstalling after a restart. Dust left its leftovers alone.
-            </div>
+            </Alert>
           )}
 
           {waiting && waitingSince !== null && (
@@ -413,16 +402,15 @@ export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose
               <p className="text-sm text-ink-muted">
                 Still running · {Math.max(Math.floor((clock - waitingSince) / 1000), 0)}s
               </p>
-              <button
-                type="button"
-                className={COMPACT}
+              <Button
+                size="sm"
                 onClick={() => {
                   setSkippedWaiting(true);
                   void api.skipUninstallWaiting();
                 }}
               >
                 Skip waiting
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -435,9 +423,9 @@ export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose
           <h2 className="text-lg font-semibold tracking-tight text-ink">Nothing was removed</h2>
           <ErrorNotice message={error} />
           <div className="mt-6 flex justify-end">
-            <button type="button" onClick={onClose} className={PRIMARY}>
+            <Button variant="primary" onClick={onClose}>
               Close
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -501,13 +489,9 @@ function ItemRow({
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div
-      role="alert"
-      className="mt-4 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-    >
-      <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-      <p className="min-w-0">{message}</p>
-    </div>
+    <Alert tone="danger" className="mt-4">
+      <p>{message}</p>
+    </Alert>
   );
 }
 
@@ -561,34 +545,23 @@ function ReportBody({ report, onDone }: { report: RemovalReport; onDone: () => v
       </dl>
 
       {report.uninstaller.skippedReason !== null && (
-        <div
-          role="note"
-          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-        >
+        <Alert className="mt-4">
           <p className="font-medium">The app&apos;s own uninstaller did not run</p>
           <p className="mt-0.5 text-xs text-ink-muted">
             {blockReasonText(report.uninstaller.skippedReason) ?? keptReasonText(report.uninstaller.skippedReason)}
           </p>
-        </div>
+        </Alert>
       )}
 
       {report.uninstaller.ran && !report.uninstaller.verifiedGone && (
-        <div
-          role="note"
-          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-        >
+        <Alert className="mt-4">
           The app still appears in the installed list. The maker&apos;s uninstaller may not have finished; run it again
           from Windows Settings if needed.
-        </div>
+        </Alert>
       )}
 
       {report.outcome === 'reboot-required' && (
-        <div
-          role="note"
-          className="mt-4 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-        >
-          Restart to finish uninstalling. Leftovers were not touched.
-        </div>
+        <Alert className="mt-4">Restart to finish uninstalling. Leftovers were not touched.</Alert>
       )}
 
       {report.registry.backupPath.length > 0 && (
@@ -622,9 +595,9 @@ function ReportBody({ report, onDone }: { report: RemovalReport; onDone: () => v
       <p className="mt-4 break-all font-mono text-xs text-ink-muted">{report.journalPath}</p>
 
       <div className="mt-6 flex justify-end">
-        <button type="button" onClick={onDone} className={PRIMARY}>
+        <Button variant="primary" onClick={onDone}>
           Done
-        </button>
+        </Button>
       </div>
     </>
   );

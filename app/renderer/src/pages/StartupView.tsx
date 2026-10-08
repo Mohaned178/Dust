@@ -353,7 +353,7 @@ function StartupSection({ title, count, entries, empty, busyId, onToggle }: Star
   return (
     <section
       aria-label={title}
-      className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+      className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card"
     >
       <div className="flex items-center gap-3 px-4 py-3.5">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>

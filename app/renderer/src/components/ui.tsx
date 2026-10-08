@@ -9,10 +9,10 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'md' | 'lg' | 'sm';
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent-strong shadow-[0_1px_2px_rgba(15,110,110,0.25)]',
+  primary: 'bg-accent text-on-accent hover:bg-accent-strong shadow-[0_1px_2px_rgba(16,24,40,0.12)]',
   secondary: 'border border-hairline bg-surface text-ink hover:border-hairline-strong hover:bg-surface-hover',
   ghost: 'text-accent hover:bg-accent-soft',
-  danger: 'bg-grade-danger text-white hover:brightness-95',
+  danger: 'bg-grade-danger text-on-accent hover:brightness-95',
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -88,6 +88,54 @@ export function Badge({
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * Inline message box. `info` for neutral notes, `danger` for errors (announced
+ * as alerts), `review` for warnings the user should read before acting.
+ */
+export function Alert({
+  tone = 'info',
+  children,
+  action,
+  className = '',
+}: {
+  tone?: 'info' | 'danger' | 'review';
+  children: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  const tones = {
+    info: 'border-notice-border bg-notice text-ink',
+    danger: 'border-transparent bg-grade-danger-soft text-grade-danger',
+    review: 'border-transparent bg-grade-review-soft text-grade-review',
+  } as const;
+  const icon = tone === 'info' ? 'text-accent' : '';
+  return (
+    <div
+      role={tone === 'danger' ? 'alert' : undefined}
+      className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm ${tones[tone]} ${className}`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className={`mt-0.5 h-4 w-4 shrink-0 ${icon}`}
+      >
+        {tone === 'info' ? (
+          <path d="M12 16v-4m0-4h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z" />
+        ) : (
+          <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+        )}
+      </svg>
+      <div className="min-w-0 flex-1">{children}</div>
+      {action !== undefined && <div className="shrink-0">{action}</div>}
+    </div>
   );
 }
 
@@ -169,11 +217,14 @@ export function Tabs<T extends string>({
   onChange,
   items,
   label,
+  idPrefix,
 }: {
   value: T;
   onChange: (value: T) => void;
   items: Array<{ value: T; label: string; icon?: ReactNode }>;
   label: string;
+  /** Tab `i` gets id `${idPrefix}-tab-${value}` and controls `${idPrefix}-panel-${value}`. */
+  idPrefix?: string;
 }) {
   return (
     <div role="tablist" aria-label={label} className="inline-flex rounded-xl border border-hairline bg-surface p-1">
@@ -184,6 +235,8 @@ export function Tabs<T extends string>({
             key={item.value}
             type="button"
             role="tab"
+            id={idPrefix === undefined ? undefined : `${idPrefix}-tab-${item.value}`}
+            aria-controls={idPrefix === undefined ? undefined : `${idPrefix}-panel-${item.value}`}
             aria-selected={active}
             onClick={() => onChange(item.value)}
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${FOCUS} ${

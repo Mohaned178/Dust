@@ -1,16 +1,25 @@
 import type { CleanItemPreview, CleanPreview } from '../../../src/shared/ipc';
 import { CATEGORY_LABELS } from '../../../src/shared/categories';
-import { formatBytes, formatRelativeTime } from '../format';
-import { categoryRecoveryNote, groupItemsByCategory, refusedReasonText, recoveryLabel } from '../clean';
+import { formatBytes, formatCount, formatRelativeTime } from '../format';
+import {
+  categoryRecoveryNote,
+  groupItemsByCategory,
+  needsAcknowledgement,
+  refusedReasonText,
+  recoveryLabel,
+} from '../clean';
 import { CleanLedger } from './CleanLedger';
 import type { CleanLedgerRow } from './CleanLedger';
 import { CopyButton } from './CopyButton';
 import { GradePill } from './GradePill';
-import { ChevronRightIcon, InfoIcon } from './icons';
+import { ChevronRightIcon } from './icons';
+import { Alert, Button, FOCUS, Meter } from './ui';
 
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const PRIMARY = `inline-flex items-center justify-center rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
-const SECONDARY = `inline-flex items-center justify-center rounded-lg border border-hairline bg-surface px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
+export interface CleanProgress {
+  done: number;
+  plannedBytes: number;
+  freedBytes: number;
+}
 
 export interface CleanPlanProps {
   preview: CleanPreview;
@@ -21,6 +30,8 @@ export interface CleanPlanProps {
   onReveal: (path: string) => void;
   onRelaunchElevated?: () => void;
   busy: boolean;
+  /** Items finished so far while deleting, from the per-item `clean-item` events. */
+  progress?: CleanProgress | null;
   error?: string | null;
   scopeNote?: string | null;
 }
@@ -34,10 +45,13 @@ export function CleanPlan({
   onReveal,
   onRelaunchElevated,
   busy,
+  progress = null,
   error = null,
   scopeNote = null,
 }: CleanPlanProps) {
   const adminItems = preview.items.filter((item) => item.adminRequired);
+  const requiresAcknowledge = needsAcknowledgement(preview.items);
+  const itemCount = preview.items.length;
   const sourceText =
     preview.source === 'live'
       ? `Using Analyze data from ${formatRelativeTime(Date.now() - (preview.scanAgeMs ?? 0))}.`
@@ -80,42 +94,76 @@ export function CleanPlan({
       {preview.refused.length > 0 && <RefusedItems refused={preview.refused} />}
 
       {adminItems.length > 0 && onRelaunchElevated !== undefined && (
-        <button
-          type="button"
-          onClick={onRelaunchElevated}
-          className={`mt-4 inline-flex items-center rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`}
-        >
+        <Button size="sm" onClick={onRelaunchElevated} className="mt-4">
           Relaunch as Administrator
-        </button>
+        </Button>
       )}
 
-      <label className="mt-5 flex items-start gap-2.5 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={acknowledge}
-          onChange={(event) => onAcknowledge(event.target.checked)}
-          className={`mt-0.5 h-4 w-4 shrink-0 rounded border-hairline accent-accent ${FOCUS}`}
-        />
-        <span>I understand some items cannot be recovered</span>
-      </label>
+      {requiresAcknowledge && (
+        <label className="mt-5 flex items-start gap-2.5 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={acknowledge}
+            disabled={busy}
+            onChange={(event) => onAcknowledge(event.target.checked)}
+            className={`mt-0.5 h-4 w-4 shrink-0 rounded border-hairline accent-accent ${FOCUS}`}
+          />
+          <span>I understand some items cannot be recovered</span>
+        </label>
+      )}
 
       {error !== null && (
-        <div
-          role="alert"
-          className="mt-4 flex items-start gap-2.5 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-        >
-          <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <p className="min-w-0">{error}</p>
+        <Alert tone="danger" className="mt-4">
+          {error}
+        </Alert>
+      )}
+
+      {busy && (
+        <div className="mt-4">
+          <div role="status" className="flex items-center gap-2.5 text-sm text-ink-muted">
+            <span
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 rounded-full border-2 border-track border-t-accent motion-safe:animate-spin"
+            />
+            {progress === null || progress.done === 0 ? (
+              <p className="min-w-0">
+                Deleting {formatCount(itemCount)} {itemCount === 1 ? 'item' : 'items'} ·{' '}
+                <span className="font-mono">{formatBytes(preview.totals.bytes)}</span> — large folders can take a few
+                minutes.
+              </p>
+            ) : (
+              <p className="min-w-0">
+                Deleted {formatCount(Math.min(progress.done, itemCount))} of {formatCount(itemCount)}{' '}
+                {itemCount === 1 ? 'item' : 'items'} ·{' '}
+                <span className="font-mono">{formatBytes(progress.freedBytes)}</span> freed
+              </p>
+            )}
+          </div>
+          {/* Weighted by planned size: one huge folder should not read as 1/N done. */}
+          {progress !== null && progress.done > 0 && (
+            <Meter
+              value={progress.plannedBytes}
+              max={preview.totals.bytes}
+              label="Deletion progress"
+              className="mt-2.5 h-1.5"
+            />
+          )}
         </div>
       )}
 
       <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY}>
+        <Button size="lg" onClick={onCancel} disabled={busy}>
           Cancel
-        </button>
-        <button type="button" disabled={busy || !acknowledge} onClick={onConfirm} className={PRIMARY}>
-          {busy ? 'Cleaning…' : 'Confirm & Clean'}
-        </button>
+        </Button>
+        {/* Red only when the plan holds irreversible items; an all-green plan stays calm. */}
+        <Button
+          size="lg"
+          variant={requiresAcknowledge ? 'danger' : 'primary'}
+          disabled={busy || itemCount === 0 || (requiresAcknowledge && !acknowledge)}
+          onClick={onConfirm}
+        >
+          {busy ? 'Deleting…' : `Delete ${formatBytes(preview.totals.bytes)}`}
+        </Button>
       </div>
     </>
   );
@@ -141,13 +189,9 @@ function PlanItem({ item, onReveal }: { item: CleanItemPreview; onReveal: (path:
       <p className="mt-1.5 text-xs text-ink-muted">{item.evidence}</p>
       {item.adminRequired && <p className="mt-1.5 text-xs text-ink-muted">Needs administrator rights.</p>}
       {item.action === 'empty-recycle-bin' && (
-        <button
-          type="button"
-          onClick={() => onReveal(item.path)}
-          className={`mt-1.5 text-xs font-medium text-accent hover:underline ${FOCUS}`}
-        >
+        <Button variant="ghost" size="sm" onClick={() => onReveal(item.path)} className="mt-1.5 -ml-3">
           Open the Recycle Bin in Explorer first
-        </button>
+        </Button>
       )}
     </li>
   );

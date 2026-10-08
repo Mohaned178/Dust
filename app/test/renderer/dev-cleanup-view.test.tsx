@@ -57,8 +57,7 @@ describe('DevCleanupView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
 
     expect(await screen.findByRole('dialog', { name: 'Dev Cleanup' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
 
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('dialog', { name: 'Cleanup complete' })).toBeInTheDocument();
@@ -121,8 +120,7 @@ describe('DevCleanupView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
     fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
     await screen.findByRole('dialog', { name: 'Dev Cleanup' });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
 
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
@@ -148,10 +146,14 @@ describe('DevCleanupView', () => {
       });
     });
 
-    const status = screen.getByRole('status');
+    const status = screen
+      .getAllByRole('status')
+      .find((node) => node.textContent?.includes('C:\\dev\\dead-app\\node_modules'));
+    expect(status).toBeDefined();
+    expect(status).toHaveTextContent('done');
     expect(status).toHaveTextContent('C:\\dev\\dead-app\\node_modules');
     expect(status).toHaveTextContent('done');
-    expect(screen.getByRole('button', { name: 'Cleaning…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
 
     await act(async () => {
       resolveExecute({ ok: true, report: makeCleanReport({ scope: 'dev' }) });

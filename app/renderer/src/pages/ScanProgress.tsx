@@ -1,7 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CategorySummaryRow, DustApi, ScanProgressPayload } from '../../../src/shared/ipc';
+import type { CategorySummaryRow, DustApi, ScanEvent, ScanProgressPayload } from '../../../src/shared/ipc';
 import { formatBytes, formatClock, formatCount } from '../format';
-import { Button, Card, ProgressRing } from '../components/ui';
+import { Alert, Button, Card, ProgressRing } from '../components/ui';
+
+/**
+ * What the app has seen of one scan run. The app-level listener fills this from
+ * mount, so a run that finishes before this screen subscribes is not lost.
+ */
+export interface ScanRunRecord {
+  progress: ScanProgressPayload | null;
+  categories: CategorySummaryRow[];
+  finalizing: boolean;
+  outcome: { type: 'finished'; status: 'complete' | 'cancelled' } | { type: 'failed'; message: string } | null;
+}
+
+export function emptyScanRun(): ScanRunRecord {
+  return { progress: null, categories: [], finalizing: false, outcome: null };
+}
+
+/** Folds one scan event into a run record (mutating it); events that do not describe a run are ignored. */
+export function applyScanEvent(record: ScanRunRecord, event: ScanEvent): void {
+  switch (event.type) {
+    case 'progress':
+      record.progress = event.progress;
+      break;
+    case 'categories':
+      record.categories = event.categories;
+      break;
+    case 'finalizing':
+      record.finalizing = true;
+      break;
+    case 'finished':
+      record.outcome = { type: 'finished', status: event.status };
+      break;
+    case 'failed':
+      record.outcome = { type: 'failed', message: event.message };
+      break;
+    default:
+      break;
+  }
+}
 
 export interface ScanProgressProps {
   api: DustApi;
@@ -9,6 +47,8 @@ export interface ScanProgressProps {
   runId: string;
   /** Used space on the drive: the denominator that turns bytes found into a percentage. */
   usedBytes: number | null;
+  /** Events already seen for this run (the screen mounts after the scan has started). */
+  getRun?: (runId: string) => ScanRunRecord | undefined;
   onFinished: (root: string, status: 'complete' | 'cancelled') => void;
   onFailed: (message: string) => void;
 }
@@ -21,50 +61,76 @@ const PHASE_COPY: Record<Phase, string> = {
   done: 'Done',
 };
 
-export function ScanProgress({ api, root, runId, usedBytes, onFinished, onFailed }: ScanProgressProps) {
-  const [progress, setProgress] = useState<ScanProgressPayload | null>(null);
-  const [categories, setCategories] = useState<CategorySummaryRow[]>([]);
-  const [phase, setPhase] = useState<Phase>('reading');
+export function ScanProgress({ api, root, runId, usedBytes, getRun, onFinished, onFailed }: ScanProgressProps) {
+  const [seen] = useState(() => getRun?.(runId));
+  const [progress, setProgress] = useState<ScanProgressPayload | null>(seen?.progress ?? null);
+  const [categories, setCategories] = useState<CategorySummaryRow[]>(seen?.categories ?? []);
+  const [phase, setPhase] = useState<Phase>(
+    seen?.outcome?.type === 'finished' ? 'done' : seen?.finalizing ? 'checking' : 'reading',
+  );
   const [cancelling, setCancelling] = useState(false);
+  const [cancelFailed, setCancelFailed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef(performance.now());
+  const settled = useRef(false);
   const finishedRef = useRef(onFinished);
   const failedRef = useRef(onFailed);
+  const getRunRef = useRef(getRun);
   finishedRef.current = onFinished;
   failedRef.current = onFailed;
-
-  useEffect(
-    () =>
-      api.onScanEvent((event) => {
-        if (!('runId' in event) || event.runId !== runId) return;
-        switch (event.type) {
-          case 'progress':
-            setProgress(event.progress);
-            break;
-          case 'categories':
-            setCategories(event.categories);
-            break;
-          case 'finalizing':
-            setPhase('checking');
-            break;
-          case 'finished':
-            setPhase('done');
-            finishedRef.current(root, event.status);
-            break;
-          case 'failed':
-            failedRef.current(event.message);
-            break;
-          default:
-            break;
-        }
-      }),
-    [api, root, runId],
-  );
+  getRunRef.current = getRun;
 
   useEffect(() => {
+    const settle = (outcome: NonNullable<ScanRunRecord['outcome']>) => {
+      if (settled.current) return;
+      settled.current = true;
+      if (outcome.type === 'finished') {
+        setPhase('done');
+        finishedRef.current(root, outcome.status);
+      } else {
+        failedRef.current(outcome.message);
+      }
+    };
+    const unsubscribe = api.onScanEvent((event) => {
+      if (!('runId' in event) || event.runId !== runId) return;
+      switch (event.type) {
+        case 'progress':
+          setProgress(event.progress);
+          break;
+        case 'categories':
+          setCategories(event.categories);
+          break;
+        case 'finalizing':
+          setPhase('checking');
+          break;
+        case 'finished':
+          settle({ type: 'finished', status: event.status });
+          break;
+        case 'failed':
+          settle({ type: 'failed', message: event.message });
+          break;
+        default:
+          break;
+      }
+    });
+    // Subscribed: now catch up on anything that arrived before this screen mounted.
+    // Events are delivered one at a time, so nothing can slip between these two steps.
+    const earlier = getRunRef.current?.(runId);
+    if (earlier !== undefined) {
+      setProgress(earlier.progress);
+      setCategories(earlier.categories);
+      if (earlier.finalizing) setPhase('checking');
+      if (earlier.outcome !== null) settle(earlier.outcome);
+    }
+    return unsubscribe;
+  }, [api, root, runId]);
+
+  // The clock stops once the scan is done.
+  useEffect(() => {
+    if (phase === 'done') return;
     const id = setInterval(() => setElapsed(performance.now() - startedAt.current), 250);
     return () => clearInterval(id);
-  }, []);
+  }, [phase]);
 
   const bytes = progress?.bytesSeen ?? 0;
   // Bytes found track used space closely; hold at 99 until the scan really ends.
@@ -78,7 +144,11 @@ export function ScanProgress({ api, root, runId, usedBytes, onFinished, onFailed
 
   const cancel = () => {
     setCancelling(true);
-    void api.cancelScan().catch(() => setCancelling(false));
+    setCancelFailed(false);
+    void api.cancelScan().catch(() => {
+      setCancelling(false);
+      setCancelFailed(true);
+    });
   };
 
   return (
@@ -116,9 +186,15 @@ export function ScanProgress({ api, root, runId, usedBytes, onFinished, onFailed
             {percent !== null ? `${percent} percent` : ''} {PHASE_COPY[phase]}
           </p>
 
+          {cancelFailed && (
+            <Alert tone="danger" className="mt-6 text-left">
+              Could not stop the scan. Try again.
+            </Alert>
+          )}
+
           <div className="mt-8 flex justify-center">
             <Button onClick={cancel} disabled={cancelling || phase !== 'reading'}>
-              {cancelling ? 'Stopping…' : 'Cancel'}
+              {cancelling ? 'Stopping…' : phase === 'reading' ? 'Cancel' : 'Finishing…'}
             </Button>
           </div>
         </Card>

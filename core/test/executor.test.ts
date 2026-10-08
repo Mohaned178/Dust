@@ -33,6 +33,8 @@ describe('deletePathTree', () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  // Copying node.exe and starting it (plus antivirus scanning the new exe) is
+  // slow under parallel load; the readiness wait allows up to 15 s.
   it('skips locked files, deletes the rest, and reports partial', async () => {
     // NOTE: deviation from the plan's draft test (openSync 'r' handle).
     // Verified empirically on this platform: Node/libuv opens files with
@@ -77,7 +79,7 @@ describe('deletePathTree', () => {
         }
       });
     }
-  });
+  }, 30_000);
 
   it('never follows links and reports them as errors', (ctx) => {
     fixture.file('real/data.bin', '1234567890');

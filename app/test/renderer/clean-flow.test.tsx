@@ -1,15 +1,18 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CleanDialog } from '../../renderer/src/components/CleanDialog';
 import { CleanFlow } from '../../renderer/src/components/CleanFlow';
 import { CleanPlan } from '../../renderer/src/components/CleanPlan';
 import { CleanSummary } from '../../renderer/src/components/CleanSummary';
 import type {
+  CleanExecuteRequest,
+  CleanExecuteResult,
   CleanItemPreview,
   CleanItemResult,
   CleanPreview,
   CleanReport,
   CleanPreviewResult,
+  ScanEvent,
 } from '../../src/shared/ipc';
 import { makeApi, makeCleanPreview } from './fakes';
 
@@ -111,6 +114,50 @@ describe('CleanFlow', () => {
     expect(screen.queryByText('Select at least one item to clean')).not.toBeInTheDocument();
     expect(screen.getByText('will be freed')).toBeInTheDocument();
   });
+
+  it('counts finished items from clean-item events for its own clean only', async () => {
+    const twoItems = makeCleanPreview({
+      items: [item({ path: 'C:\\a', bytes: 30_000 }), item({ path: 'C:\\b', bytes: 10_000 })],
+      totals: { bytes: 40_000, items: 2, reviewBytes: 0, reviewItems: 0 },
+    });
+    const executeClean = vi.fn((_request: CleanExecuteRequest) => new Promise<CleanExecuteResult>(() => {}));
+    const handlers: Array<(event: ScanEvent) => void> = [];
+    const api = makeApi({
+      previewClean: async () => ({ ok: true, preview: twoItems }),
+      executeClean,
+      onScanEvent: (handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+    });
+    render(
+      <CleanFlow
+        api={api}
+        scope="row"
+        root="C:\"
+        paths={['C:\\a']}
+        label="Clean"
+        onClose={() => {}}
+        onPrimary={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Delete / }));
+    await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
+    const cleanId = executeClean.mock.calls[0]?.[0]?.cleanId ?? '';
+    const emit = (event: ScanEvent) => act(() => handlers.forEach((handler) => handler(event)));
+
+    emit({
+      type: 'clean-item',
+      cleanId: 'someone-else',
+      item: reportItem({ plannedBytes: 10_000, deletedBytes: 10_000 }),
+    });
+    expect(screen.getByText(/Deleting 2 items/)).toBeInTheDocument();
+
+    emit({ type: 'clean-item', cleanId, item: reportItem({ plannedBytes: 30_000, deletedBytes: 29_000 }) });
+    expect(screen.getByText(/Deleted 1 of 2 items/)).toBeInTheDocument();
+    expect(screen.getByRole('meter', { name: 'Deletion progress' })).toHaveAttribute('aria-valuenow', '75');
+  });
 });
 
 describe('CleanDialog', () => {
@@ -191,7 +238,23 @@ describe('CleanPlan', () => {
   it('disables both cancel and confirm while executing', () => {
     render(<CleanPlan {...baseProps} busy preview={preview({ items: [item()] })} />);
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Cleaning/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+  });
+
+  it('shows done / total and freed bytes once items finish', () => {
+    render(
+      <CleanPlan
+        {...baseProps}
+        busy
+        progress={{ done: 1, plannedBytes: 1024, freedBytes: 1024 }}
+        preview={preview({
+          items: [item(), item({ path: 'C:\\b' })],
+          totals: { bytes: 2048, items: 2, reviewBytes: 0, reviewItems: 0 },
+        })}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Deleted 1 of 2 items · 1.0 KB freed');
+    expect(screen.getByRole('meter', { name: 'Deletion progress' })).toHaveAttribute('aria-valuenow', '50');
   });
 });
 

@@ -50,7 +50,7 @@ function NavButton({ icon: Icon, label, collapsed, active = false, disabled = fa
       <Icon className="h-[18px] w-[18px] shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
       {collapsed && focused && (
-        <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-hairline bg-surface px-2 py-1 text-xs font-medium text-ink shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-hairline bg-surface px-2 py-1 text-xs font-medium text-ink shadow-card">
           {label}
         </span>
       )}

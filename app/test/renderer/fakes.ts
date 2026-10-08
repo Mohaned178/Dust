@@ -9,6 +9,7 @@ import type {
   RemovalReport,
   ResultRow,
   ResultsState,
+  ScanEvent,
   StartupEntry,
   StartupListState,
   SystemInfoLive,
@@ -571,5 +572,37 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     onUninstallEvent: () => () => {},
     onScanEvent: () => () => {},
     ...overrides,
+  };
+}
+
+/** A scan-event bus: pass `onScanEvent` to makeApi and call `emit` to deliver to every live subscriber. */
+export function makeScanBus() {
+  const handlers = new Set<(event: ScanEvent) => void>();
+  return {
+    onScanEvent: (handler: (event: ScanEvent) => void) => {
+      handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+      };
+    },
+    emit: (event: ScanEvent) => {
+      for (const handler of [...handlers]) handler(event);
+    },
+  };
+}
+
+export function finishedEvent(runId: string, status: 'complete' | 'cancelled' = 'complete'): ScanEvent {
+  return {
+    type: 'finished',
+    runId,
+    status,
+    startedAt: 0,
+    finishedAt: 2000,
+    filesScanned: 10,
+    bytesSeen: 2048,
+    errors: 0,
+    projects: 0,
+    reclaimableBytes: 0,
+    saved: true,
   };
 }

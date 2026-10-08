@@ -24,7 +24,7 @@ export interface DevCleanupViewProps {
 }
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const PRIMARY = `inline-flex items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
+const PRIMARY = `inline-flex items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
 const SECONDARY = `inline-flex items-center justify-center rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
 
 const GROUP_ORDER = ['dead', 'occasional', 'active', 'orphaned', 'pinned'] as const;
@@ -376,7 +376,7 @@ function GroupLedger({ group, collapsed, onToggle, selected, onToggleProject, on
   return (
     <section
       aria-label={group.label}
-      className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+      className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card"
     >
       <button
         type="button"

@@ -64,7 +64,7 @@ export function UpdateBanner({ api }: UpdateBannerProps) {
             <button
               type="button"
               onClick={() => void api.installUpdate()}
-              className={`mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong ${FOCUS}`}
+              className={`mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-strong ${FOCUS}`}
             >
               Restart to update
             </button>

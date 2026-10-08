@@ -32,7 +32,7 @@ export function Switch({ checked, disabled = false, busy = false, label, title, 
     >
       <span
         aria-hidden="true"
-        className={`h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(16,24,40,0.25)] transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+        className={`h-4 w-4 rounded-full bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.25)] transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
           checked ? 'translate-x-[18px]' : 'translate-x-0.5'
         }`}
       />

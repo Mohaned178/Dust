@@ -1,8 +1,8 @@
 import type { CategoryId } from '@dust/core';
 import type { CategorySummaryRow } from '../../../src/shared/ipc';
 import { formatBytes } from '../format';
+import { FOCUS } from './ui';
 
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
 
 export interface CategoryStripProps {

@@ -24,8 +24,8 @@ describe('QuickCleanView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Temp, 9.8 KB, Junk by default' }));
     expect(screen.getByText('C:\\Users\\x\\AppData\\Local\\Temp')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand some items cannot be recovered' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm & Clean' }));
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
     await waitFor(() => expect(executeClean).toHaveBeenCalledTimes(1));
 
     expect(await screen.findByRole('button', { name: 'View Updated Disk' })).toBeInTheDocument();

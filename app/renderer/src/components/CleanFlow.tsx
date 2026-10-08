@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CleanPreview,
   CleanPreviewRequest,
@@ -12,11 +12,9 @@ import { cleanErrorMessage, newCleanId } from '../clean';
 import { formatCount } from '../format';
 import { CleanDialog } from './CleanDialog';
 import { CleanPlan } from './CleanPlan';
+import type { CleanProgress } from './CleanPlan';
 import { CleanSummary } from './CleanSummary';
-import { InfoIcon } from './icons';
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const COMPACT_SECONDARY = `inline-flex items-center justify-center rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover ${FOCUS}`;
+import { Alert, Button } from './ui';
 
 export interface CleanFlowProps {
   api: DustApi;
@@ -46,7 +44,11 @@ export function CleanFlow({
   const [error, setError] = useState<string | null>(null);
   const [acknowledge, setAcknowledge] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [quickProgress, setQuickProgress] = useState<ScanProgressPayload | null>(null);
+  const [cleanProgress, setCleanProgress] = useState<CleanProgress | null>(null);
+  // A ref, not state: the first `clean-item` can arrive before a re-render commits.
+  const cleanIdRef = useRef<string | null>(null);
 
   const [request] = useState<CleanPreviewRequest>(() =>
     scope === 'quick' ? { scope: 'quick' } : { scope, root: root ?? '', paths: paths ?? [] },
@@ -58,6 +60,18 @@ export function CleanFlow({
       if (event.type === 'quick-clean-progress') setQuickProgress(event.progress);
     });
   }, [api, scope]);
+
+  useEffect(() => {
+    return api.onScanEvent((event) => {
+      if (event.type !== 'clean-item' || event.cleanId !== cleanIdRef.current) return;
+      const { plannedBytes, deletedBytes } = event.item;
+      setCleanProgress((current) => ({
+        done: (current?.done ?? 0) + 1,
+        plannedBytes: (current?.plannedBytes ?? 0) + plannedBytes,
+        freedBytes: (current?.freedBytes ?? 0) + deletedBytes,
+      }));
+    });
+  }, [api]);
 
   useEffect(() => {
     let active = true;
@@ -78,15 +92,18 @@ export function CleanFlow({
     return () => {
       active = false;
     };
-  }, [api, request]);
+  }, [api, request, attempt]);
 
   const confirm = useCallback(async () => {
     if (preview === null) return;
+    const cleanId = newCleanId();
+    cleanIdRef.current = cleanId;
+    setCleanProgress(null);
     setBusy(true);
     setError(null);
     try {
       const result = await api.executeClean({
-        cleanId: newCleanId(),
+        cleanId,
         planId: preview.planId,
         acknowledge: preview.items.filter((item) => item.grade === 'review').map((item) => item.path),
       });
@@ -128,14 +145,20 @@ export function CleanFlow({
               : undefined
           }
           busy={busy}
+          progress={cleanProgress}
           error={error}
           scopeNote={scope === 'quick' ? QUICK_CLEAN_SCOPE_NOTE : null}
         />
       ) : error !== null ? (
-        <div className="flex items-start gap-2.5 rounded-xl border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
-          <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <p className="min-w-0">{error}</p>
-        </div>
+        <>
+          <Alert tone="danger">{error}</Alert>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button onClick={closeFlow}>Close</Button>
+            <Button variant="primary" onClick={() => setAttempt((count) => count + 1)}>
+              Try again
+            </Button>
+          </div>
+        </>
       ) : (
         <div className="py-2">
           <p className="text-sm text-ink-muted">Building the cleanup plan.</p>
@@ -145,9 +168,9 @@ export function CleanFlow({
             </p>
           )}
           {scope === 'quick' && (
-            <button type="button" onClick={closeFlow} className={`mt-3 ${COMPACT_SECONDARY}`}>
+            <Button size="sm" onClick={closeFlow} className="mt-3">
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       )}

@@ -1,9 +1,11 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SystemInfoLive, SystemInfoStatic } from '@dust/core';
 import type { DustApi } from '../../../src/shared/ipc';
 import { StartupToast } from '../components/StartupToast';
-import { UsageBar } from '../components/UsageBar';
+import { RefreshIcon } from '../components/icons';
+import { Alert, Badge, Button, Card, Meter, PageHeader, SectionTitle } from '../components/ui';
+import { formatBytes } from '../format';
 import {
   VRAM_CAVEAT,
   formatBios,
@@ -14,13 +16,11 @@ import {
   formatUptime,
   formatVram,
   joinBoard,
+  toStorageVolumes,
 } from '../system-info';
+import type { StorageVolume } from '../system-info';
 
 const LIVE_INTERVAL_MS = 1500;
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const CARD = 'rounded-2xl border border-hairline bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)]';
-const SECONDARY = `rounded-lg border border-hairline bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:border-hairline-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS}`;
-const PRIMARY = `rounded-lg bg-accent px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong ${FOCUS}`;
 
 export interface SystemInfoViewProps {
   api: DustApi;
@@ -31,34 +31,80 @@ interface InfoRowProps {
   value: ReactNode | null;
 }
 
+function Page({ children }: { children: ReactNode }) {
+  return (
+    <main className="min-h-full bg-canvas text-ink">
+      <div className="mx-auto max-w-5xl px-6 py-10 sm:px-10">{children}</div>
+    </main>
+  );
+}
+
 function InfoRow({ label, value }: InfoRowProps) {
   return (
-    <div className="flex items-baseline justify-between gap-6 px-4 py-2.5">
+    <div className="flex items-baseline justify-between gap-6 px-5 py-2.5">
       <span className="min-w-0 text-sm text-ink-muted">{label}</span>
       {value !== null && <span className="shrink-0 text-right font-mono text-sm text-ink">{value}</span>}
     </div>
   );
 }
 
-function InfoSection({ title, children }: { title: string; children: ReactNode }) {
+function InfoSection({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className={`overflow-hidden ${CARD}`}>
-      <div className="px-4 py-3.5">
-        <h2 className="text-sm font-semibold text-ink">{title}</h2>
-      </div>
-      <div className="h-px w-full bg-hairline" aria-hidden="true" />
-      <div className="divide-y divide-hairline">{children}</div>
+    <section aria-label={title} className={className}>
+      <SectionTitle>{title}</SectionTitle>
+      <Card className="divide-y divide-hairline overflow-hidden">{children}</Card>
     </section>
   );
 }
 
 function LiveTile({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section aria-label={label} className={`px-4 py-4 ${CARD}`}>
-      <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</h2>
-      {children}
+    <section aria-label={label}>
+      <Card className="p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</h2>
+        {children}
+      </Card>
     </section>
   );
+}
+
+/** Same thresholds as the drive cards on Home: review above 80%, danger above 90%. */
+function usageTone(percent: number): 'accent' | 'review' | 'danger' {
+  return percent > 90 ? 'danger' : percent > 80 ? 'review' : 'accent';
+}
+
+function StorageRow({ volume }: { volume: StorageVolume }) {
+  const { usedBytes, totalBytes } = volume;
+  const percent = usedBytes !== null && totalBytes ? (usedBytes / totalBytes) * 100 : null;
+  return (
+    <div className="px-5 py-3.5">
+      <div className="flex items-baseline justify-between gap-6">
+        <p className="flex min-w-0 items-center gap-2 text-sm">
+          <span className="font-semibold text-ink">{volume.drive}</span>
+          {volume.label !== null && <span className="truncate text-ink-muted">{volume.label}</span>}
+          {volume.media !== null && <Badge>{volume.media}</Badge>}
+        </p>
+        <span className="shrink-0 text-right font-mono text-sm text-ink">
+          {usedBytes !== null && totalBytes !== null
+            ? `${formatBytes(usedBytes)} of ${formatBytes(totalBytes)}`
+            : 'Size unavailable'}
+        </span>
+      </div>
+      {usedBytes !== null && totalBytes !== null && percent !== null && (
+        <Meter
+          value={usedBytes}
+          max={totalBytes}
+          label={`${volume.drive} used space`}
+          tone={usageTone(percent)}
+          className="mt-2.5 h-2"
+        />
+      )}
+    </div>
+  );
+}
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`animate-pulse rounded-2xl border border-hairline bg-surface ${className}`} />;
 }
 
 function errorText(cause: unknown): string {
@@ -68,6 +114,7 @@ function errorText(cause: unknown): string {
 export function SystemInfoView({ api }: SystemInfoViewProps) {
   const [snapshot, setSnapshot] = useState<SystemInfoStatic | null>(null);
   const [live, setLive] = useState<SystemInfoLive | null>(null);
+  const [storage, setStorage] = useState<StorageVolume[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toastKey, setToastKey] = useState(0);
@@ -82,6 +129,11 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
         })
         .catch((cause: unknown) => setError(errorText(cause)))
         .finally(() => setRefreshing(false));
+      // Volumes come from the dashboard; a failure here only hides the Storage section.
+      api
+        .getDashboard()
+        .then((state) => setStorage(toStorageVolumes(state.volumes)))
+        .catch(() => {});
     },
     [api],
   );
@@ -90,8 +142,10 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
     load(false);
   }, [load]);
 
+  // Live values refresh only while the window is visible; coming back polls immediately.
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
     const poll = () => {
       api
         .getSystemInfoLive()
@@ -100,11 +154,23 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
         })
         .catch(() => {});
     };
-    poll();
-    const timer = window.setInterval(poll, LIVE_INTERVAL_MS);
+    const start = () => {
+      if (timer !== null) return;
+      poll();
+      timer = window.setInterval(poll, LIVE_INTERVAL_MS);
+    };
+    const stop = () => {
+      if (timer === null) return;
+      window.clearInterval(timer);
+      timer = null;
+    };
+    const onVisibility = () => (document.hidden ? stop() : start());
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [api]);
 
@@ -113,20 +179,51 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
     load(true);
   }, [load]);
 
+  const retry = useCallback(() => {
+    setError(null);
+    load(true);
+  }, [load]);
+
   const copy = useCallback(() => {
     if (snapshot === null) return;
-    const text = formatSystemInfoText(snapshot, live);
+    const text = formatSystemInfoText(snapshot, live, storage ?? []);
     void navigator.clipboard
       ?.writeText(text)
       .then(() => setToastKey((value) => value + 1))
       .catch(() => {});
-  }, [snapshot, live]);
+  }, [snapshot, live, storage]);
 
   if (snapshot === null) {
     return (
-      <main className="dust-dashboard flex min-h-screen items-center justify-center bg-canvas px-6 text-sm text-ink-muted">
-        {error ?? 'Loading system information.'}
-      </main>
+      <Page>
+        <PageHeader title="System Info" subtitle="Hardware and system details for this PC." />
+        {error !== null ? (
+          <Alert
+            tone="danger"
+            className="mt-8"
+            action={
+              <Button size="sm" onClick={retry}>
+                Try again
+              </Button>
+            }
+          >
+            Couldn&apos;t read system information. {error}
+          </Alert>
+        ) : (
+          <div role="status" aria-live="polite" className="mt-8">
+            <span className="sr-only">Loading system information.</span>
+            <div className="grid gap-4 sm:grid-cols-2" aria-hidden="true">
+              <SkeletonBlock className="h-28" />
+              <SkeletonBlock className="h-28" />
+            </div>
+            <SkeletonBlock className="mt-8 h-32" />
+            <div className="mt-8 grid items-start gap-6 md:grid-cols-2" aria-hidden="true">
+              <SkeletonBlock className="h-56" />
+              <SkeletonBlock className="h-40" />
+            </div>
+          </div>
+        )}
+      </Page>
     );
   }
 
@@ -158,124 +255,142 @@ export function SystemInfoView({ api }: SystemInfoViewProps) {
     snapshot.hostname !== null ||
     uptime !== null;
 
+  const cpuPercent = live === null ? null : live.cpuPercent;
+  const memPercent =
+    live !== null && live.memTotalBytes > 0 ? Math.round((live.memUsedBytes / live.memTotalBytes) * 100) : null;
+  const threads = snapshot.cpu?.logicalThreads ?? null;
+
   return (
-    <main className="dust-dashboard min-h-screen bg-canvas text-ink">
-      <header className="mx-auto w-full max-w-4xl px-6 pt-10 sm:px-8 sm:pt-12">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">System Info</h1>
-            <p className="mt-1.5 text-sm text-ink-muted">
-              Captured <span className="font-mono text-ink">{formatCapturedAt(snapshot.capturedAt)}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={refresh} disabled={refreshing} className={SECONDARY}>
+    <Page>
+      <PageHeader
+        title="System Info"
+        subtitle={
+          <>
+            Captured <span className="font-mono text-ink">{formatCapturedAt(snapshot.capturedAt)}</span>
+          </>
+        }
+        actions={
+          <>
+            <Button size="sm" onClick={refresh} disabled={refreshing}>
+              <RefreshIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
               {refreshing ? 'Refreshing…' : 'Refresh'}
-            </button>
-            <button type="button" onClick={copy} className={PRIMARY}>
+            </Button>
+            <Button size="sm" variant="primary" onClick={copy}>
               Copy system info
-            </button>
-          </div>
-        </div>
-      </header>
+            </Button>
+          </>
+        }
+      />
 
-      <div className="mx-auto w-full max-w-4xl px-6 pb-24 pt-8 sm:px-8">
-        {error !== null && (
-          <p
-            role="alert"
-            className="mb-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink"
-          >
-            {error}
+      {error !== null && (
+        <Alert tone="danger" className="mt-8">
+          Couldn&apos;t refresh system information. {error}
+        </Alert>
+      )}
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <LiveTile label="CPU usage">
+          <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-ink">
+            {cpuPercent === null ? '—' : `${cpuPercent}%`}
           </p>
+          <Meter
+            value={cpuPercent ?? 0}
+            max={100}
+            label="CPU usage"
+            tone={usageTone(cpuPercent ?? 0)}
+            className="mt-3 h-2.5"
+          />
+          <p className="mt-2 text-xs text-ink-muted">{threads === null ? 'All cores' : `Across ${threads} threads`}</p>
+        </LiveTile>
+        <LiveTile label="Memory usage">
+          <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-ink">
+            {memPercent === null ? '—' : `${memPercent}%`}
+          </p>
+          <Meter
+            value={live?.memUsedBytes ?? 0}
+            max={live?.memTotalBytes ?? 0}
+            label="Memory usage"
+            tone={usageTone(memPercent ?? 0)}
+            className="mt-3 h-2.5"
+          />
+          <p className="mt-2 font-mono text-xs tabular-nums text-ink-muted">
+            {live === null ? '—' : `${formatMemory(live.memUsedBytes)} used of ${formatMemory(live.memTotalBytes)}`}
+          </p>
+        </LiveTile>
+      </div>
+
+      {!snapshot.hardwareAvailable && (
+        <Alert className="mt-8">Hardware details unavailable on this machine.</Alert>
+      )}
+
+      {storage !== null && storage.length > 0 && (
+        <InfoSection title="Storage" className="mt-8">
+          {storage.map((volume) => (
+            <StorageRow key={volume.drive} volume={volume} />
+          ))}
+        </InfoSection>
+      )}
+
+      <div className="mt-8 grid items-start gap-x-6 gap-y-8 md:grid-cols-2">
+        {hasSystemRows && (
+          <InfoSection title="This PC">
+            <InfoRow label="OS" value={osName} />
+            <InfoRow label="Build" value={snapshot.os.build} />
+            <InfoRow label="Architecture" value={snapshot.os.arch} />
+            <InfoRow label="Hostname" value={snapshot.hostname} />
+            <InfoRow label="Uptime" value={uptime} />
+          </InfoSection>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <LiveTile label="CPU usage">
-            <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-ink">
-              {live === null || live.cpuPercent === null ? '—' : `${live.cpuPercent}%`}
-            </p>
-          </LiveTile>
-          <LiveTile label="Memory usage">
-            <p className="mt-2 font-mono text-sm tabular-nums text-ink">
-              {live === null ? '—' : `${formatMemory(live.memUsedBytes)} used of ${formatMemory(live.memTotalBytes)}`}
-            </p>
-            <div className="mt-2">
-              <UsageBar
-                usedBytes={live?.memUsedBytes ?? null}
-                totalBytes={live?.memTotalBytes ?? null}
-                label="Memory usage"
-                size="lg"
-              />
-            </div>
-          </LiveTile>
-        </div>
-
-        {!snapshot.hardwareAvailable && (
-          <p className="mt-6 rounded-lg border border-notice-border bg-notice px-3.5 py-2.5 text-sm text-ink">
-            Hardware details unavailable on this machine.
-          </p>
+        {processorRows.length > 0 && (
+          <InfoSection title="Processor">
+            {processorRows.map((row) => (
+              <InfoRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </InfoSection>
         )}
 
-        <div className="mt-8 space-y-6">
-          {hasSystemRows && (
-            <InfoSection title="This PC">
-              <InfoRow label="OS" value={osName} />
-              <InfoRow label="Build" value={snapshot.os.build} />
-              <InfoRow label="Architecture" value={snapshot.os.arch} />
-              <InfoRow label="Hostname" value={snapshot.hostname} />
-              <InfoRow label="Uptime" value={uptime} />
-            </InfoSection>
-          )}
+        {snapshot.gpus.length > 0 && (
+          <InfoSection title="Graphics">
+            {snapshot.gpus.map((gpu, index) => {
+              const vram = formatVram(gpu.vramBytes);
+              return (
+                <div key={`${gpu.name}-${index}`} className="divide-y divide-hairline">
+                  <h3 className="px-5 py-2.5 text-sm font-semibold text-ink">{gpu.name}</h3>
+                  {gpu.driverVersion !== null && <InfoRow label="Driver" value={gpu.driverVersion} />}
+                  {vram !== null && (
+                    <InfoRow
+                      label="VRAM"
+                      value={
+                        <>
+                          {vram}
+                          {gpu.vramUncertain && (
+                            <span className="cursor-help" title={VRAM_CAVEAT} aria-label={VRAM_CAVEAT}>
+                              *
+                            </span>
+                          )}
+                        </>
+                      }
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </InfoSection>
+        )}
 
-          {processorRows.length > 0 && (
-            <InfoSection title="Processor">
-              {processorRows.map((row) => (
-                <InfoRow key={row.label} label={row.label} value={row.value} />
-              ))}
-            </InfoSection>
-          )}
-
-          {snapshot.gpus.length > 0 && (
-            <InfoSection title="Graphics">
-              {snapshot.gpus.map((gpu, index) => {
-                const vram = formatVram(gpu.vramBytes);
-                return (
-                  <Fragment key={`${gpu.name}-${index}`}>
-                    <InfoRow label={gpu.name} value={gpu.driverVersion} />
-                    {vram !== null && (
-                      <InfoRow
-                        label="VRAM"
-                        value={
-                          <>
-                            {vram}
-                            {gpu.vramUncertain && (
-                              <span className="cursor-help" title={VRAM_CAVEAT} aria-label={VRAM_CAVEAT}>
-                                *
-                              </span>
-                            )}
-                          </>
-                        }
-                      />
-                    )}
-                  </Fragment>
-                );
-              })}
-            </InfoSection>
-          )}
-
-          {firmwareRows.length > 0 && (
-            <InfoSection title="Firmware">
-              {firmwareRows.map((row) => (
-                <InfoRow key={row.label} label={row.label} value={row.value} />
-              ))}
-            </InfoSection>
-          )}
-        </div>
+        {firmwareRows.length > 0 && (
+          <InfoSection title="Firmware">
+            {firmwareRows.map((row) => (
+              <InfoRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </InfoSection>
+        )}
       </div>
 
       {toastKey > 0 && (
         <StartupToast key={toastKey} message="System info copied." durationMs={3000} onDismiss={() => setToastKey(0)} />
       )}
-    </main>
+    </Page>
   );
 }
