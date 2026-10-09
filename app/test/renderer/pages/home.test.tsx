@@ -75,7 +75,7 @@ describe('Home hero', () => {
   it('shows the safe total, traced to its rows, and opens Clean up', async () => {
     const user = userEvent.setup();
     renderHome();
-    const headline = await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    const headline = await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     // 1.9 + 1.1 + 0.8 + 0.4 GB. The npm projects (5.2 GB) belong to the Developer section, not this figure.
     expect(headline).toHaveTextContent('4.2 GB');
 
@@ -84,7 +84,7 @@ describe('Home hero', () => {
     expect(screen.getByText('Everything else')).toBeInTheDocument();
     expect(screen.getByText('187 GB of 237 GB used')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Clean up 4.2 GB' }));
+    await user.click(screen.getByRole('button', { name: 'Choose what to clean' }));
     expect(useNavStore.getState().page).toBe('cleanup');
     expect(useNavStore.getState().params.cleanup).toEqual({ view: 'results', root: 'C:\\' });
   });
@@ -92,7 +92,7 @@ describe('Home hero', () => {
   it('jumps to a category from the legend', async () => {
     const user = userEvent.setup();
     renderHome();
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     await user.click(screen.getByRole('button', { name: /Recycle Bin/ }));
     expect(useNavStore.getState().params.cleanup).toEqual({ view: 'results', root: 'C:\\', category: 'recycle-bin' });
   });
@@ -102,7 +102,7 @@ describe('Home hero', () => {
     const startAnalyze = vi.fn(async () => ({ ok: true as const, runId: 'run-9' }));
     renderHome({ getDashboard: async () => dashboard({ analyzed: false }), startAnalyze });
     expect(await screen.findByRole('heading', { level: 2, name: 'Find out what can be freed on C:\\' })).toBeVisible();
-    expect(screen.queryByText(/can be freed safely/)).not.toBeInTheDocument();
+    expect(screen.queryByText('can be freed')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Scan C:\\' }));
     expect(startAnalyze).toHaveBeenCalledWith('C:\\');
@@ -169,7 +169,7 @@ describe('Home hero', () => {
 
   it('warns when the figures come from a cancelled scan', async () => {
     renderHome({ getResultCategories: async () => categories(CLEANABLE, { status: 'cancelled', rulesStale: true }) });
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     expect(screen.getByText(/last scan was cancelled/)).toBeInTheDocument();
     expect(screen.getByText(/cleanup rules changed/)).toBeInTheDocument();
   });
@@ -186,7 +186,7 @@ describe('Home hero', () => {
     expect(await screen.findByText('Dust could not read your drives')).toBeVisible();
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('heading', { level: 2, name: /can be freed safely/ })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 2, name: /can be freed$/ })).toBeVisible();
   });
 
   it('lists the other drives with how full they are', async () => {
@@ -213,10 +213,10 @@ describe('Home while the scan totals load', () => {
     expect(await screen.findByText(/C:\\ · last checked/)).toBeVisible();
     expect(screen.getByText('187 GB of 237 GB used')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Scan again' })).toBeVisible();
-    expect(screen.queryByText(/can be freed safely/)).not.toBeInTheDocument();
+    expect(screen.queryByText('can be freed')).not.toBeInTheDocument();
 
     release();
-    expect(await screen.findByRole('heading', { level: 2, name: /can be freed safely/ })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 2, name: /can be freed$/ })).toBeVisible();
   });
 
   it('says so when the last scan cannot be read, and still offers a new one', async () => {
@@ -256,7 +256,7 @@ describe('starting a scan', () => {
     const cancelScan = vi.fn(async () => {});
     renderHome({ startAnalyze, cancelScan });
 
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     await user.click(screen.getByRole('button', { name: 'Scan again' }));
     const dialog = await screen.findByRole('dialog', { name: 'A scan is already running.' });
     expect(cancelScan).not.toHaveBeenCalled();
@@ -275,7 +275,7 @@ describe('starting a scan', () => {
       startAnalyze: async () => ({ ok: false, reason: 'busy', running: 'analyze' }),
       cancelScan,
     });
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     await user.click(screen.getByRole('button', { name: 'Scan again' }));
     await user.click(await screen.findByRole('button', { name: 'Wait' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -288,7 +288,7 @@ describe('starting a scan', () => {
     renderHome({
       startAnalyze: async () => ({ ok: false, reason: 'start-failed', message: 'The disk is not ready.' }),
     });
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     await user.click(screen.getByRole('button', { name: 'Scan again' }));
     expect(await screen.findByText(/Dust could not start the scan: The disk is not ready\./)).toBeVisible();
     expect(useNavStore.getState().page).toBe('home');
@@ -330,7 +330,7 @@ describe('Home tiles', () => {
 
   it('say so when a source cannot be read, without hiding the rest', async () => {
     renderHome({ listUninstallApps: async () => ({ ok: false, message: 'Registry unavailable' }) });
-    await screen.findByRole('heading', { level: 2, name: /can be freed safely/ });
+    await screen.findByRole('heading', { level: 2, name: /can be freed$/ });
     const appsTile = tile('Apps');
     expect(await within(appsTile).findByText('Unavailable right now')).toBeVisible();
     expect(await screen.findByText('58%')).toBeVisible();

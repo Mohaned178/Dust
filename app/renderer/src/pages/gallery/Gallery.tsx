@@ -66,7 +66,7 @@ export function Gallery() {
 
         <Section title="Buttons">
           <Demo title="Variants">
-            <Button variant="primary">Clean up 4.2 GB</Button>
+            <Button variant="primary">Choose what to clean</Button>
             <Button variant="secondary">Scan again</Button>
             <Button variant="subtle">Keep</Button>
             <Button variant="danger">Delete 4.2 GB</Button>

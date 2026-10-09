@@ -1,4 +1,5 @@
 import { basename } from 'node:path';
+import { isInstalledSoftwarePath } from '@dust/core';
 import type {
   CategoryId,
   CleanupPlan,
@@ -98,7 +99,9 @@ function recoveryForMatch(match: SnapshotMatch, projects: ProjectRecord[]): Reco
 
 export function snapshotRules(snapshot: SnapshotData, pins: readonly string[]): Rule[] {
   const pinned = new Set(pins.map(canonicalKey));
-  const offered = snapshot.projects.filter((entry) => entry.offered && !pinned.has(canonicalKey(entry.path)));
+  const offered = snapshot.projects.filter(
+    (entry) => entry.offered && !pinned.has(canonicalKey(entry.path)) && !isInstalledSoftwarePath(entry.path),
+  );
 
   const byRuleId = new Map<string, SnapshotMatch[]>();
   for (const match of snapshot.matches) {

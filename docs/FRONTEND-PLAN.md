@@ -1114,6 +1114,18 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
     Met and recorded in the table under section 4.4. One qualification: the first launch after a rebuild showed Home
     at 549 ms; relaunches (the case the budget is about) were 411 ms.
 
+**Release review for 2.0.0 (2026-10-09, Opus):** the two items this plan left open are resolved.
+
+- **Installed apps' `node_modules` (phase 9 finding):** `core/src/projects/installed-software.ts` marks any project or
+  loose `node_modules` under a drive's Program Files, ProgramData or Windows folder, under AppData (except
+  `AppData\Local\Temp`), under a dot-folder's `extensions`, under `resources\app` or `resources\app.asar.unpacked`, or
+  under `scoop\apps` as not offered. It runs at classification, and again when a saved snapshot is read
+  (`dev-cleanup.ts`, `cleanup.ts` `snapshotRules`), so scans saved by 1.2.0 are guarded without a rescan. The
+  Developer page shows engine reasons in plain words (`plainReason`), so no "Phase 2" text reaches the user.
+- **Recycle Bin in Home's headline (phase 4 decision):** the headline now reads "can be freed" (it still sums the
+  legend rows, including review items such as the Recycle Bin), and the button reads "Choose what to clean" instead
+  of promising a figure that Clean up's safe-only preselection would not show.
+
 ---
 
 ## 6. Out of scope (backend follow-ups, tracked in `docs/ENHANCEMENT-PLAN.md`)

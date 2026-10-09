@@ -199,6 +199,26 @@ describe('snapshotRules', () => {
       [],
     );
   });
+
+  it("drops an installed app's node_modules that an older snapshot still marks as offered", () => {
+    const app = 'C:\\Program Files\\Docker\\Docker\\resources\\app';
+    const nodeModules = `${app}\\node_modules`;
+    const base = snapshot({
+      matches: [
+        {
+          path: nodeModules,
+          ruleId: 'npm-project-modules',
+          category: 'npm-projects',
+          bytes: 10,
+          grade: 'safe',
+          evidence: 'project',
+        },
+      ],
+      projects: [project(app, nodeModules)],
+    });
+
+    expect(snapshotRules(base, [])).toEqual([]);
+  });
 });
 
 describe('toCleanPreview', () => {

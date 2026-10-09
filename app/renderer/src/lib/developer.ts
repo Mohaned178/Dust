@@ -89,7 +89,20 @@ export function activitySourceText(project: DevProject): string {
 export function projectSubline(project: DevProject): string {
   if (project.pinned) return 'You chose to keep this project.';
   if (project.offered) return project.restoreCommand !== null ? `Rebuild with ${project.restoreCommand}` : project.path;
-  return project.reasons.length > 0 ? project.reasons.join(' · ') : 'Dust does not offer this one.';
+  const reasons = [...new Set(project.reasons.map(plainReason))];
+  return reasons.length > 0 ? reasons.join(' ') : 'Dust does not offer this one.';
+}
+
+/** The engine's reasons are written for developers of Dust; say them in plain words. */
+export function plainReason(reason: string): string {
+  if (/installed app/i.test(reason)) return 'Part of an installed app. Deleting it could break that app.';
+  if (/global install/i.test(reason)) return 'Part of a global install. Deleting it could break those tools.';
+  if (/plug.n.play/i.test(reason)) return 'Uses Yarn Plug’n’Play, so there is no node_modules to clean.';
+  if (/no manifest or lockfile/i.test(reason)) return 'Nothing here to rebuild it from.';
+  const unsupported = /^(.+?) is not supported/i.exec(reason);
+  if (unsupported) return `Dust cannot rebuild ${unsupported[1]} projects yet.`;
+  const sentence = reason.replace(/\s*[—-]?\s*\(?\s*phase \d+\s*\)?/gi, '').trim();
+  return sentence.length > 0 ? `${sentence[0]!.toUpperCase()}${sentence.slice(1)}.` : 'Dust does not offer this one.';
 }
 
 /** The disclosure row for each recently cleaned project: nothing is lost, here is how to bring it back. */

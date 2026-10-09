@@ -1,3 +1,4 @@
+import { INSTALLED_SOFTWARE_REASON } from '@dust/core';
 import type { ProjectRecord } from '@dust/core';
 import { describe, expect, it } from 'vitest';
 import { groupDevProjects, projectNameOf, toDevProjects } from '../src/main/host/dev-cleanup';
@@ -42,6 +43,17 @@ describe('toDevProjects', () => {
       ['C:\\dev\\b', true, false],
       ['C:\\dev\\c', false, false],
     ]);
+  });
+
+  it("never offers an installed app's node_modules from a snapshot saved before that check", () => {
+    const vscode = 'C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\resources\\app';
+    const [mapped] = toDevProjects([project(vscode)], []);
+    expect(mapped).toMatchObject({
+      offered: false,
+      grade: 'not-offered',
+      reasons: [INSTALLED_SOFTWARE_REASON],
+      restoreCommand: null,
+    });
   });
 });
 

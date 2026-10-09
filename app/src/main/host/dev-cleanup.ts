@@ -1,4 +1,5 @@
 import { basename, dirname } from 'node:path';
+import { INSTALLED_SOFTWARE_REASON, isInstalledSoftwarePath } from '@dust/core';
 import type { ProjectRecord } from '@dust/core';
 import { canonicalKey } from './cleanup';
 import type { DevGroup, DevProject } from '../../shared/ipc';
@@ -11,6 +12,11 @@ export function toDevProjects(projects: ProjectRecord[], pins: readonly string[]
   const pinned = new Set(pins.map(canonicalKey));
   return projects.map((entry) => {
     const isPinned = entry.pinned || pinned.has(canonicalKey(entry.path));
+    // Snapshots saved before this check existed can still say "offered" for an app's own node_modules.
+    const installed = isInstalledSoftwarePath(entry.path);
+    const restorability: ProjectRecord['restorability'] = installed
+      ? { grade: 'not-offered', reasons: [INSTALLED_SOFTWARE_REASON], restoreCommand: null }
+      : entry.restorability;
     return {
       path: entry.path,
       name: entry.name,
@@ -18,14 +24,14 @@ export function toDevProjects(projects: ProjectRecord[], pins: readonly string[]
       packageManager: entry.packageManager,
       recency: entry.recency,
       pinned: isPinned,
-      offered: entry.offered && !isPinned,
+      offered: entry.offered && !isPinned && !installed,
       nodeModulesBytes: entry.nodeModules.bytes,
       nodeModulesPaths: entry.nodeModules.paths.map((location) => location.path),
       activityMs: entry.activity.ms,
       activitySource: entry.activity.source,
-      grade: entry.restorability.grade,
-      reasons: entry.restorability.reasons,
-      restoreCommand: entry.restorability.restoreCommand,
+      grade: restorability.grade,
+      reasons: restorability.reasons,
+      restoreCommand: restorability.restoreCommand,
       workspaceCount: entry.workspaceCount,
     };
   });

@@ -3,6 +3,7 @@ import { canonicalizePath } from '../cleaner/guard';
 import type { AggregateTree } from '../model/tree';
 import type { FsProbe } from '../rules/types';
 import { discoverProjects } from './discover';
+import { INSTALLED_SOFTWARE_REASON, isInstalledSoftwarePath } from './installed-software';
 import type { DiscoveredOrphan, DiscoveredUnit } from './discover';
 import { PUBLIC_REGISTRY_HOSTS, parsePackageManager, sampleRegistryHosts } from './manifest';
 import type { LockfileName } from './manifest';
@@ -46,7 +47,10 @@ function classifyUnit(
   pins: Set<string>,
 ): ProjectRecord {
   const manager = resolveManager(unit);
-  const restorability = resolveRestorability(unit, input.probe, manager);
+  const installedSoftware = isInstalledSoftwarePath(unit.root);
+  const restorability: Restorability = installedSoftware
+    ? { grade: 'not-offered', reasons: [INSTALLED_SOFTWARE_REASON], restoreCommand: null }
+    : resolveRestorability(unit, input.probe, manager);
   const activity = computeActivity(unit, input.tree, input.probe);
   const recency = recencyOf(activity, now, thresholds);
   const pinned = pins.has(canonicalizePath(unit.root).toLowerCase());
@@ -92,11 +96,16 @@ function classifyOrphan(orphan: DiscoveredOrphan, input: ClassifyInput, pins: Se
   const pinned = pins.has(canonicalizePath(orphan.path).toLowerCase());
   const external = input.isExternal?.(parentDir) ?? false;
   const globalInstallRoot = isUnderAnyRoot(orphan.path, input.globalInstallRoots);
+  const installedSoftware = isInstalledSoftwarePath(orphan.path);
   const reasons = ['no manifest or lockfile found — node_modules cannot be recreated'];
   const evidence = ['Orphaned node_modules — no package.json above', 'cannot be recreated'];
   if (globalInstallRoot) {
     reasons.push(GLOBAL_INSTALL_ROOT_REASON);
     evidence.push(GLOBAL_INSTALL_ROOT_REASON);
+  }
+  if (installedSoftware) {
+    reasons.unshift(INSTALLED_SOFTWARE_REASON);
+    evidence.push(INSTALLED_SOFTWARE_REASON);
   }
   return {
     path: orphan.path,
@@ -113,7 +122,7 @@ function classifyOrphan(orphan: DiscoveredOrphan, input: ClassifyInput, pins: Se
       reasons,
       restoreCommand: null,
     },
-    offered: !pinned && !external && !globalInstallRoot,
+    offered: !pinned && !external && !globalInstallRoot && !installedSoftware,
     evidence,
   };
 }

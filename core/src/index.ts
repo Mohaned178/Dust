@@ -75,6 +75,7 @@ export type { DisplayGrade, DisplayGradeReason } from './display/display-grade';
 export { defaultEmptyRecycleBin, defaultEmptyRecycleBinAsync } from './cleaner/executor';
 export type { EmptyRecycleBinResult } from './cleaner/executor';
 export { classifyProjects, DEFAULT_RECENCY_THRESHOLDS } from './projects/classify';
+export { INSTALLED_SOFTWARE_REASON, isInstalledSoftwarePath } from './projects/installed-software';
 export { discoverProjects } from './projects/discover';
 export type { DiscoveredOrphan, DiscoveredUnit } from './projects/discover';
 export {

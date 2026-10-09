@@ -81,7 +81,8 @@ function ResultsHero({
   onQuickClean: () => void;
 }) {
   const { rows, usedBytes, totalBytes, root, onSelectCategory } = state;
-  // The headline is the sum of the rows in the bar's legend, so every figure can be traced to a line.
+  // The headline is the sum of the rows in the bar's legend, so every figure can be traced to a line. It includes
+  // review items such as the Recycle Bin, so it does not say "safely"; Clean up then ticks only the safe ones.
   const total = rows.reduce((sum, row) => sum + row.bytes, 0);
   const segments = useMemo(() => {
     const parts: UsageSegment[] = rows.map((row) => ({
@@ -124,7 +125,7 @@ function ResultsHero({
         <div>
           <h2>
             <span className="text-hero font-semibold">{formatBytes(total)}</span>{' '}
-            <span className="text-subtitle font-normal">can be freed safely</span>
+            <span className="text-subtitle font-normal">can be freed</span>
           </h2>
           <p className="mt-1 text-body text-ink-2">
             {root} · last checked <RelativeTime ms={state.finishedAt} />
@@ -138,7 +139,7 @@ function ResultsHero({
             Scan again
           </Button>
           <Button variant="primary" size="lg" onClick={state.onOpen}>
-            Clean up {formatBytes(total)}
+            Choose what to clean
           </Button>
         </div>
       </div>

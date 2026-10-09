@@ -12,7 +12,7 @@ Built with Electron + React + Tailwind. Runs locally on the user's machine.
 
 The window has a 240 px sidebar (a 56 px icon rail below 1100 px) and one page at a time. Pages stay in memory once visited and stop their background work while hidden.
 
-- **Home** — "how is my PC?" without a score. A headline of what can be freed safely (the sum of rows the user can open), a bar of the drive by category, Scan again and Quick clean, other drives, and four tiles (Startup, Apps, PC Health, Developer).
+- **Home** — "how is my PC?" without a score. A headline of what can be freed (the sum of rows the user can open; Clean up then ticks only the safe ones), a bar of the drive by category, Scan again and Quick clean, other drives, and four tiles (Startup, Apps, PC Health, Developer).
 - **Clean up** — a scan view (progress, elapsed time, the current path, what has been found so far, Cancel), then the results: categories that open in place into their items, with Keep, Show in Explorer, a "Take a look first" group for categories with nothing safe, and a sticky footer that says what is selected.
 - **Clean dialog** — one dialog for every deletion: the plan, an acknowledgement when something cannot be recovered, progress, and a summary with the drive before and now. The confirm button names the amount. Modal overlay, not a routed page.
 - **Explore disk** — a lazy folder tree, a treemap of the current folder, search, a "Show protected items" switch, and Show in Explorer.
