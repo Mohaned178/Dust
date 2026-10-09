@@ -235,6 +235,12 @@ void app
     installSessionSecurity(session.defaultSession, {
       dev: process.env.DUST_DEV_SERVER_URL !== undefined,
     });
+    // Taken before the elevation step so a second launch exits quietly instead of offering to restart as admin.
+    const singleInstance = benchRoot === undefined;
+    if (singleInstance && !app.requestSingleInstanceLock()) {
+      app.quit();
+      return;
+    }
     const ackPath = elevationAckPath(userDataDir);
     const launchedViaElevation = hasElevatedFlag(process.argv);
     let elevated = launchedViaElevation || (await isRunningElevated());
@@ -258,6 +264,8 @@ void app
         }
       };
       log(`request: ${command}`);
+      // The elevated copy must be able to take the lock; keep it only if the handoff does not succeed.
+      if (singleInstance) app.releaseSingleInstanceLock();
       return awaitElevatedStartup({
         spawn: () => {
           let child;
