@@ -868,8 +868,39 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 7 — Startup
 
-- [ ] Build §3.5: the single list, the filter, optimistic toggles with Undo, the protected, admin and Windows-disabled
+- [x] Build §3.5: the single list, the filter, optimistic toggles with Undo, the protected, admin and Windows-disabled
       paths, and the verdict slot.
+      Notes: `pages/startup/` (`StartupPage`, `StartupRow`, `StartupDialogs`), `lib/startup.ts` (pure helpers) and two
+      new store actions (`setState`, and `load(api, force)`). The page chunk is 10 kB; the entry chunk is 248.7 kB
+      (budget 250: only 1.3 kB of headroom is left).
+      **List:** one list sorted by name, a filter (All, On, Off), the summary "9 apps start with Windows · 6 on", an icon
+      (a letter tile when none), the publisher, and where it starts from in plain words ("Registry · this user",
+      "Startup folder · all users"). Publishers and icons that arrive later are laid over the list for display only.
+      **Toggles are optimistic:** the switch moves and the count changes at once, the switch is disabled while the call
+      runs, and a refusal puts that one entry back. Turning off shows a toast with Undo (5 s, the toast kit's fixed
+      length); turning on shows a plain toast.
+      **Every result kind is handled:** `needs-admin` opens the administrator dialog; `windows-disabled` opens the
+      turn-on question; `not-found` and `conflict` say so in plain words and read the list again; `protected` and
+      `failed` show the backend's message or a plain one; a call that throws also reverts. A locked (protected) row shows a
+      lock and the reason in words, and its switch is disabled.
+      **Dialogs:** "Administrator rights needed" (relaunches with `relaunchElevated(id)`, says so if Windows refuses) and
+      "Turn on X?" for an entry switched off in Windows' own settings (relaunches with `relaunchElevated(id, 'enable')`
+      when it needs administrator rights). Both focus Cancel and cannot be dismissed while working.
+      **After the relaunch:** the launch hint is read once and forgotten; it shows "X turned off" with Undo, or "X turned
+      on" (and "It starts at your next sign-in" for a Windows-disabled entry).
+      **Verdict slot:** `lib/startup.ts` `verdictOf` reads an optional `verdict` from an entry and the row shows it as a
+      tag; there is none today, so nothing shows. **Not built, as planned:** boot time and impact figures.
+      **A fix that touches Apps too:** a refused read (`{ ok: false }`) is now a failure in both the Startup and Apps
+      stores, so the last good list stays on screen behind a notice instead of being replaced by the error.
+      **Tests:** `test/renderer-next/pages/startup.test.tsx` (22 cases: list and summary, filter, locked row, late
+      details, empty and failed reads, optimistic toggle with Undo, turning back on, each refusal kind, admin and
+      Windows-disabled dialogs and their failures, the post-relaunch notices) and `lib/startup.test.ts`. Whole suite:
+      671 tests.
+      **Verified in the running app** (production build, real data, 18 entries): the list shows 343 ms after the click,
+      with real icons and publishers, the right counts, "Turned off in Windows settings" and "Needs administrator rights"
+      on the right rows, and the locked SecurityHealth row with its lock and reason; the Off filter works. JS heap 3.5 MB.
+      **Not exercised live:** turning anything on or off (I did not change your startup entries), the dialogs, and the
+      administrator relaunch; those are covered by tests only.
 - **Done when:**
   - All toggle result kinds are handled and tested.
 

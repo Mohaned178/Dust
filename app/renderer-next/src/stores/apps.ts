@@ -63,9 +63,17 @@ const initial = () => ({
 export const useAppsStore = create<AppsStore>()((set, get) => ({
   ...initial(),
   load: (api, force = false) =>
-    loadResource(loadKey, { get: () => get().list, set: (list) => set({ list }) }, () => api.listUninstallApps(force), {
-      force,
-    }),
+    loadResource(
+      loadKey,
+      { get: () => get().list, set: (list) => set({ list }) },
+      async () => {
+        const result = await api.listUninstallApps(force);
+        // A refused read is a failure, so the last good list stays on screen behind it.
+        if (!result.ok) throw new Error(result.message);
+        return result;
+      },
+      { force },
+    ),
   applyBatch: ({ sizes, icons, jobs }) =>
     set((state) => {
       const next: Partial<AppsStore> = {};
