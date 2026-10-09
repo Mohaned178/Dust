@@ -219,6 +219,24 @@ Releases are tag-driven and produce a draft GitHub Release:
 4. **Copy system info** copies the formatted block and shows the "System info copied." toast; the block contains no serial numbers, MAC addresses, or IP addresses.
 5. On a machine or VM with no discrete GPU, the page renders without a Graphics section (or with the adapters Windows reports) and never shows an error; on any machine, no administrator prompt appears.
 
+### New interface smoke checklist
+
+Run from an administrator terminal with `npm run dev:next -w app`. This covers the rebuilt interface in `app/renderer-next/` (see `docs/FRONTEND-PLAN.md`). Steps marked **(changes your PC)** delete or change real things; use a machine you can afford to change.
+
+1. **Home.** The window opens light, with no dark flash, and the first screen shows within half a second. The greeting, the drive card and the four tiles (Startup, Apps, PC Health, Developer) fill in on their own. Nothing says "score", "risk" or "issues".
+2. **Scan.** Choose **Scan again**: the progress bar, file count, elapsed time and a path shortened in the middle update. **Cancel** stops it, and the results open with "Scan cancelled. Showing what was found."
+3. **Clean up.** Safe items start ticked, review items (the Recycle Bin) sit under "Take a look first" unticked. Open a category, **Keep** an item, then **Undo** in the toast. The footer total equals the plan total in the next step.
+4. **Clean dialog.** **Review and clean** opens a plan with Cancel focused and a confirm button that names the amount ("Delete 599 MB"). Cancel deletes nothing. **(changes your PC)** Confirm: progress counts up, the summary shows the drive before and now, and the list reads again.
+5. **Quick clean.** From Home, **Quick clean** builds a plan; closing it while it builds stops the scan.
+6. **Explore disk.** From Clean up, open **Explore disk**: open folders in place, scroll a folder with thousands of children, search for a folder name (one request after you stop typing), turn on **Show protected items**, switch to **Map** and open a folder, then use the breadcrumb to go back.
+7. **Apps.** Icons and sizes appear without the list jumping; sort by Size shows "Sizes updated. Sort again" when more sizes arrive. **(changes your PC)** Uninstall a test app: its own uninstaller runs, then the leftovers are listed unticked where they may hold your data, and the done line only says the app is removed if it is.
+8. **Startup.** The summary reads "N apps start with Windows · M on". **(changes your PC)** Turn an entry off: the switch moves at once and a toast offers Undo. A protected row shows a lock and its reason. A machine-wide entry asks for administrator rights first.
+9. **PC Health.** The two rings update about every 2 seconds, and stop updating while another page is open. **Copy specs** puts plain text on the clipboard.
+10. **Developer.** Groups are named in plain words and the total equals the sum of the rows. **Review and clean** shows each rebuild command with a copy button before anything is deleted. Check that no folder inside an installed app (for example VS Code or Docker) is offered.
+11. **Settings.** The version, license and privacy statement are shown, **Check for updates** reports a result, and **Relaunch as administrator** restarts Dust elevated.
+12. **Keyboard only.** From each page, Tab reaches every control in a sensible order, each shows a visible focus ring, Escape closes dialogs, and arrow keys move through the Explore tree and the Developer list.
+13. **Reduced motion.** With Windows animation effects off, nothing slides or fades.
+
 ### Development flags
 
 Environment variables used by development and benchmark tooling — not needed for normal use.

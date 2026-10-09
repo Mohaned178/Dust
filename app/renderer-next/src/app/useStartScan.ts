@@ -52,8 +52,8 @@ export function useStartScan() {
             },
           }),
         );
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+      } catch {
+        setError('Dust lost contact with its scanner. Try again.');
       } finally {
         setStarting(false);
       }

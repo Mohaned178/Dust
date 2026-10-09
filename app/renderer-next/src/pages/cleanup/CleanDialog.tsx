@@ -82,10 +82,6 @@ function driveUse(root: string): DriveUse | null {
   return { usedBytes: Math.max(volume.totalBytes - volume.freeBytes, 0), totalBytes: volume.totalBytes };
 }
 
-function errorText(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
 function PlanItem({ item }: { item: CleanItemPreview }) {
   return (
     <li className="flex flex-col gap-1 rounded-control bg-canvas p-3">
@@ -313,9 +309,9 @@ export function CleanDialog({ open, onClose, request, title, scopeNote }: CleanD
             : { kind: 'failed', message: cleanErrorMessage(result) },
         );
       },
-      (cause: unknown) => {
+      () => {
         if (!mounted.current || startedAttempt.current !== attempt) return;
-        setStep({ kind: 'failed', message: errorText(cause) });
+        setStep({ kind: 'failed', message: 'Dust could not build the plan. Nothing was deleted.' });
       },
     );
   }, [api, request, attempt]);
@@ -359,9 +355,11 @@ export function CleanDialog({ open, onClose, request, title, scopeNote }: CleanD
       if (!mounted.current) return;
       const after = driveUse(report.root);
       setStep((current) => (current.kind === 'done' ? { ...current, drive: { ...current.drive, after } } : current));
-    } catch (cause) {
+    } catch {
       if (!mounted.current) return;
-      setProblem(errorText(cause));
+      setProblem(
+        'Dust could not finish the cleanup. Some items may already be gone, so scan again to see what is left.',
+      );
       setStep({ kind: 'plan', preview });
     }
   };
@@ -464,7 +462,7 @@ export function CleanDialog({ open, onClose, request, title, scopeNote }: CleanD
       const done = Math.min(cleanRun?.items.length ?? 0, total);
       const plannedDone = cleanRun?.items.reduce((sum, item) => sum + item.plannedBytes, 0) ?? 0;
       const freed = cleanRun?.items.reduce((sum, item) => sum + item.deletedBytes, 0) ?? 0;
-      description = 'Please keep Dust open until this finishes.';
+      description = 'Keep Dust open until this finishes.';
       body = (
         <div role="status" className="flex flex-col gap-3">
           <p className="text-body">

@@ -66,7 +66,7 @@ export function SearchBox({
     <div
       className={cn(
         'dur-faster flex h-8 w-72 items-center gap-2 rounded-control border border-border bg-surface px-2 transition-colors',
-        'focus-within:border-accent hover:border-border-strong',
+        'hover:border-border-strong focus-within:border-accent focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent',
         className,
       )}
     >

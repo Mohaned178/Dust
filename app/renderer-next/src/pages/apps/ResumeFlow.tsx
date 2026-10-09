@@ -41,9 +41,10 @@ function previewMessage(result: { reason: string; message?: string }): string {
   return result.message ?? 'This app cannot be removed right now.';
 }
 
-function errorText(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
+/** The exception's own words are for the log, not for the user. */
+const PLAN_FAILED = 'Dust could not build the removal plan. Nothing was changed.';
+const RELAUNCH_FAILED = 'Dust could not restart with administrator rights. Nothing was changed.';
+const RUN_FAILED = 'Dust could not finish the removal. Open Apps to see what is left.';
 
 function PhaseMarker({ status }: { status: string }) {
   if (status === 'started') return <Spinner className="size-4 text-accent" />;
@@ -232,9 +233,9 @@ export function ResumeFlow({ open, onClose, appId, adoptJobId, elevated, onChang
         setSelection(new Set(defaultUninstallSelection(result.preview.items)));
         setStage('plan');
       },
-      (cause: unknown) => {
+      () => {
         if (!active) return;
-        setError(errorText(cause));
+        setError(PLAN_FAILED);
         setStage('error');
       },
     );
@@ -301,9 +302,9 @@ export function ResumeFlow({ open, onClose, appId, adoptJobId, elevated, onChang
     if (needsAdmin && !elevated) {
       try {
         await api.relaunchElevatedUninstall(id);
-      } catch (cause) {
+      } catch {
         if (mounted.current) {
-          setError(errorText(cause));
+          setError(RELAUNCH_FAILED);
           setStage('error');
         }
       }
@@ -336,9 +337,9 @@ export function ResumeFlow({ open, onClose, appId, adoptJobId, elevated, onChang
       }
       setError(result.reason === 'busy' ? BUSY_TEXT : (result.message ?? 'The uninstall could not start.'));
       setStage('error');
-    } catch (cause) {
+    } catch {
       if (mounted.current) {
-        setError(errorText(cause));
+        setError(RUN_FAILED);
         setStage('error');
       }
     }

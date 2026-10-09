@@ -5,6 +5,7 @@ import type {
   ScanProgressPayload,
   StartupDetailsEvent,
   UninstallEvent,
+  UpdateStatus,
 } from '../../../src/shared/ipc';
 import { useAppsStore } from '../stores/apps';
 import type { UninstallJob } from '../stores/apps';
@@ -14,6 +15,7 @@ import type { ScanRun } from '../stores/scan';
 import { useStartupStore } from '../stores/startup';
 import type { StartupDetail } from '../stores/startup';
 import { useUpdatesStore } from '../stores/updates';
+import { useToastStore } from '../ui/toast-store';
 
 /**
  * The one subscription to each backend event stream. High-rate events are folded into a buffer and written to the
@@ -259,17 +261,29 @@ export function startEvents(api: DustApi, scheduler: Scheduler = browserSchedule
     buffered();
   }
 
+  /** Keeps the status, and tells the user once, without interrupting, when an update is ready to install. */
+  function applyUpdateStatus(status: UpdateStatus): void {
+    const wasReady = useUpdatesStore.getState().status.phase === 'downloaded';
+    useUpdatesStore.getState().setStatus(status);
+    if (status.phase !== 'downloaded' || wasReady) return;
+    useToastStore.getState().push({
+      title: `Dust ${status.version ?? 'update'} is ready`,
+      description: 'Restart Dust to finish updating.',
+      action: { label: 'Restart to update', onAction: () => void api.installUpdate() },
+    });
+  }
+
   const unsubscribes = [
     api.onScanEvent(onScan),
     api.onUninstallEvent(onUninstall),
     api.onStartupEvent(onStartup),
-    api.onUpdateEvent((status) => useUpdatesStore.getState().setStatus(status)),
+    api.onUpdateEvent(applyUpdateStatus),
   ];
   let stopped = false;
   api
     .getUpdateStatus()
     .then((status) => {
-      if (!stopped) useUpdatesStore.getState().setStatus(status);
+      if (!stopped) applyUpdateStatus(status);
     })
     .catch(() => {});
 

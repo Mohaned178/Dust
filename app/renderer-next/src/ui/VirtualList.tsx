@@ -47,7 +47,7 @@ function RowInner<T>({ item, index, top, height, count, renderRow, role, extra }
       aria-setsize={count}
       aria-posinset={index + 1}
       {...extra}
-      className="absolute inset-x-0 top-0 outline-none"
+      className="absolute inset-x-0 top-0 focus-visible:-outline-offset-2"
       style={{ height, transform: `translateY(${top}px)` }}
     >
       {renderRow(item, index)}

@@ -49,7 +49,7 @@ function PageSlot({ page }: { page: PageDefinition }) {
       onScroll={(event) => {
         scrollTop.current = event.currentTarget.scrollTop;
       }}
-      className="h-full overflow-y-auto"
+      className="h-full scroll-pb-24 overflow-y-auto"
     >
       <div className="mx-auto max-w-[1040px] px-8 pt-2 pb-8 max-[1099px]:px-6">
         <ErrorBoundary>

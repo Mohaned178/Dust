@@ -65,9 +65,9 @@ function newJobId(): string {
     : `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function errorText(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
+/** The exception's own words are for the log, not for the user. */
+const STEP_FAILED = 'Dust could not finish that step. Open Apps to see whether the app is still installed.';
+const RELAUNCH_FAILED = 'Dust could not restart with administrator rights. Nothing was changed.';
 
 function Waiting({ title, text, action }: { title: string; text: string; action?: ReactNode }) {
   return (
@@ -316,8 +316,8 @@ export function UninstallWizard({ open, onClose, app, elevated, onChanged }: Uni
         }
         setSelected(new Set(result.preview.items.filter((item) => item.defaultSelected).map((item) => item.id)));
         setStep({ name: 'review', preview: result.preview, origin });
-      } catch (cause) {
-        if (mounted.current) setStep({ name: 'error', message: errorText(cause) });
+      } catch {
+        if (mounted.current) setStep({ name: 'error', message: STEP_FAILED });
       }
     },
     [api, app.id],
@@ -348,8 +348,8 @@ export function UninstallWizard({ open, onClose, app, elevated, onChanged }: Uni
       if (outcome.rebootRequired) setStep({ name: 'reboot' });
       else if (!outcome.verifiedGone) setStep({ name: 'still-installed', message: null });
       else await scanLeftovers('uninstalled');
-    } catch (cause) {
-      if (mounted.current) setStep({ name: 'error', message: errorText(cause) });
+    } catch {
+      if (mounted.current) setStep({ name: 'error', message: STEP_FAILED });
     }
   }, [api, app.id, markChanged, quiet, scanLeftovers]);
 
@@ -378,8 +378,8 @@ export function UninstallWizard({ open, onClose, app, elevated, onChanged }: Uni
           return;
         }
         setStep({ name: 'done', report: result.report, origin });
-      } catch (cause) {
-        if (mounted.current) setStep({ name: 'error', message: errorText(cause) });
+      } catch {
+        if (mounted.current) setStep({ name: 'error', message: STEP_FAILED });
       }
     },
     [api, markChanged, selected],
@@ -390,8 +390,8 @@ export function UninstallWizard({ open, onClose, app, elevated, onChanged }: Uni
     setRelaunchError(null);
     api
       .relaunchElevatedUninstall(planId)
-      .catch((cause: unknown) => {
-        if (mounted.current) setRelaunchError(errorText(cause));
+      .catch(() => {
+        if (mounted.current) setRelaunchError(RELAUNCH_FAILED);
       })
       .finally(() => {
         if (mounted.current) setRelaunching(false);

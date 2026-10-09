@@ -984,13 +984,69 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 10 — Settings, updates, polish pass
 
-- [ ] Build §3.8 and the update toast.
-- [ ] Do a copy pass against the voice rules.
-- [ ] Add empty and error states on every page.
-- [ ] Do a keyboard-only walkthrough of every flow.
-- [ ] Run the `ui-ux-pro-max` pre-delivery checklist (`references/pro-rules.md`).
+- [x] Build §3.8 and the update toast.
+      Notes: `pages/settings/SettingsPage.tsx`. **About:** the version (read from `package.json` by Vite at build time
+      through a `__APP_VERSION__` define; "development build" under tests), the license (MIT), where the source is, and
+      the privacy statement. **The privacy statement was checked against the code before it was written:** there is no
+      account and no analytics or crash-reporting code; the only network use in `app/src` and `core/src` is
+      `electron-updater` with the GitHub provider (`electron-builder.yml`: owner `Mohaned178`, repo `Dust`), which checks
+      10 seconds after launch and **downloads a found update by itself** (`autoDownload`), so the page says "to look for
+      new versions and to download one when there is one" rather than the plan's shorter wording. Files kept on the PC:
+      the saved scan and settings in `%APPDATA%\Dust`, and `error.log` there (`perf.log` only with `DUST_TIMING=1`). The
+      window blocks opening links (`setWindowOpenHandler` denies), and no new IPC is allowed, so the source link and the
+      folder are shown as text with copy buttons. **Administrator access:** says why in a sentence and relaunches with
+      `relaunchElevated()`; if the Apps page has already learned that Dust is elevated it says so and hides the button; a
+      refusal is explained in plain words. **Updates:** a plain-words line for every stage (checking, downloading with a
+      bar, ready, up to date, could not check, packaged builds only), a "Check for updates" button, "Restart to update"
+      when ready, and the technical message behind a "Details" disclosure.
+      **Update-ready notice:** the event bridge (`app/events.ts`) raises one toast, "Dust 1.3.0 is ready. Restart Dust to
+      finish updating." with a "Restart to update" action, the first time the status becomes `downloaded` (also when it
+      was already downloaded at launch). It is non-blocking, takes no focus and is not repeated.
+- [x] Do a copy pass against the voice rules.
+      Notes: scanned `renderer-next` for exclamation marks, emoji, jargon (`EPERM`, "Analyze"), fear words, "score",
+      "issues", "please" and "invalid": none are left in what the user sees. The one real find was raw exception text:
+      a failed call used to show the exception's own words (for example "Error invoking remote method"). Those are now
+      plain sentences that say what is and is not changed ("Dust could not build the plan. Nothing was deleted.", "Dust
+      could not finish the cleanup. Some items may already be gone, so scan again to see what is left.", and so on) in
+      the Clean dialog, the uninstall wizard, the resume flow and scan start. Messages that the backend authors itself
+      (such as "Windows did not allow this change") are kept. "Please keep Dust open" is now "Keep Dust open".
+- [x] Add empty and error states on every page.
+      Notes: audited, and each page already has both: Home (error with retry, no drive, never scanned, nothing to clean),
+      Clean up (skeleton, error with retry, no scan, nothing to clean, cancelled scan, failed scan), Explore (no scan,
+      error with retry, empty search, empty folder), Apps (error with retry, nothing found, no match, stale-list notice),
+      Startup (error with retry, none, none match the filter), PC Health (error with retry, hardware not available,
+      per-card placeholders), Developer (no scan, error with retry, no projects, empty group) and Settings (it has no data
+      to fail on). Each page and the whole app also sit inside an error boundary.
+- [x] Do a keyboard-only walkthrough of every flow.
+      Notes: done two ways. (1) In the running app, a script pressed Tab 40 times on each of the seven pages and checked
+      every stop for an accessible name, a visible focus indicator and visibility; every control had a name, and focus
+      cycles through the page, then the sidebar, with no trap. It found two real gaps, both fixed: the Developer list's
+      focusable rows (and Explore's, which share the component) had no ring, and the search box drew its ring only as a
+      1 px border; rows now show the focus ring inset, and the search box draws a 2 px ring. (2) The arrow-key models,
+      dialogs (focus on the safe button, Escape, no dismissal mid-delete) and toggles are covered by tests on every page.
+      Sticky footers could cover a focused row, so the page scroller now has `scroll-padding-bottom`.
+- [x] Run the `ui-ux-pro-max` pre-delivery checklist (`references/pro-rules.md`).
+      Notes: the checklist is written for mobile and says so; the desktop items were applied. **Passed:** no emoji
+      anywhere (Fluent vector icons only, through `ui/icons.ts`); one icon family and size set; no hex colour outside
+      `tokens.css`; inline styles only for computed widths, geometry and the virtualizer; no `backdrop-filter`, no
+      `transition: all`, no animated shadows; decorative icons are `aria-hidden` and icon buttons have a required
+      `label`; disabled states use `disabled`; pressed and hover states do not move layout; a grade is always a word plus
+      a dot; reduced motion sets every duration to 0; sticky UI no longer hides keyboard focus (above). **Not applicable
+      today:** dark mode (tokens only, by decision), safe areas, touch-target sizes (a pointer and keyboard app; controls
+      are 32 px high, as Windows 11 uses), password managers. **Open:** the minimum window is 960 px wide, so the
+      375 px phone check does not apply; the layout was checked at 1200 and at the 1000 px rail breakpoint in earlier phases.
 - **Done when:**
   - A manual checklist (in the README smoke list) passes on a real machine.
+    The checklist is in `README.md` under "New interface smoke checklist" (13 steps). **Run on this machine:** steps 1,
+    2, 3 (up to the plan), 5, 6, 7 (list and sort only), 8 (list, filter, lock; nothing toggled), 9, 10 (plan only), 11
+    (page only) and 12 (the Tab pass above), over phases 3 to 9. **Not run, because they change the PC and need the
+    owner:** the confirmed deletion in steps 4 and 10, an uninstall in step 7, a startup toggle in step 8, **Check for
+    updates** and **Relaunch as administrator** in step 11, and step 13 (reduced motion on a real Windows setting).
+    **Tests:** `test/renderer-next/pages/settings.test.tsx` (11 cases: the About and privacy text, the copy buttons, the
+    administrator rules, every update stage, the update-ready notice) plus the changes above. Whole suite: 719.
+    **Bundle:** entry chunk 249.25 kB (budget 250: 0.75 kB left); phase 11 changes the build, so measure again there.
+    **Verified in the running app:** Settings shows version 1.2.0, the license, the privacy text, the elevated state and
+    the update line; the Tab pass above.
 
 ### Phase 11 — Switch over and clean up
 

@@ -511,7 +511,8 @@ describe('Uninstall wizard', () => {
       await user.click(await screen.findByRole('button', { name: 'Uninstall Orphan' }));
       const dialog = await screen.findByRole('dialog');
       await user.click(await within(dialog).findByRole('button', { name: 'Relaunch as administrator' }));
-      expect(await within(dialog).findByText('Windows said no')).toBeInTheDocument();
+      expect(await within(dialog).findByText(/could not restart with administrator rights/)).toBeInTheDocument();
+      expect(within(dialog).queryByText('Windows said no')).not.toBeInTheDocument();
     });
 
     it('is absent after a verified uninstall, when nothing needs it, and when already elevated', async () => {
