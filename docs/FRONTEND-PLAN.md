@@ -818,8 +818,50 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 6 — Apps
 
-- [ ] Build §3.4: the virtualized list, per-row subscriptions, sort and search, and the uninstall wizard.
-- [ ] Support resuming an elevated relaunch.
+- [x] Build §3.4: the virtualized list, per-row subscriptions, sort and search, and the uninstall wizard.
+- [x] Support resuming an elevated relaunch.
+      Notes: `pages/apps/` has `AppsPage`, `AppRow`, `UninstallWizard`, `ResumeFlow` and `openUninstall.tsx`; the pure
+      helpers were ported to `lib/uninstall.ts`. The wizard and the resume flow are their own lazy chunks (12 and 17 kB);
+      the entry chunk is 248.3 kB (budget 250).
+      **List:** a virtualized list of fixed 56 px rows with the app's icon (a letter tile when it is missing or fails),
+      name, caution and "Leftovers only" and "Needs administrator" badges, publisher, version and size. The page shows the
+      last list at once and reads it again behind it. The header reads "83 apps · 439 GB". Search is the debounced
+      `SearchBox` (name or publisher) with `useDeferredValue`. A refresh that fails keeps the last list with a notice.
+      **Streaming:** a row's body reads nothing from the store. Its size and its icon are two small children that each
+      read only their own entry (`sizes.get(id)`, `icons.get(id)`), so sizes and icons arriving never redraw a row. A test
+      hook (`lib/renderProbe.ts`) counts row bodies: with 300 apps and three waves of sizes and icons, zero row bodies
+      ran again. The order by size is worked out from the sizes known when it was asked for, so rows never move under the
+      pointer; "Sizes updated. Sort again" appears when more have arrived.
+      **Not possible:** the plan lists "install date" for the row and as a sort. The backend does not send an install date
+      (`UninstallAppSummary` has none), so the list sorts by Name or Size only. Adding the date is backend work.
+      **Wizard:** confirm (steps, a caution notice for drivers, security software and runtimes, "uninstall quietly" for
+      MSI) → the app's own uninstaller (with "It has finished" to stop waiting) → leftover scan → review (grouped as files,
+      registry and startup, select all or none per group, review items and user data start unticked) → removing (progress
+      from the job's `item` events in the store, "Removing 1 of 2") → done. The done line is worked out from the report,
+      and says the app is removed only after a verified uninstall. An app with no uninstaller goes straight to the scan.
+      It cannot be dismissed while it runs, scans or removes, and each step puts focus on its safe button (Cancel, Keep
+      everything, Close). The remove button states the amount ("Remove 1.0 MB"). "Relaunch as administrator" shows when
+      items need it and the app is still registered (never after a verified uninstall, since the elevated copy could not
+      see the leftovers of a removed app).
+      **Resume after the administrator relaunch:** a hint with an app id opens `ResumeFlow` (a port of the old
+      `UninstallFlow`) once the list says whether this copy is elevated: one plan with the app's own uninstaller and its
+      leftovers in sections, run-it-silently, the acknowledgement for items marked Review, the copyable uninstall
+      command, then the eight steps (from the job's phases in the store), "Skip waiting", and the report with the
+      registry backup's restore command. If the plan needs administrator rights and Dust is not elevated it relaunches
+      instead of running. A hint whose app is gone, or whose last run never started, says so in a toast and changes
+      nothing; a hint with a running job id adopts that job. (The host never sets a running job id today; the path is kept
+      because the type allows it.)
+      **Tests:** `test/renderer-next/pages/apps.test.tsx` (27 cases: list, search, badges, streaming sizes and icons, a
+      failed icon, sort and re-sort, errors and retries, the 300-app render count, every wizard step and branch, dismissal
+      locks, progress for this job only, refusal, the relaunch rules, and the resume flow with all hint kinds). Whole
+      suite: 642 tests.
+      **Verified in the running app** (production build, real data, 83 apps): the list shows 360 ms after the click, with
+      real icons, sizes and badges, and "83 apps · 439 GB"; sorting by Size works; the wizard opened for an app with no
+      uninstaller, scanned for leftovers and showed the review step with the amount on the button and focus on "Keep
+      everything". I closed it with "Keep everything"; **nothing was removed on this machine**. JS heap 3.8 MB.
+      **Not run live:** an actual uninstall (no app was removed), the resume flow after a real administrator relaunch, and
+      the "Sizes updated" link (sizes arrived before the page was first drawn on this machine, so no later arrival could be
+      seen); all three are covered by tests.
 - **Done when:**
   - Streaming sizes and icons for 300 apps causes no full-list re-render. Verify with the Profiler, and add a test that
     counts row renders.
