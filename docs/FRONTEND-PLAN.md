@@ -569,8 +569,17 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 1 — Component kit and Gallery
 
-- [ ] Build every component in §2.5, plus `icons.ts` and the Gallery page.
-- [ ] Add a test per interactive component: keyboard behavior, aria attributes, and the Dialog focus trap and restore.
+- [x] Build every component in §2.5, plus `icons.ts` and the Gallery page.
+- [x] Add a test per interactive component: keyboard behavior, aria attributes, and the Dialog focus trap and restore.
+      Notes: the kit is in `renderer-next/src/ui/` (Tooltip is its own file; `DropdownMenu` and `Collapsible` are not
+      built yet because no screen needs them). 39 tests in `test/renderer-next/`. Radix only returns focus to a
+      `Dialog.Trigger`, so `Dialog` remembers the opener itself. A new dialog starts with focus on its close button;
+      phase 4 should pick a safer first focus for the delete dialog. Toasts are announced by Radix's polite live region
+      and never take focus. `UsageBar` legend buttons are the tab stops; the bar's own buttons are mouse-only so keyboard
+      users do not tab through each action twice. The Gallery is `#gallery` in dev only and is absent from the
+      production bundle (entry chunk unchanged at 223 kB). Icon cold start is fine (about 190 ms for `icons.ts`), so
+      `icons.ts` keeps the barrel import. The `dataviz` palette validator was not run on `--chart-1…5`; they are only
+      checked for 4.2:1 or better against white.
 - **Done when:**
   - The Gallery shows every component in every state.
   - Tab order is correct.

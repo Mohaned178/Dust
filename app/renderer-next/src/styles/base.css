@@ -74,6 +74,91 @@
   transition-timing-function: var(--ease-standard);
 }
 
+@utility dur-faster {
+  transition-duration: var(--dur-faster);
+}
+@utility dur-fast {
+  transition-duration: var(--dur-fast);
+}
+@utility dur-normal {
+  transition-duration: var(--dur-normal);
+}
+
+/* Motion. Only transform and opacity ever animate; exits run one step shorter than entrances. */
+@keyframes dust-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dust-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+/* Tailwind positions the dialog with the separate `translate` property, so these only touch `transform`. */
+@keyframes dust-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes dust-pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes dust-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes dust-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes dust-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@layer components {
+  .dust-overlay[data-state='open'] {
+    animation: dust-fade-in var(--dur-normal) var(--ease-enter);
+  }
+  .dust-overlay[data-state='closed'] {
+    animation: dust-fade-out var(--dur-fast) var(--ease-exit) forwards;
+  }
+  .dust-dialog[data-state='open'] {
+    animation: dust-pop-in var(--dur-normal) var(--ease-enter);
+  }
+  .dust-dialog[data-state='closed'] {
+    animation: dust-pop-out var(--dur-fast) var(--ease-exit) forwards;
+  }
+  .dust-flyout[data-state='delayed-open'],
+  .dust-flyout[data-state='instant-open'] {
+    animation: dust-fade-in var(--dur-fast) var(--ease-enter);
+  }
+  .dust-toast[data-state='open'] {
+    animation: dust-rise-in var(--dur-fast) var(--ease-enter);
+  }
+  .dust-toast[data-state='closed'] {
+    animation: dust-fade-out var(--dur-fast) var(--ease-exit) forwards;
+  }
+  .dust-pulse {
+    animation: dust-pulse 1.4s var(--ease-standard) infinite;
+  }
+  .dust-indeterminate {
+    animation: dust-slide 1.4s var(--ease-standard) infinite;
+  }
+}
+
 @layer base {
   html,
   body,

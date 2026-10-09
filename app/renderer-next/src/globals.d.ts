@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { DustApi } from '../../src/shared/ipc';
 
 declare global {
