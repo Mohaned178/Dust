@@ -63,12 +63,9 @@ const initial = () => ({
 export const useAppsStore = create<AppsStore>()((set, get) => ({
   ...initial(),
   load: (api, force = false) =>
-    loadResource(
-      loadKey,
-      { get: () => get().list, set: (list) => set({ list }) },
-      () => api.listUninstallApps(force),
-      { force },
-    ),
+    loadResource(loadKey, { get: () => get().list, set: (list) => set({ list }) }, () => api.listUninstallApps(force), {
+      force,
+    }),
   applyBatch: ({ sizes, icons, jobs }) =>
     set((state) => {
       const next: Partial<AppsStore> = {};

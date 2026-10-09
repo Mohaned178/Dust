@@ -654,8 +654,38 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 3 — Home
 
-- [ ] Build §3.1 with every hero state, the drive rows and the four tiles. Each tile loads independently.
-- [ ] Add a "Busy scan" dialog.
+- [x] Build §3.1 with every hero state, the drive rows and the four tiles. Each tile loads independently.
+- [x] Add a "Busy scan" dialog.
+      Notes: Home is `pages/home/` (`HomePage`, `Hero`, `OtherDrives`, `Tiles`/`Tile`). The hero has the plan's four
+      states (never scanned, scanning, results, nothing to clean) plus loading, error, no-drive, and `checking`:
+      the drive is known to have been scanned but the totals have not arrived, so the card shows the drive, the last-scan
+      time, the usage bar and a placeholder figure instead of a blank. The headline is the sum of the rows in the legend
+      (temporary files, Recycle Bin, package cache, app caches: the Quick Clean categories). npm projects are left out
+      because they belong to the Developer tile. The bar's other colour is "Everything else" (a new `muted` segment in
+      `UsageBar`), so the segments add up to the drive's used space. Notices show for a cancelled scan, stale rules and
+      a depth-limited scan. Names and one-line descriptions for every category are in `lib/categories.ts`.
+      The scan flow is shared: `app/useStartScan.ts` starts the scan, opens the scan screen with its run id, and shows
+      `app/BusyScanDialog.tsx` ("A scan is already running." with Cancel it and scan / Wait) when the backend is busy.
+      Phase 4's Scan again reuses it. "Clean up 4.2 GB" currently opens the Clean up page; the Clean dialog and the
+      Quick clean link arrive in phase 4. A resumed uninstall or startup relaunch still opens its page as in phase 2.
+      Tiles: Startup, Apps, PC Health (polls every 5 s, only while Home is visible) and Developer (sum of offered,
+      unpinned `node_modules`). Each has its own skeleton and its own "Unavailable right now". The page title is a
+      greeting for the time of day (`Good morning` and so on), as in the plan's sketch.
+      **Speed:** `prefetchHome` (called from `main.tsx`) asks for the drives and the scan totals before the page has
+      loaded. Measured in the production build, three cold launches: the first Home content, with the figure, was
+      397-410 ms after navigation start (window in front). Before the prefetch it was 527 ms. Every IPC call Home makes
+      takes 0-8 ms once warm, but the first `getResultCategories` after launch takes about 340 ms in the backend (it
+      reads the last scan), which is most of the remaining time. Warming that in the main process at startup would
+      save it; that is backend work outside this plan.
+      **Bundle:** entry chunk 247.5 kB (budget 250), Home chunk 44 kB.
+      **Tests:** `test/renderer-next/pages/home.test.tsx` (21 cases): all hero states and the notices, retry on error,
+      category links, other drives, the busy dialog (cancel-and-scan, wait, a failed start), tiles filling in
+      independently, an unreadable source, the Developer total, tile polling, the greeting, and the prefetch.
+      `setup-next.ts` now gives Testing Library a 5 s timeout, because lazy pages compile on first use in jsdom.
+      Prettier was run over `renderer-next/` and its tests; it had not been applied in phases 1 and 2.
+      **Verified in the production build with real data:** the hero, bar, other drives and four tiles render with the
+      machine's own figures and the console is empty. **Not exercised in the app:** starting a scan or the busy dialog
+      (covered by tests only); I did not start a scan on this machine.
 - **Done when:**
   - Home paints from cached data in under 500 ms on relaunch.
   - Tests cover all four hero states.

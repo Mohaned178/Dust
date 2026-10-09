@@ -19,18 +19,11 @@ const initial = () => ({ info: emptyResource<SystemInfoStatic>(), live: emptyRes
 export const useHealthStore = create<HealthStore>()((set, get) => ({
   ...initial(),
   loadInfo: (api, force = false) =>
-    loadResource(
-      infoKey,
-      { get: () => get().info, set: (info) => set({ info }) },
-      () => api.getSystemInfo(force),
-      { force },
-    ),
+    loadResource(infoKey, { get: () => get().info, set: (info) => set({ info }) }, () => api.getSystemInfo(force), {
+      force,
+    }),
   loadLive: (api) =>
-    loadResource(
-      liveKey,
-      { get: () => get().live, set: (live) => set({ live }) },
-      () => api.getSystemInfoLive(),
-    ),
+    loadResource(liveKey, { get: () => get().live, set: (live) => set({ live }) }, () => api.getSystemInfoLive()),
 }));
 
 export function resetHealthStore(): void {

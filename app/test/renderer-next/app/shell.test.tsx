@@ -20,28 +20,40 @@ describe('app shell', () => {
     const user = userEvent.setup();
     render(<App api={makeApi()} />);
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(nav).getAllByRole('button').map((button) => button.textContent)).toEqual(NAV_LABELS);
+    expect(
+      within(nav)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(NAV_LABELS);
 
     for (const label of NAV_LABELS) {
       await user.click(within(nav).getByRole('button', { name: label }));
-      const heading = await screen.findByRole('heading', { level: 1, name: label });
+      // Home's heading is a greeting for the time of day.
+      const heading = await screen.findByRole('heading', {
+        level: 1,
+        name: label === 'Home' ? /^Good (morning|afternoon|evening)$/ : label,
+      });
       expect(heading).toBeVisible();
       expect(within(nav).getByRole('button', { name: label })).toHaveAttribute('aria-current', 'page');
-      expect(within(nav).getAllByRole('button').filter((button) => button.hasAttribute('aria-current'))).toHaveLength(1);
+      expect(
+        within(nav)
+          .getAllByRole('button')
+          .filter((button) => button.hasAttribute('aria-current')),
+      ).toHaveLength(1);
     }
   });
 
   it('moves focus to the page heading after navigating, including to a page that is still loading', async () => {
     const user = userEvent.setup();
     render(<App api={makeApi()} />);
-    await user.click(screen.getByRole('button', { name: 'Apps' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Apps' }));
     const heading = await screen.findByRole('heading', { level: 1, name: 'Apps' });
     await waitFor(() => expect(heading).toHaveFocus());
   });
 
   it('does not take focus on first load', async () => {
     render(<App api={makeApi()} />);
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Home' });
+    const heading = await screen.findByRole('heading', { level: 1, name: /^Good / });
     expect(heading).not.toHaveFocus();
   });
 });

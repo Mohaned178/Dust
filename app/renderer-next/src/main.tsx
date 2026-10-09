@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { ErrorBoundary } from './app/ErrorBoundary';
 import { startEvents } from './app/events';
-import { applyLaunchHints } from './app/launch';
+import { applyLaunchHints, prefetchHome } from './app/launch';
 import { getWindowApi } from './lib/api';
 import './styles/base.css';
 
@@ -22,6 +22,7 @@ if (!showGallery) {
   // The one subscription to each backend stream, on before the first render so no early event is missed.
   startEvents(api);
   void applyLaunchHints(api);
+  void prefetchHome(api);
 }
 createRoot(container).render(
   <StrictMode>

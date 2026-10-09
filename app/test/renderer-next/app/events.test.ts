@@ -259,7 +259,9 @@ describe('browser scheduler', () => {
   });
 
   it('flushes on the next animation frame', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+    });
     const scan = realClockSetup();
     const updates = vi.fn();
     const unsubscribe = useScanStore.subscribe(updates);

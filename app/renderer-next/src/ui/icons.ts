@@ -2,7 +2,10 @@
  * The only place icons are imported from. They come from the headless Fluent build (no CSS-in-JS runtime),
  * one module per icon, so the shell only pays for the glyphs it draws. Swapping the icon set touches this file alone.
  */
-export { AppsList20Regular as AppsIcon, AppsList24Regular as AppsNavIcon } from '@fluentui/react-icons/headless/svg/apps-list';
+export {
+  AppsList20Regular as AppsIcon,
+  AppsList24Regular as AppsNavIcon,
+} from '@fluentui/react-icons/headless/svg/apps-list';
 export { ArrowClockwise20Regular as RefreshIcon } from '@fluentui/react-icons/headless/svg/arrow-clockwise';
 export { ArrowUndo20Regular as UndoIcon } from '@fluentui/react-icons/headless/svg/arrow-undo';
 export { Checkmark20Regular as CheckIcon } from '@fluentui/react-icons/headless/svg/checkmark';

@@ -227,7 +227,8 @@ export function startEvents(api: DustApi, scheduler: Scheduler = browserSchedule
           ...job,
           phases: {
             ...job.phases,
-            [event.phase]: event.note === undefined ? { status: event.status } : { status: event.status, note: event.note },
+            [event.phase]:
+              event.note === undefined ? { status: event.status } : { status: event.status, note: event.note },
           },
         }));
         break;

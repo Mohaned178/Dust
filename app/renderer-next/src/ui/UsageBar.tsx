@@ -7,9 +7,12 @@ export interface UsageSegment {
   bytes: number;
   /** Makes the segment and its legend entry a button, e.g. to jump to that category. */
   onSelect?: () => void;
+  /** Neutral grey for "everything else", so it never reads as one of the categories. */
+  muted?: boolean;
 }
 
 const SWATCHES = ['bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4', 'bg-chart-5'] as const;
+const MUTED_SWATCH = 'bg-border-strong';
 
 export interface UsageBarProps {
   segments: ReadonlyArray<UsageSegment>;
@@ -27,6 +30,10 @@ export function UsageBar({ segments, totalBytes, label, legend = true, className
   const denominator = Math.max(totalBytes, usedBytes, 1);
   // The legend offers the same actions, so the bar's own buttons stay clickable but are not extra tab stops.
   const legendShown = legend && visible.length > 0;
+  // Muted segments do not use up a category colour.
+  const swatches: string[] = [];
+  let colored = 0;
+  for (const segment of visible) swatches.push(segment.muted ? MUTED_SWATCH : SWATCHES[colored++ % SWATCHES.length]!);
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div
@@ -35,7 +42,7 @@ export function UsageBar({ segments, totalBytes, label, legend = true, className
         className="flex h-2 w-full gap-px overflow-hidden rounded-control bg-surface-pressed"
       >
         {visible.map((segment, index) => {
-          const classes = cn('h-full min-w-px', SWATCHES[index % SWATCHES.length]);
+          const classes = cn('h-full min-w-px', swatches[index]);
           const basis = { flexBasis: `${(segment.bytes / denominator) * 100}%` };
           return segment.onSelect ? (
             <button
@@ -64,10 +71,7 @@ export function UsageBar({ segments, totalBytes, label, legend = true, className
           {visible.map((segment, index) => {
             const content = (
               <>
-                <span
-                  className={cn('size-2 shrink-0 rounded-[2px]', SWATCHES[index % SWATCHES.length])}
-                  aria-hidden="true"
-                />
+                <span className={cn('size-2 shrink-0 rounded-[2px]', swatches[index])} aria-hidden="true" />
                 <span>{segment.label}</span>
                 <span className="text-ink">{formatBytes(segment.bytes)}</span>
               </>

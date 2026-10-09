@@ -23,8 +23,7 @@ const initial = () => ({ list: emptyResource<StartupListResult>(), details: new 
 
 export const useStartupStore = create<StartupStore>()((set, get) => ({
   ...initial(),
-  load: (api) =>
-    loadResource(loadKey, { get: () => get().list, set: (list) => set({ list }) }, () => api.getStartup()),
+  load: (api) => loadResource(loadKey, { get: () => get().list, set: (list) => set({ list }) }, () => api.getStartup()),
   mergeDetails: (details) => set((state) => ({ details: new Map([...state.details, ...details]) })),
 }));
 
