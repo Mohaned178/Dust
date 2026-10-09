@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The window could stay hidden after start** — on some PCs the app ran but never showed its window. It now shows as soon as the page loads.
 - **"Access is denied" cache errors** — the administrator copy now keeps its cache in its own folder instead of sharing the normal copy's.
 - **Only one Dust at a time** — opening Dust again brings the open window forward instead of starting another copy.
+- **No console window at start** — the hidden helper used to restart as administrator no longer flashes a console.
 
 ## [2.0.0] - 2026-10-09
 
