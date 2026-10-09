@@ -906,8 +906,33 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 8 — PC Health
 
-- [ ] Build §3.6: live tiles that pause when hidden, the spec cards, and Copy specs.
-- [ ] Rename the page in the UI.
+- [x] Build §3.6: live tiles that pause when hidden, the spec cards, and Copy specs.
+- [x] Rename the page in the UI.
+      Notes: `pages/health/HealthPage.tsx` and `lib/system-info.ts` (the old formatting helpers and their 12 tests,
+      ported). The page chunk is 11 kB; the entry chunk is 248.77 kB (budget 250).
+      **Live tiles:** processor and memory rings (no score, no colour change with the figure), read every 2 s
+      (`LIVE_POLL_MS`) by an effect, so the polling stops while any other page is open and resumes, reading at once, when
+      the page comes back. A test proves it: after leaving for Settings, no read happens for more than two intervals.
+      Home's own tile reads every 5 s while Home is open.
+      **Storage:** one row per internal drive from the dashboard (removable and network drives are left out), with a bar
+      and "207 GB of 237 GB used".
+      **Specs:** six cards, each with its own placeholder: This PC, Windows, Processor, Memory, Graphics, Firmware. Memory
+      waits for the live read, not for the static details. Graphics shows its placeholder while `hardwarePending` and
+      fills in by itself (re-read every 750 ms for up to 30 s). A card with nothing to say is left out. Video memory
+      Windows may have misreported carries the old asterisk and its explanation. The spec grid uses
+      `content-visibility: auto` so cards far down are not laid out until needed.
+      **Copy specs** copies the plain-text report (headed "Dust PC specs") and says so in a toast. A failed refresh keeps
+      the last details behind a notice; a failed first read offers Try again. "Disk health, battery health and top
+      processes" are not faked (backend work).
+      **Renamed:** the nav label, the heading and the copied text say PC Health; no "System Info" string is left in
+      `renderer-next`.
+      **Tests:** `test/renderer-next/pages/health.test.tsx` (9 cases: rings and specs, no score words, storage, per-card
+      placeholders and the graphics arriving, uncertain video memory, hardware not available, retry and failed refresh,
+      refresh, copy, and the polling test that uses the real timer) and `lib/system-info.test.ts`. Whole suite: 692.
+      **Verified in the running app** (production build, real data): the page showed its rings with real figures (16%
+      processor, 57% memory, "9.1 GB of 15.9 GB"), the three internal drives with SSD or HDD tags, and all six cards;
+      no card was still waiting after 1.5 s; no long task in 8 s of polling; JS heap 3.3 MB.
+      **Not run live:** the copy to the clipboard (covered by a test), and a machine where the graphics are slow to arrive.
 - **Done when:**
   - No polling happens while another page is open. Prove it with a test that uses `<Activity>` hidden.
 
