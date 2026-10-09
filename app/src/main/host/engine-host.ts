@@ -81,6 +81,11 @@ import type {
   UninstallPreviewResult,
   UninstallRunRequest,
   UninstallRunResult,
+  FolderChildrenOptions,
+  FolderChildrenResult,
+  ResultsSearchOptions,
+  ResultsSearchResult,
+  ResultsSummaryState,
 } from '../../shared/ipc';
 import type { StartupService } from './startup';
 import { createUninstallService } from './uninstall';
@@ -105,6 +110,7 @@ import {
   toResultRow,
 } from './results';
 import type { ResultsEnv } from './results';
+import { folderChildren, searchRows, topContributors } from './results-index';
 import { applyCleanReport } from './cleanup-rows';
 import {
   isUnderAny,
@@ -140,6 +146,8 @@ export interface EngineHostDeps {
   categoryIntervalMs?: number;
   /** Stream every folder row to the renderer during Analyze (live results table). Default on. */
   streamLiveRows?: boolean;
+  /** Send the final 'matches' event after a scan. Nothing in the app reads it; default off. */
+  emitMatchEvents?: boolean;
   volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   volumesCacheFile?: string;
@@ -170,6 +178,9 @@ export interface EngineHost {
   cancelScan(): Promise<boolean>;
   getResults(root: string): ResultsState;
   getResultCategories(root: string): ResultsCategoriesState;
+  getResultsSummary(root: string): ResultsSummaryState;
+  getFolderChildren(root: string, path: string, options?: FolderChildrenOptions): FolderChildrenResult;
+  searchResults(root: string, query: string, options?: ResultsSearchOptions): ResultsSearchResult;
   getBrowseResults(root: string): BrowseState;
   deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
@@ -236,6 +247,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const lock = new ScanLock();
   const guard = guardEnv(env, deps.dustInstallPath);
   const streamLiveRows = deps.streamLiveRows ?? true;
+  const emitMatchEvents = deps.emitMatchEvents === true;
   let disposed = false;
   let prewarmScheduled = false;
   let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1124,19 +1136,21 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         input.installsPromise,
       );
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
-      emit({
-        type: 'matches',
-        runId: input.runId,
-        matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence, origin }) => ({
-          path,
-          bytes,
-          ruleId,
-          category,
-          grade,
-          evidence,
-          origin,
-        })),
-      });
+      if (emitMatchEvents) {
+        emit({
+          type: 'matches',
+          runId: input.runId,
+          matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence, origin }) => ({
+            path,
+            bytes,
+            ruleId,
+            category,
+            grade,
+            evidence,
+            origin,
+          })),
+        });
+      }
       emit({
         type: 'finished',
         runId: input.runId,
@@ -1401,6 +1415,28 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
   }
 
+  function getResultsSummary(requestedRoot: string): ResultsSummaryState {
+    const state = getResults(requestedRoot);
+    return {
+      source: state.source,
+      root: state.root,
+      finishedAt: state.finishedAt,
+      status: state.status,
+      rulesStale: state.rulesStale,
+      depthLimited: state.depthLimited,
+      categories: state.categories,
+      contributors: topContributors(state.rows),
+    };
+  }
+
+  function getFolderChildren(requestedRoot: string, path: string, options?: FolderChildrenOptions) {
+    return folderChildren(getResults(requestedRoot).rows, path, options);
+  }
+
+  function searchResults(requestedRoot: string, query: string, options?: ResultsSearchOptions) {
+    return searchRows(getResults(requestedRoot).rows, query, options);
+  }
+
   function getBrowseResults(requestedRoot: string): BrowseState {
     if (lastBrowse !== null && sameRoot(lastBrowse.root, requestedRoot)) {
       return {
@@ -1473,6 +1509,9 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     cancelScan,
     getResults,
     getResultCategories,
+    getResultsSummary,
+    getFolderChildren,
+    searchResults,
     getBrowseResults,
     deleteBrowsePath,
     previewClean,

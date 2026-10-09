@@ -3,6 +3,8 @@ import { IPC } from '../shared/ipc';
 import type {
   CleanExecuteRequest,
   CleanPreviewRequest,
+  FolderChildrenOptions,
+  ResultsSearchOptions,
   ScanEvent,
   StartupLaunchHint,
   StartupRelaunchAction,
@@ -103,6 +105,27 @@ export function registerIpcHandlers(
   registrar.handle(IPC.resultsCategoriesGet, (_event, root) =>
     timed('resultsCategoriesGet', () => host.getResultCategories(typeof root === 'string' ? root : '')),
   );
+  registrar.handle(IPC.resultsSummaryGet, (_event, root) =>
+    timed('resultsSummaryGet', () => host.getResultsSummary(typeof root === 'string' ? root : '')),
+  );
+  registrar.handle(IPC.resultsChildrenGet, (_event, root, path, options) =>
+    timed('resultsChildrenGet', () =>
+      host.getFolderChildren(
+        typeof root === 'string' ? root : '',
+        typeof path === 'string' ? path : '',
+        parseFolderChildrenOptions(options),
+      ),
+    ),
+  );
+  registrar.handle(IPC.resultsSearch, (_event, root, query, options) =>
+    timed('resultsSearch', () =>
+      host.searchResults(
+        typeof root === 'string' ? root : '',
+        typeof query === 'string' ? query.slice(0, 260) : '',
+        parseResultsSearchOptions(options),
+      ),
+    ),
+  );
   registrar.handle(IPC.browseStart, (_event, volume) => host.startBrowse(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.browseResultsGet, (_event, root) =>
     timed('browseResultsGet', () => host.getBrowseResults(typeof root === 'string' ? root : '')),
@@ -175,6 +198,25 @@ export function registerIpcHandlers(
     offUninstall();
     offStartup();
   };
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function parseFolderChildrenOptions(value: unknown): FolderChildrenOptions {
+  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  return {
+    limit: finiteNumber(record.limit),
+    offset: finiteNumber(record.offset),
+    sort: record.sort === 'name' ? 'name' : 'size',
+    hideDanger: record.hideDanger === true,
+  };
+}
+
+export function parseResultsSearchOptions(value: unknown): ResultsSearchOptions {
+  const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  return { limit: finiteNumber(record.limit), hideDanger: record.hideDanger === true };
 }
 
 export function parseCleanPreviewRequest(value: unknown): CleanPreviewRequest | null {

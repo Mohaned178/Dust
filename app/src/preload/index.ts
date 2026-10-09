@@ -10,8 +10,13 @@ import type {
   DashboardState,
   DevCleanupState,
   DustApi,
+  FolderChildrenOptions,
+  FolderChildrenResult,
   ResultsCategoriesState,
+  ResultsSearchOptions,
+  ResultsSearchResult,
   ResultsState,
+  ResultsSummaryState,
   ScanEvent,
   SetPinResult,
   StartAnalyzeResult,
@@ -41,6 +46,11 @@ const api: DustApi = {
   getResults: (root: string) => ipcRenderer.invoke(IPC.resultsGet, root) as Promise<ResultsState>,
   getResultCategories: (root: string) =>
     ipcRenderer.invoke(IPC.resultsCategoriesGet, root) as Promise<ResultsCategoriesState>,
+  getResultsSummary: (root: string) => ipcRenderer.invoke(IPC.resultsSummaryGet, root) as Promise<ResultsSummaryState>,
+  getFolderChildren: (root: string, path: string, options?: FolderChildrenOptions) =>
+    ipcRenderer.invoke(IPC.resultsChildrenGet, root, path, options ?? {}) as Promise<FolderChildrenResult>,
+  searchResults: (root: string, query: string, options?: ResultsSearchOptions) =>
+    ipcRenderer.invoke(IPC.resultsSearch, root, query, options ?? {}) as Promise<ResultsSearchResult>,
   startBrowse: (volume: string) => ipcRenderer.invoke(IPC.browseStart, volume) as Promise<StartAnalyzeResult>,
   getBrowseResults: (root: string) => ipcRenderer.invoke(IPC.browseResultsGet, root) as Promise<BrowseState>,
   deleteBrowsePath: (path: string) => ipcRenderer.invoke(IPC.browseDelete, path) as Promise<BrowseDeleteResult>,

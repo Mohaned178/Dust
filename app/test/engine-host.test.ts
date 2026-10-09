@@ -557,7 +557,6 @@ describe('createEngineHost', () => {
       'finalize-progress',
       'finalize-progress',
       'categories',
-      'matches',
       'finished',
     ]);
     expect(seen).not.toContain('failed');
@@ -594,6 +593,7 @@ describe('createEngineHost', () => {
       createSession: (options) => (fake = new FakeSession(options)),
       folderIntervalMs: 100,
       categoryIntervalMs: 50,
+      emitMatchEvents: true,
     });
 
     const events: ScanEvent[] = [];

@@ -36,7 +36,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['app/renderer/**/*.{ts,tsx}'],
+    files: ['app/renderer/**/*.{ts,tsx}', 'app/renderer-next/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       // Classic hook rules only. The React Compiler ruleset (refs, purity,

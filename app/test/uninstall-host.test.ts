@@ -619,4 +619,30 @@ describe('app icons', () => {
       { type: 'app-icon', appId: 'exe-app', iconDataUrl: 'data:image/png;base64,icon' },
     ]);
   });
+
+  it('batches sizes and icons into arrays when batching is on', async () => {
+    const { service, events } = makeService({
+      batchAppEvents: true,
+      listApps: async () => ({
+        apps: [
+          installedApp({ id: 'a', displayName: 'A', installLocation: 'D:\\Apps\\A', displayIcon: 'C:\\A\\a.exe' }),
+          installedApp({ id: 'b', displayName: 'B', installLocation: 'D:\\Apps\\B', displayIcon: 'C:\\B\\b.exe' }),
+        ],
+        trusted: true,
+      }),
+      measureDirectory: async () => 42,
+      loadIcon: async () => 'data:image/png;base64,icon',
+    });
+    await service.list(false);
+    await waitFor(events, 'app-sizes');
+    await waitFor(events, 'app-icons');
+    expect(events.some((event) => event.type === 'app-size' || event.type === 'app-icon')).toBe(false);
+    const sizes = events.flatMap((event) => (event.type === 'app-sizes' ? event.sizes : []));
+    expect(sizes).toEqual([
+      { appId: 'a', bytes: 42 },
+      { appId: 'b', bytes: 42 },
+    ]);
+    const icons = events.flatMap((event) => (event.type === 'app-icons' ? event.icons : []));
+    expect(icons.map((icon) => icon.appId)).toEqual(['a', 'b']);
+  });
 });

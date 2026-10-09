@@ -18,6 +18,7 @@ import type {
   UninstallItemPreview,
   UninstallPreview,
 } from '../../src/shared/ipc';
+import { folderChildren, searchRows, topContributors } from '../../src/main/host/results-index';
 
 export function makeResultsRows(): ResultRow[] {
   const root = 'C:\\';
@@ -540,6 +541,21 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
         categories: state.categories,
       };
     },
+    getResultsSummary: async (root) => {
+      const state = makeResultsState({ root });
+      return {
+        source: state.source,
+        root: state.root,
+        finishedAt: state.finishedAt,
+        status: state.status,
+        rulesStale: state.rulesStale,
+        depthLimited: state.depthLimited,
+        categories: state.categories,
+        contributors: topContributors(state.rows),
+      };
+    },
+    getFolderChildren: async (root, path, options) => folderChildren(makeResultsState({ root }).rows, path, options),
+    searchResults: async (root, query, options) => searchRows(makeResultsState({ root }).rows, query, options),
     getBrowseResults: async (root) => ({ source: 'empty', root, finishedAt: null, status: null, rows: [] }),
     deleteBrowsePath: async (path) => ({
       path,

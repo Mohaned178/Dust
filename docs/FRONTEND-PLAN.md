@@ -535,11 +535,33 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 0 — Groundwork
 
-- [ ] 0.1 (Plan already saved here on 2026-10-09.) Commit the 17 currently uncommitted files first, on their own,
-      after checking with the owner.
-- [ ] 0.2 Scaffold `renderer-next/` and wire the build (§4.5). Add a blank shell that renders "Dust".
-- [ ] 0.3 Write `tokens.css` and `base.css`. Add the fonts (system only, no downloads).
-- [ ] 0.4 Make the IPC additions in §4.3, with host tests.
+- [x] 0.1 (Plan already saved here on 2026-10-09.) Commit the 17 currently uncommitted files first, on their own,
+      after checking with the owner. Done: committed as `45d7151` (plus `b9e355e` for this plan), owner approved.
+- [x] 0.2 Scaffold `renderer-next/` and wire the build (§4.5). Add a blank shell that renders "Dust".
+      Notes: `npm run dev:next` passes `--next` to `dev.mjs` (no `cross-env` needed). The new vitest project has its
+      own `test/setup-next.ts`, because `test/setup.ts` imports old-renderer modules that phase 11 deletes.
+- [x] 0.3 Write `tokens.css` and `base.css`. Add the fonts (system only, no downloads).
+      Notes: shadows, radii and easings are Tailwind `@utility` classes (`shadow-card`, `rounded-control`, `ease-enter`)
+      because they keep the token names. Chart colors checked against white: all at least 4.2:1; run the `dataviz`
+      check when `UsageBar` is built in phase 1.
+- [x] 0.4 Make the IPC additions in §4.3, with host tests.
+      Notes: `getResultsSummary`, `getFolderChildren`, `searchResults` are served from `host/results-index.ts` over the
+      rows the host already holds. The `matches` scan event is now opt-in (`emitMatchEvents`, default off). Uninstall
+      `app-size` / `app-icon` events are batched into `app-sizes` / `app-icons` every 100 ms only when the next
+      renderer runs (`batchAppEvents`), so the old renderer keeps working. Contract test now counts 37 channels.
+      Folder rows hide system-critical items with `hideDanger` (the grade is called `danger` in code).
+      Measured on 280k synthetic rows: summary 15 ms, first folder request 85 ms, first search 330 ms (builds the
+      search index once; later searches 4–7 ms). Phase 5 should warm the search index when Explore opens.
+      **Dev note:** Dust relaunches itself elevated, and the elevated copy does not inherit `DUST_RENDERER` or
+      `DUST_DEV_SERVER_URL`. Run `npm run dev:next` from an administrator terminal (as `npm run dev` already needs).
+      `DUST_DEV_PORT` picks another port when 5173 is taken. For a non-admin check, start vite with
+      `DUST_RENDERER=next` and launch `electron . --dust-elevated` against it.
+      **Bundle baseline:** the blank shell's entry chunk is 223 kB minified (70 kB gzip), almost all React. The 250 kB
+      budget in §4.4 leaves about 27 kB for the shell, stores and nav; pages and Radix parts must stay lazy.
+      **Verified by running the app** (vite dev server on the next root + Electron, inspected over the debug port): window
+      1200×800, `windowControlsOverlay.visible` true with a 40 px title area, body background `rgb(247,249,252)`,
+      tokens and Tailwind utilities applied. The old renderer, started the same way with no env var, still opens at
+      1180×780, dark, on its Home page. **Verified by tests/build only:** IPC handlers, batching, `vite build`.
 - **Done when:**
   - `npm run dev:next` opens the blank shell with a light title bar and no dark flash.
   - The old renderer still runs with `npm run dev`.

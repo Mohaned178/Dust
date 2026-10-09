@@ -28,6 +28,15 @@ export default defineConfig({
           setupFiles: ['test/setup.ts'],
         },
       },
+      {
+        extends: true,
+        test: {
+          name: 'renderer-next',
+          environment: 'jsdom',
+          include: ['test/renderer-next/**/*.test.{ts,tsx}'],
+          setupFiles: ['test/setup-next.ts'],
+        },
+      },
     ],
   },
 });

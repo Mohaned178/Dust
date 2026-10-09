@@ -72,6 +72,8 @@ export interface UninstallServiceDeps {
   measureDirectory?: (path: string) => Promise<number | null>;
   /** Loads an icon file (.exe, .dll or .ico) as a data URL. */
   loadIcon?: (path: string) => Promise<string | null>;
+  /** Send sizes and icons as 'app-sizes' / 'app-icons' arrays every 100 ms instead of one event each. */
+  batchAppEvents?: boolean;
 }
 
 export interface UninstallService {
@@ -108,6 +110,47 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
   // Apps whose uninstaller ran this session, kept so their leftovers can still
   // be scanned once the registry entry is gone.
   const uninstalled = new Map<string, InstalledApp>();
+
+  const BATCH_INTERVAL_MS = 100;
+  const batchAppEvents = deps.batchAppEvents === true;
+  let pendingSizes: Array<{ appId: string; bytes: number }> = [];
+  let pendingIcons: Array<{ appId: string; iconDataUrl: string }> = [];
+  let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushBatches(): void {
+    if (batchTimer !== null) clearTimeout(batchTimer);
+    batchTimer = null;
+    const sizes = pendingSizes;
+    const icons = pendingIcons;
+    pendingSizes = [];
+    pendingIcons = [];
+    if (sizes.length > 0) emit({ type: 'app-sizes', sizes });
+    if (icons.length > 0) emit({ type: 'app-icons', icons });
+  }
+
+  function queueBatch(): void {
+    if (batchTimer !== null) return;
+    batchTimer = setTimeout(flushBatches, BATCH_INTERVAL_MS);
+    batchTimer.unref?.();
+  }
+
+  function emitAppSize(appId: string, bytes: number): void {
+    if (!batchAppEvents) {
+      emit({ type: 'app-size', appId, bytes });
+      return;
+    }
+    pendingSizes.push({ appId, bytes });
+    queueBatch();
+  }
+
+  function emitAppIcon(appId: string, iconDataUrl: string): void {
+    if (!batchAppEvents) {
+      emit({ type: 'app-icon', appId, iconDataUrl });
+      return;
+    }
+    pendingIcons.push({ appId, iconDataUrl });
+    queueBatch();
+  }
 
   function emit(event: UninstallEvent): void {
     for (const listener of [...listeners]) {
@@ -198,7 +241,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
         const bytes = await measureDirectory(location).catch(() => null);
         if (bytes === null) continue;
         sizes.set(sizeKey(app), bytes);
-        emit({ type: 'app-size', appId: app.id, bytes });
+        emitAppSize(app.id, bytes);
       }
     })().finally(() => {
       sizing = null;
@@ -222,7 +265,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
             const path = iconPathOf(app.displayIcon);
             const icon = path === null ? null : await loadIcon(path).catch(() => null);
             icons.set(app.id, icon);
-            if (icon !== null) emit({ type: 'app-icon', appId: app.id, iconDataUrl: icon });
+            if (icon !== null) emitAppIcon(app.id, icon);
           }),
         );
       }

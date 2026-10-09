@@ -2,7 +2,12 @@ import { SnapshotStore } from '@dust/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
 import type { EngineHostDeps } from '../src/main/host/engine-host';
-import { registerIpcHandlers, parseCleanPreviewRequest } from '../src/main/ipc';
+import {
+  registerIpcHandlers,
+  parseCleanPreviewRequest,
+  parseFolderChildrenOptions,
+  parseResultsSearchOptions,
+} from '../src/main/ipc';
 import type { IpcRegistrar } from '../src/main/ipc';
 import { IPC } from '../src/shared/ipc';
 import type {
@@ -107,6 +112,18 @@ describe('registerIpcHandlers', () => {
 
     const results = (await registrar.invoke(IPC.resultsGet, 'Z:\\')) as { source: string };
     expect(results.source).toBe('empty');
+
+    const summary = (await registrar.invoke(IPC.resultsSummaryGet, 'Z:\\')) as {
+      source: string;
+      contributors: Record<string, unknown[]>;
+    };
+    expect(summary.source).toBe('empty');
+    expect(summary.contributors.temp).toEqual([]);
+    await expect(registrar.invoke(IPC.resultsChildrenGet, 'Z:\\', 'Z:\\', { limit: 'x' })).resolves.toEqual({
+      rows: [],
+      total: 0,
+    });
+    await expect(registrar.invoke(IPC.resultsSearch, 'Z:\\', 42)).resolves.toEqual({ rows: [], total: 0 });
 
     await registrar.invoke(IPC.revealPath, 'T:\\Temp');
     expect(revealed).toEqual(['T:\\Temp']);
@@ -375,6 +392,27 @@ describe('parseCleanPreviewRequest', () => {
       scope: 'dev',
       root: 'T:\\',
       paths: ['T:\\a'],
+    });
+  });
+});
+
+describe('results option parsers', () => {
+  it('keeps only well-typed paging values', () => {
+    expect(parseFolderChildrenOptions({ limit: 50, offset: 'x', sort: 'name', hideDanger: true })).toEqual({
+      limit: 50,
+      offset: undefined,
+      sort: 'name',
+      hideDanger: true,
+    });
+    expect(parseFolderChildrenOptions(null)).toEqual({
+      limit: undefined,
+      offset: undefined,
+      sort: 'size',
+      hideDanger: false,
+    });
+    expect(parseResultsSearchOptions({ limit: Infinity, hideDanger: 'yes' })).toEqual({
+      limit: undefined,
+      hideDanger: false,
     });
   });
 });

@@ -21,6 +21,9 @@ export const IPC = {
   scanEvent: 'dust:scan:event',
   resultsGet: 'dust:results:get',
   resultsCategoriesGet: 'dust:results:categories',
+  resultsSummaryGet: 'dust:results:summary',
+  resultsChildrenGet: 'dust:results:children',
+  resultsSearch: 'dust:results:search',
   browseStart: 'dust:browse:start',
   browseResultsGet: 'dust:browse:results',
   browseDelete: 'dust:browse:delete',
@@ -154,6 +157,37 @@ export interface ResultsCategoriesState {
   rulesStale: boolean;
   depthLimited: boolean;
   categories: CategorySummaryRow[];
+}
+
+/** Category summary plus the largest cleanup targets per category, without the full folder tree. */
+export interface ResultsSummaryState extends ResultsCategoriesState {
+  /** Up to 200 rows per category, largest first. */
+  contributors: Record<CategoryId, ResultRow[]>;
+}
+
+export interface FolderChildrenOptions {
+  limit?: number;
+  offset?: number;
+  sort?: 'size' | 'name';
+  /** Leave out system-critical (danger-graded) rows. */
+  hideDanger?: boolean;
+}
+
+export interface FolderChildrenResult {
+  rows: ResultRow[];
+  /** Direct children available after filtering, before limit and offset. */
+  total: number;
+}
+
+export interface ResultsSearchOptions {
+  limit?: number;
+  hideDanger?: boolean;
+}
+
+export interface ResultsSearchResult {
+  rows: ResultRow[];
+  /** Every match, even when `rows` is capped. */
+  total: number;
 }
 
 export type CleanScope = 'quick' | 'dev' | 'row';
@@ -536,7 +570,10 @@ export type UninstallEvent =
   | { type: 'finished'; jobId: string; report: RemovalReport }
   | { type: 'failed'; jobId: string; message: string }
   | { type: 'app-size'; appId: string; bytes: number }
-  | { type: 'app-icon'; appId: string; iconDataUrl: string };
+  | { type: 'app-icon'; appId: string; iconDataUrl: string }
+  /** Batched forms of 'app-size' and 'app-icon', sent instead of them when batching is on. */
+  | { type: 'app-sizes'; sizes: Array<{ appId: string; bytes: number }> }
+  | { type: 'app-icons'; icons: Array<{ appId: string; iconDataUrl: string }> };
 
 export interface UninstallLaunchHint {
   open: boolean;
@@ -562,6 +599,9 @@ export interface DustApi {
   cancelScan(): Promise<void>;
   getResults(root: string): Promise<ResultsState>;
   getResultCategories(root: string): Promise<ResultsCategoriesState>;
+  getResultsSummary(root: string): Promise<ResultsSummaryState>;
+  getFolderChildren(root: string, path: string, options?: FolderChildrenOptions): Promise<FolderChildrenResult>;
+  searchResults(root: string, query: string, options?: ResultsSearchOptions): Promise<ResultsSearchResult>;
   getBrowseResults(root: string): Promise<BrowseState>;
   deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   revealPath(path: string): Promise<void>;

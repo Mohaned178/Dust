@@ -74,13 +74,25 @@ function isRunningElevated(): Promise<boolean> {
   });
 }
 
+/** True while the rebuilt renderer (app/renderer-next) is the one being run. */
+const nextRenderer = process.env.DUST_RENDERER === 'next';
+
+// Window chrome for the light Fluent look. Values mirror --canvas and --ink in renderer-next tokens.css.
+const NEXT_WINDOW = {
+  width: 1200,
+  height: 800,
+  minWidth: 960,
+  minHeight: 640,
+  backgroundColor: '#F7F9FC',
+  titleBarStyle: 'hidden',
+  titleBarOverlay: { color: '#F7F9FC', symbolColor: '#1B1B1F', height: 40 },
+} as const;
+
 function createMainWindow(backgroundThrottling: boolean): BrowserWindow {
   return new BrowserWindow({
-    width: 1180,
-    height: 780,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#0b0b0c',
+    ...(nextRenderer
+      ? NEXT_WINDOW
+      : { width: 1180, height: 780, minWidth: 900, minHeight: 600, backgroundColor: '#0b0b0c' }),
     title: 'Dust',
     show: false,
     webPreferences: {
@@ -430,6 +442,7 @@ void app
       dustInstallPath,
       uninstallDeps: {
         store,
+        batchAppEvents: nextRenderer,
         journalPath: journalPathFor(userDataDir),
         backupDir,
         elevated,

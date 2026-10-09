@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
+// DUST_RENDERER=next builds the rebuilt renderer (docs/FRONTEND-PLAN.md); phase 11 makes it the default.
+const rendererDir = process.env.DUST_RENDERER === 'next' ? './renderer-next' : './renderer';
+
 export default defineConfig({
-  root: fileURLToPath(new URL('./renderer', import.meta.url)),
+  root: fileURLToPath(new URL(rendererDir, import.meta.url)),
   base: './',
   plugins: [react(), tailwindcss()],
   build: {

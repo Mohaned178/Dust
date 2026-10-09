@@ -1,0 +1,84 @@
+/*
+ * Design tokens for the rebuilt renderer (docs/FRONTEND-PLAN.md section 2).
+ * This is the only file that holds raw color values. Dark mode, if it comes,
+ * is a second block of these same names.
+ */
+:root {
+  /* Surfaces */
+  --canvas: #f7f9fc;
+  --surface: #ffffff;
+  --surface-hover: #f3f6fa;
+  --surface-pressed: #eaeff5;
+  --border: #e3e8ef;
+  --border-strong: #cdd5df;
+
+  /* Text. --ink-3 is for icons and disabled states, never body text. */
+  --ink: #1b1b1f;
+  --ink-2: #5c6370;
+  --ink-3: #8a8f98;
+  --on-accent: #ffffff;
+
+  /* Accent: Windows blue */
+  --accent: #0f6cbd;
+  --accent-hover: #115ea3;
+  --accent-pressed: #0f548c;
+  --accent-soft: #ebf3fc;
+  --accent-border: #b4d6fa;
+
+  /* Grades. Always a word plus a dot, never color alone. */
+  --safe: #0e700e;
+  --safe-soft: #f1faf1;
+  --review: #8a5a00;
+  --review-soft: #fff9f0;
+  --danger: #b10e1c;
+  --danger-soft: #fdf3f4;
+  --danger-fill: #c42b1c;
+
+  /* Category segments in usage bars, blue first. Each is at least 4.2:1 on white. */
+  --chart-1: #0f6cbd;
+  --chart-2: #00838f;
+  --chart-3: #7a5cb5;
+  --chart-4: #b26b00;
+  --chart-5: #5c6b7a;
+
+  /* Overlay */
+  --backdrop: rgba(0, 0, 0, 0.3);
+
+  /* Elevation: static only, never animated */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-flyout: 0 8px 16px rgba(0, 0, 0, 0.12);
+  --shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* Radius: Windows 11 geometry */
+  --radius-control: 4px;
+  --radius-overlay: 8px;
+
+  /* Motion: Fluent 2 */
+  --dur-faster: 100ms;
+  --dur-fast: 150ms;
+  --dur-normal: 200ms;
+  --dur-slow: 300ms;
+  --ease-enter: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --ease-exit: cubic-bezier(1, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.33, 0, 0.67, 1);
+
+  /* Type */
+  --font-text: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  /* Layout */
+  --titlebar-height: 40px;
+  --sidebar-width: 240px;
+  --sidebar-rail-width: 56px;
+  --page-max-width: 1040px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-faster: 0ms;
+    --dur-fast: 0ms;
+    --dur-normal: 0ms;
+    --dur-slow: 0ms;
+  }
+}
