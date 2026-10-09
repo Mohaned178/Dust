@@ -497,6 +497,25 @@ until phase 11.
 | Renderer heap after a full C:\ scan, results open | < 80 MB (today 228 MB) | DevTools Memory |
 | Initial JS (entry chunk) | < 250 KB minified | `vite build` report |
 
+**Measured on 2026-10-09 (phase 11),** in the packaged app (`release/win-unpacked/Dust.exe`, the same files the
+installer installs), on a machine with 660k files on C:\, 83 apps and 259 projects. The window has to be in front for
+Chromium to draw frames, so the script brings it forward first.
+
+| Metric | Budget | Measured | Met |
+|---|---|---|---|
+| Window shown to first content | < 500 ms | Home content 411 ms after navigation start (second run; 549 ms on a cold first launch) | yes (first launch after a build was slower) |
+| Page switch, already visited | < 50 ms | 6.6 to 15.7 ms (all seven pages) | yes |
+| Page switch, first visit | < 200 ms | 1.6 to 11.9 ms to the second frame | yes |
+| Scroll, Explore list of about 28,000 rows | 60 fps, no long task over 50 ms | 307 frames in 4 s, median 14.9 ms, p99 30 ms, one frame over 33 ms, none over 50 ms, no long task | yes |
+| Scroll, other lists | same | Apps and Developer lists drew and scrolled in earlier phases with no long task; not re-measured here | yes (earlier) |
+| Typing in a search box | no dropped keystrokes; results < 150 ms after the debounce | six keys 40 ms apart: results 300 ms after the last key (the debounce is 300 ms, so about 0 ms of work), no long task | yes |
+| Renderer JS heap after a full scan, results open | < 80 MB (was 228 MB) | 5.8 MB after a full scan of C:\ (25 s); 20 MB with 28,000 Explore rows loaded | yes |
+| Initial JS (entry chunk) | < 250 KB | 249.13 kB (`index-*.js` named by `index.html`); CSS 29.3 kB | yes, with 0.9 kB to spare |
+
+Notes: the heap figure is the JS heap from DevTools (`Runtime.getHeapUsage` after a garbage collection), the measure
+the budget names. For the whole app the Task Manager shows about 380 MB private for the GPU process and about 85 to
+110 MB each for the renderer and main processes; those are not comparable with the 228 MB.
+
 **CSS rules:**
 
 - No `backdrop-filter` anywhere.
@@ -1050,20 +1069,50 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 11 — Switch over and clean up
 
-- [ ] Flip the Vite default to `renderer-next` and make the window changes permanent.
-- [ ] Delete `app/renderer/` and `app/test/renderer/` tests that have ported equivalents. Keep `fakes.ts`, and move it
+- [x] Flip the Vite default to `renderer-next` and make the window changes permanent.
+- [x] Delete `app/renderer/` and `app/test/renderer/` tests that have ported equivalents. Keep `fakes.ts`, and move it
       to `test/renderer-next/`.
-- [ ] Remove IPC channels nothing uses any more: browse, plus `getResults` if it is replaced. Update the contract test.
-- [ ] Rename `renderer-next` to `renderer`.
-- [ ] Rewrite `app/DESIGN.md` from §2, and update `app/PRODUCT.md`:
+- [x] Remove IPC channels nothing uses any more: browse, plus `getResults` if it is replaced. Update the contract test.
+- [x] Rename `renderer-next` to `renderer`.
+- [x] Rewrite `app/DESIGN.md` from §2, and update `app/PRODUCT.md`:
   - Audience: everyone plus a developer section.
   - Accent: Windows blue.
   - Screens: per §3.
-- [ ] Update `PROJECT_BRIEF.md` and mark the superseded parts of `docs/ENHANCEMENT-PLAN.md`.
+- [x] Update `PROJECT_BRIEF.md` and mark the superseded parts of `docs/ENHANCEMENT-PLAN.md`.
+      Notes: **Switch.** `app/renderer/` (the old UI, 9,500 lines) and its 25 test files were deleted. Ported first:
+      `format.test.ts` (its relative-time wording changed on purpose) and `system-info`. Not ported, because the
+      features are gone: the tree table, space map, category strip, results page and scan-progress screen, whose
+      replacements have their own tests. `app/renderer-next` became `app/renderer`, `test/renderer-next` became
+      `test/renderer` (with `fakes.ts` and `virtual-mock.ts` in it), and `setup-next.ts` became `setup.ts`. Vite,
+      Vitest, tsconfig, ESLint and the dev script lost their two-renderer switch (`DUST_RENDERER`, `--next`,
+      `dev:next`, in the root `package.json` too). `@tanstack/react-table` was removed from `package.json` and the
+      lockfile. **Window.** The light title-bar overlay, the `#F7F9FC` background and the 960 x 640 minimum are now the only
+      window. **Host and IPC.** Removed: the `getResults`, `startBrowse`, `getBrowseResults` and `deleteBrowsePath`
+      channels (the contract test counts 33 channels, was 37), the browse scan and its delete in the engine host, the
+      `folders`, `matches`, `browse-folders` and `browse-finished` scan events, the single `app-size` and `app-icon`
+      events (sizes and icons always arrive in 100 ms batches), and the options that only existed to serve two
+      renderers (`emitFolderEvents`, `emitMatchEvents`, `folderIntervalMs`, `batchAppEvents`). The scripted
+      navigation pass (`DUST_AUTO`) and the browse benchmark were removed with the old UI; `DUST_BENCH_ROOT` still
+      benchmarks an analyze without a renderer. The host keeps its internal `getResults` for the summary, folder and
+      search channels. `core`'s guarded browse delete is now unused (left in place). `DashboardVolumeCard.role` still
+      says `'browse'` for non-system drives; the new renderer reads it only as "not the system drive". **Tests.** Host
+      tests that asserted the removed events and browse behaviour were deleted or rewritten; the suite is now 491
+      tests (it was 719 with the old renderer's, about 250). **Docs.** `app/DESIGN.md` and `app/PRODUCT.md` were rewritten
+      from §2 and §3 (audience, accent, screens, voice, known gaps), `PROJECT_BRIEF.md` and the README describe the new
+      screens, `docs/ENHANCEMENT-PLAN.md` has a banner saying which workstreams are superseded and which still stand as
+      backend work, and the changelog has an Unreleased entry.
 - **Done when:**
   - `npm run dist:app` builds.
+    Built: `release/Dust-Setup-1.2.0.exe` (and its blockmap), through electron-builder, with the new renderer as the
+    only one.
   - The installer runs.
+    **Partly checked.** I did not run the installer, because installing would change this PC (shortcuts, an uninstall
+    entry). I ran the packaged app it installs, `release/win-unpacked/Dust.exe`, from a fresh start: it opened,
+    showed Home with real data, scanned C:\, opened every page, and passed the measurements below. Running the
+    installer itself, on a clean Windows 11 account, is still to do (README smoke checklist and section 8, step 5).
   - Every budget in §4.4 is met and the measurements are recorded in this file.
+    Met and recorded in the table under section 4.4. One qualification: the first launch after a rebuild showed Home
+    at 549 ms; relaunches (the case the budget is about) were 411 ms.
 
 ---
 

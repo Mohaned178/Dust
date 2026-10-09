@@ -1,6 +1,5 @@
 import type {
   ActionGrade,
-  BrowseDeleteResult,
   CategoryId,
   DisplayGrade,
   DriveType,
@@ -19,14 +18,10 @@ export const IPC = {
   scanStart: 'dust:scan:start',
   scanCancel: 'dust:scan:cancel',
   scanEvent: 'dust:scan:event',
-  resultsGet: 'dust:results:get',
   resultsCategoriesGet: 'dust:results:categories',
   resultsSummaryGet: 'dust:results:summary',
   resultsChildrenGet: 'dust:results:children',
   resultsSearch: 'dust:results:search',
-  browseStart: 'dust:browse:start',
-  browseResultsGet: 'dust:browse:results',
-  browseDelete: 'dust:browse:delete',
   revealPath: 'dust:shell:reveal',
   cleanPreview: 'dust:clean:preview',
   cleanExecute: 'dust:clean:execute',
@@ -54,9 +49,9 @@ export const IPC = {
   updatesEvent: 'dust:updates:event',
 } as const;
 
-export type { BrowseDeleteResult, RemovalReport, StartupSource, SystemInfoLive, SystemInfoStatic };
+export type { RemovalReport, StartupSource, SystemInfoLive, SystemInfoStatic };
 
-export type ScanKind = 'analyze' | 'quick-clean' | 'browse' | 'uninstall';
+export type ScanKind = 'analyze' | 'quick-clean' | 'uninstall';
 
 export interface ScanState {
   kind: ScanKind;
@@ -104,30 +99,6 @@ export interface ResultRow {
   gradeReason: string;
   action: ResultAction | null;
   detected?: boolean;
-}
-
-export interface BrowseRow {
-  path: string;
-  name: string;
-  parent: string | null;
-  bytes: number;
-  allocatedBytes: number;
-  fileCount: number;
-  folderCount: number;
-  linkCount: number;
-  newestMtimeMs: number;
-  errorCount: number;
-  partial: boolean;
-  complete: boolean;
-  childCount: number;
-}
-
-export interface BrowseState {
-  source: 'live' | 'empty';
-  root: string;
-  finishedAt: number | null;
-  status: 'complete' | 'cancelled' | null;
-  rows: BrowseRow[];
 }
 
 export interface CategorySummaryRow {
@@ -328,20 +299,7 @@ export type ScanEvent =
   | { type: 'started'; runId: string; root: string; startedAt: number }
   | { type: 'progress'; runId: string; progress: ScanProgressPayload }
   | { type: 'quick-clean-progress'; progress: ScanProgressPayload }
-  | { type: 'folders'; runId: string; folders: ResultRow[] }
-  | { type: 'browse-folders'; runId: string; folders: BrowseRow[] }
-  | {
-      type: 'browse-finished';
-      runId: string;
-      status: 'complete' | 'cancelled';
-      startedAt: number;
-      finishedAt: number;
-      filesScanned: number;
-      bytesSeen: number;
-      errors: number;
-    }
   | { type: 'categories'; runId: string; categories: CategorySummaryRow[] }
-  | { type: 'matches'; runId: string; matches: ResultMatch[] }
   | { type: 'finalizing'; runId: string }
   | { type: 'finalize-progress'; runId: string; step: string }
   | {
@@ -569,9 +527,7 @@ export type UninstallEvent =
   | { type: 'item'; jobId: string; itemId: string; status: string; bytes: number }
   | { type: 'finished'; jobId: string; report: RemovalReport }
   | { type: 'failed'; jobId: string; message: string }
-  | { type: 'app-size'; appId: string; bytes: number }
-  | { type: 'app-icon'; appId: string; iconDataUrl: string }
-  /** Batched forms of 'app-size' and 'app-icon', sent instead of them when batching is on. */
+  /** Sizes and icons arrive in batches, every 100 ms at most. */
   | { type: 'app-sizes'; sizes: Array<{ appId: string; bytes: number }> }
   | { type: 'app-icons'; icons: Array<{ appId: string; iconDataUrl: string }> };
 
@@ -595,15 +551,11 @@ export interface UpdateStatus {
 export interface DustApi {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
-  startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<void>;
-  getResults(root: string): Promise<ResultsState>;
   getResultCategories(root: string): Promise<ResultsCategoriesState>;
   getResultsSummary(root: string): Promise<ResultsSummaryState>;
   getFolderChildren(root: string, path: string, options?: FolderChildrenOptions): Promise<FolderChildrenResult>;
   searchResults(root: string, query: string, options?: ResultsSearchOptions): Promise<ResultsSearchResult>;
-  getBrowseResults(root: string): Promise<BrowseState>;
-  deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   revealPath(path: string): Promise<void>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;

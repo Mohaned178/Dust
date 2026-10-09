@@ -3,9 +3,6 @@ import electronPath from 'electron';
 import { createServer } from 'vite';
 import { bundleMain } from './bundle-main.mjs';
 
-// `--next` runs the rebuilt renderer. The env var is read by vite.config.ts and the main process.
-if (process.argv.includes('--next')) process.env.DUST_RENDERER = 'next';
-
 await bundleMain();
 
 // DUST_DEV_PORT lets a second dev server run while another one holds 5173.

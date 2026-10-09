@@ -594,7 +594,7 @@ describe('app icons', () => {
     }
   }
 
-  it('streams an app-icon event for each loadable icon', async () => {
+  it('sends an icon for each loadable icon', async () => {
     const loaded: string[] = [];
     const { service, events } = makeService({
       listApps: async () => ({
@@ -613,16 +613,14 @@ describe('app icons', () => {
     });
     const result = await service.list(false);
     expect(result).toMatchObject({ ok: true });
-    await waitFor(events, 'app-icon');
+    await waitFor(events, 'app-icons');
     expect(loaded).toEqual(['C:\\App\\app.exe', 'C:\\App\\icon.ico']);
-    expect(events.filter((event) => event.type === 'app-icon')).toEqual([
-      { type: 'app-icon', appId: 'exe-app', iconDataUrl: 'data:image/png;base64,icon' },
-    ]);
+    const icons = events.flatMap((event) => (event.type === 'app-icons' ? event.icons : []));
+    expect(icons).toEqual([{ appId: 'exe-app', iconDataUrl: 'data:image/png;base64,icon' }]);
   });
 
-  it('batches sizes and icons into arrays when batching is on', async () => {
+  it('batches sizes and icons into arrays', async () => {
     const { service, events } = makeService({
-      batchAppEvents: true,
       listApps: async () => ({
         apps: [
           installedApp({ id: 'a', displayName: 'A', installLocation: 'D:\\Apps\\A', displayIcon: 'C:\\A\\a.exe' }),
@@ -636,7 +634,6 @@ describe('app icons', () => {
     await service.list(false);
     await waitFor(events, 'app-sizes');
     await waitFor(events, 'app-icons');
-    expect(events.some((event) => event.type === 'app-size' || event.type === 'app-icon')).toBe(false);
     const sizes = events.flatMap((event) => (event.type === 'app-sizes' ? event.sizes : []));
     expect(sizes).toEqual([
       { appId: 'a', bytes: 42 },

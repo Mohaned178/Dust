@@ -9,7 +9,7 @@ import {
   phaseLabel,
   selectedReviewItems,
   uninstallSelectionTotals,
-} from '../renderer/src/uninstall';
+} from '../renderer/src/lib/uninstall';
 import type { UninstallItemPreview } from '../src/shared/ipc';
 
 function item(

@@ -4,6 +4,14 @@ Handoff file for the next round of work. Read this first, then `git log -3` and 
 Written 2026-10-09 on branch `feat/ui-overhaul` (pushed, PR not opened yet). The previous round is
 `docs/UI-OVERHAUL-PLAN.md`; its visual checks are still open.
 
+> **Partly superseded (2026-10-09).** The interface was rebuilt as described in `docs/FRONTEND-PLAN.md`, and the old
+> renderer these workstreams were written against no longer exists. What is **superseded**: workstream 1's renderer
+> items (the new renderer keeps pages alive and loads lists lazily), 2 (Results is now Clean up and Explore disk),
+> 4 (Apps shows real icons), 5 (Startup is one list with a filter), 6 (System Info is PC Health) and 7 (Home and the
+> palette). What **still stands as backend work** (see `docs/FRONTEND-PLAN.md` section 6): 3 and 3b (developer logic and
+> new developer caches), the startup verdict rules and boot time (5), the health items in 6 (disk, battery, memory
+> slots), and the engine items in 8.
+
 **Status (2026-10-09):** workstream 1 (speed) and the crash-logging fix from 8 are done and committed locally (not
 pushed). Next: workstream 2 (Results).
 

@@ -526,9 +526,7 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
   return {
     getDashboard: async () => makeDashboardState(),
     startAnalyze: async () => ({ ok: true, runId: 'run-1' }),
-    startBrowse: async () => ({ ok: true, runId: 'browse-1' }),
     cancelScan: async () => {},
-    getResults: async (root) => makeResultsState({ root }),
     getResultCategories: async (root) => {
       const state = makeResultsState({ root });
       return {
@@ -556,14 +554,6 @@ export function makeApi(overrides: Partial<DustApi> = {}): DustApi {
     },
     getFolderChildren: async (root, path, options) => folderChildren(makeResultsState({ root }).rows, path, options),
     searchResults: async (root, query, options) => searchRows(makeResultsState({ root }).rows, query, options),
-    getBrowseResults: async (root) => ({ source: 'empty', root, finishedAt: null, status: null, rows: [] }),
-    deleteBrowsePath: async (path) => ({
-      path,
-      status: 'done',
-      deletedBytes: 0,
-      skippedLocked: 0,
-      errors: [],
-    }),
     revealPath: async () => {},
     previewClean: async () => ({ ok: true, preview: makeCleanPreview() }),
     executeClean: async () => ({ ok: true, report: makeCleanReport() }),

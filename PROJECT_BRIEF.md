@@ -4,7 +4,7 @@ Entry point for a new agent or developer. Read this file first; it explains what
 
 ## What Dust is
 
-Dust is a Windows-first desktop disk-cleanup tool for developers. It scans a drive, shows where the space went, and removes the junk that accumulates during development work — `node_modules` in abandoned projects, the npm download cache, temp files, and browser/app caches — while explaining why each item is safe (or not) to delete. It is built as an Electron app (TypeScript, React, Tailwind) with a pure-TypeScript engine in `core/` that has no Electron dependency. It exists because developers know their disks are full of junk, but existing cleanup tools either take too many steps to use or give no trustworthy answer to "is this safe to delete?"
+Dust is a Windows PC cleaner and manager for everyone, with a dedicated section for developers. It scans a drive, shows where the space went, and removes what is safe to remove — temp files, the Recycle Bin, browser/app caches, and the `node_modules` and package caches development work leaves behind — while explaining why each item is safe (or not) to delete. It also manages startup apps and installed apps and shows the PC's specs. It is built as an Electron app (TypeScript, React, Tailwind) with a pure-TypeScript engine in `core/` that has no Electron dependency. It exists because people know their disks are full of junk, but existing cleanup tools either take too many steps, pick items for you, or behave like scareware.
 
 ## The problem it solves
 
@@ -12,25 +12,28 @@ Dust is a Windows-first desktop disk-cleanup tool for developers. It scans a dri
 
 **Fear.** Users are afraid of deleting something important because no tool tells them what is safe. Dust addresses this with a per-match safety classification (green/yellow/red), a "why this grade" explanation on every row, a recovery statement on every plan item, and a hard rule that nothing is deleted without a preview and explicit confirmation.
 
-## What the app does today (MVP)
+## What the app does today
 
-- **Dashboard** — disk cards for fixed volumes with usage bars, an `external` label for removable/network volumes, last-analyzed/last-cleaned info, and the two global actions: Analyze and Quick Clean.
-- **Analyze** — a deep scan of a chosen drive with live progress (files scanned, bytes seen, current paths, elapsed, error count), filling in results as folders complete. Cancellable at any moment; partial results are kept and labeled.
-- **Tree Table with Safety column** — the main results surface: sortable Name / Size / Allocated / Files-Folders / % / Safety / Last modified / Action columns, in-place expansion to arbitrary depth, virtualized for large trees, double-click to open Explorer. Safety cells show an action grade with evidence for rule-matched rows, an informational display grade with a "why" for everything else.
-- **Category Strip** — reclaimable totals per category (Temp, Recycle Bin, npm cache, App caches, npm projects); clicking a category filters the tree.
-- **Dev Cleanup** — npm project discovery from Analyze data: groups Dead / Occasional / Active / Orphaned / Pinned, restorability badges, bulk "Select all Dead + green", confirmation screen with rebuild commands, per-project progress, and a session-only "Recently cleaned" group holding copyable restore commands.
-- **Quick Clean** — targeted scan when no Analyze data exists, otherwise built from the freshest Analyze results without re-scanning: per-category plan with recovery notes, explicit confirmation, execute, and a freed-bytes summary. Never touches `node_modules`. `C:\Windows\Temp` items offer "Relaunch as Administrator".
-- **Startup Manager** — one On/Off switch per Windows startup entry (Run keys and Startup folders), with a Dust backup, 5-second Undo, protected read-only rows, and an elevated toggle handoff for machine-wide entries.
-- **Deep Uninstall** — an installed-apps manager: the app's own uninstaller plus leftover folders, registry keys, and startup entries. Plans grade every item, validate paths against the protected-path policy at plan and execution time, back registry keys up to `reg import` archives, gate deletions on a write-ahead journal, and rebuild the plan in the elevated instance before any write.
-- **System Info** — a read-only OS/CPU/GPU/firmware snapshot with live CPU and memory usage, and a copyable plain-text report for bug reports. No elevation, nothing written to disk, no serial numbers or addresses.
-- **Snapshot persistence** — scan results persisted to `userData/snapshot.json`; relaunch shows the Dashboard instantly, a depth-4 folder map backs the Results view, staleness/`rulesVersion` banners prompt a rescan, and `cleanedAt` updates after cleanup.
-- **Scan Lock** — one global lock; Analyze and Quick Clean are mutually exclusive. A conflicting attempt shows "A scan is already running" with [Cancel it] / [Wait].
+The interface was rebuilt in 2026-10 (see `docs/FRONTEND-PLAN.md`): light Windows 11 style, Windows blue accent, one page at a time.
+
+- **Home** — what can be freed safely (the sum of rows the user can open, never a score), a bar of the drive by category, Scan again and Quick clean, other drives, and tiles for Startup, Apps, PC Health and Developer.
+- **Clean up** — a progressive, cancellable scan with live progress, then a category-first list: each category opens in place into its items, each with a plain reason, Keep with Undo and Show in Explorer. Only safe items start ticked; categories with nothing safe sit under "Take a look first".
+- **Clean dialog** — one dialog for every deletion: plan, acknowledgement when something cannot be recovered, progress, and a summary with the drive before and now. The confirm button names the amount.
+- **Quick clean** — the same dialog for the four quick categories; never touches `node_modules`. `C:\Windows\Temp` items offer "Relaunch as administrator".
+- **Explore disk** — a lazy folder tree, a treemap, main-process search, and a "Show protected items" switch.
+- **Apps** — installed apps with real icons and sizes, and a deep uninstall: the app's own uninstaller, then a reviewed list of leftover folders, registry keys and startup entries. Plans grade every item, validate paths against the protected-path policy at plan and execution time, back registry keys up to `reg import` archives, gate deletions on a write-ahead journal, and rebuild the plan in the elevated instance before any write.
+- **Startup** — one switch per Windows startup entry with a Dust backup, Undo, protected read-only rows and an elevated handoff for machine-wide entries.
+- **PC Health** — processor and memory rings, storage per drive and spec cards, with a plain-text Copy specs. No elevation, nothing written to disk, no serial numbers or addresses.
+- **Developer** — `node_modules` grouped by when each project was last used, restorability marks, bulk select of the safe ones, rebuild commands shown before and after, and a Toolchain caches section.
+- **Settings** — about, a privacy statement, administrator relaunch, and updates.
+- **Snapshot persistence** — scan results persisted to `userData/snapshot.json`; relaunch shows Home instantly, and staleness or a `rulesVersion` change is noted.
+- **Scan Lock** — one global lock; a scan and a clean are mutually exclusive. A conflicting attempt shows "A scan is already running." with Cancel it and scan / Wait.
 
 ## What the app does NOT do yet (Phase 2)
 
 - Docker image cleanup
-- Code signing and auto-update (1.0.0 ships unsigned with manual GitHub Releases downloads)
-- Visual treemap (the Tree Table is the MVP navigation surface)
+- Code signing (releases are unsigned; updates download from GitHub Releases)
+- A startup verdict and boot time; disk, battery and memory-slot health; dark mode
 - Quarantine (recovery buffer for deletions)
 - Real pnpm/bun support (global store and symlink math); Yarn Berry is also not supported
 - Cross-platform (Windows only at MVP)
@@ -97,17 +100,17 @@ Key architectural facts:
 
 - **No automatic deletion, ever.** Every deletion is user-confirmed. The renderer never constructs plan items or touches fs; it sends intent and renders what the host returns.
 - **Per-category recovery, not a blanket Recycle Bin.** Each rule declares how its target comes back (re-downloaded cache, rebuild command, junk by definition, irreversible). Recycling frees no bytes for GB-scale artifacts, so it is not a general safety net.
-- **Safety classification with a hard red list.** Unknown paths default to yellow; system-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden behind a "Show danger" toggle, and never actionable.
+- **Safety classification with a hard red list.** Unknown paths default to yellow; system-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden behind a "Show protected items" switch, and never actionable.
 - **Plan tokens.** `Cleaner.preview` mints a single-use, in-memory token; `Cleaner.execute(token)` is the only deletion path. Forged or expired tokens are refused, and red/unknown paths never enter a plan.
 - **Cache registry pattern.** Browser and app caches are self-contained rule files declared via path resolvers; adding one requires no engine changes.
 - **Action grade ≠ display grade.** Only whitelisted rule matches can enable cleanup, with their evidence shown; display grades are purely informational and the cleaner never consults them.
-- **Fixed accent color.** Accent color is a fixed product decision (Pine Teal). Not user-configurable. The single accent lives in one token (`--color-accent`, `#0f6e6e`); no hardcoded hex appears outside `styles.css`, and there is no theme or palette picker.
+- **Fixed accent color.** The accent is a fixed product decision (Windows blue, `#0F6CBD`), not user-configurable. Every color is a token in `app/renderer/src/styles/tokens.css`; no hex appears outside it, and there is no theme or palette picker. A dark mode would be a second block of the same tokens.
 
 ## Current state
 
-v1.0.0 is release-ready: the engine, snapshots, app shell, results surface, cleanup flows, the scan-performance pass, System Info, Startup Manager, and Deep Uninstall are merged to `master`. The renderer is on the light-first design system, the codebase is linted and hardened, and `npm run dist:app` produces an unsigned NSIS installer. CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests, and a production build on `master`; the release workflow builds a draft GitHub Release from a `v*` tag.
+v1.2.0. The engine, snapshots, the rebuilt interface (Home, Clean up, Explore disk, Apps, Startup, PC Health, Developer, Settings), the cleanup flows and updates are on the `feat/ui-overhaul` branch; `npm run dist:app` produces an unsigned NSIS installer. The old renderer was deleted in the switch-over, along with the browse-a-drive feature (its IPC channels were removed; the guarded-delete code in `core` is unused). CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests and a production build; the release workflow builds a draft GitHub Release from a `v*` tag.
 
-Repository note: everything is merged to `master`; historical `plan-*` and `redesign/light-workbench` branches remain on the remote only.
+Known follow-ups are listed in `docs/FRONTEND-PLAN.md` section 6 and in the phase notes (notably: Developer offers `node_modules` that belong to installed apps; no install date in the Apps list).
 
 ## Where to find the details
 
@@ -127,6 +130,7 @@ Repository note: everything is merged to `master`; historical `plan-*` and `rede
   12. `2026-09-28-production-release.md`
 - **Engine source:** [core/src/](core/src/) — `model/`, `scanner/`, `scan/`, `rules/`, `cleaner/`, `projects/`, `display/`, `snapshot/`, `startup/`, `uninstall/`, `system/`; tests in [core/test/](core/test/).
 - **Electron app source:** [app/](app/) — `src/main/`, `src/preload/`, `renderer/`, `scripts/`, `electron-builder.yml`; dev commands are in the [root README](README.md).
+- **Interface rebuild:** [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md) — decisions, trust principles, design system, screens, budgets, and a log of every phase; [app/DESIGN.md](app/DESIGN.md) and [app/PRODUCT.md](app/PRODUCT.md).
 - **Release design and plan:** [docs/superpowers/specs/2026-09-28-production-release-design.md](docs/superpowers/specs/2026-09-28-production-release-design.md) and [docs/superpowers/plans/2026-09-28-production-release.md](docs/superpowers/plans/2026-09-28-production-release.md).
 - **Run it:**
   ```bash

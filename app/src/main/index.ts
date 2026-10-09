@@ -74,11 +74,8 @@ function isRunningElevated(): Promise<boolean> {
   });
 }
 
-/** True while the rebuilt renderer (app/renderer-next) is the one being run. */
-const nextRenderer = process.env.DUST_RENDERER === 'next';
-
-// Window chrome for the light Fluent look. Values mirror --canvas and --ink in renderer-next tokens.css.
-const NEXT_WINDOW = {
+// Window chrome for the light Fluent look. Values mirror --canvas and --ink in renderer tokens.css.
+const WINDOW = {
   width: 1200,
   height: 800,
   minWidth: 960,
@@ -90,9 +87,7 @@ const NEXT_WINDOW = {
 
 function createMainWindow(backgroundThrottling: boolean): BrowserWindow {
   return new BrowserWindow({
-    ...(nextRenderer
-      ? NEXT_WINDOW
-      : { width: 1180, height: 780, minWidth: 900, minHeight: 600, backgroundColor: '#0b0b0c' }),
+    ...WINDOW,
     title: 'Dust',
     show: false,
     webPreferences: {
@@ -114,41 +109,8 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
   }
 }
 
-async function runAutoNav(window: BrowserWindow): Promise<void> {
-  const click = (match: string): Promise<boolean> =>
-    window.webContents.executeJavaScript(
-      `(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(
-        match,
-      )})); if (b) { b.click(); return true; } return false; })()`,
-    );
-  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-  const clickAndWait = async (match: string, ready: string): Promise<void> => {
-    const startedAt = Date.now();
-    const clicked = await click(match);
-    let readyAt = -1;
-    for (let i = 0; i < 200; i += 1) {
-      if (await window.webContents.executeJavaScript(ready)) {
-        readyAt = Date.now();
-        break;
-      }
-      await wait(25);
-    }
-    console.log(
-      `[dust:timing] click "${match}" clicked=${clicked} ready=${readyAt < 0 ? 'timeout' : `${readyAt - startedAt}ms`}`,
-    );
-  };
-  await wait(3000);
-  for (let i = 0; i < 3; i += 1) {
-    await clickAndWait('View results', '!!document.querySelector(\'section[aria-label="Reclaimable summary"]\')');
-    await wait(1500);
-    await clickAndWait('Back to dashboard', '!!document.querySelector("main.dust-dashboard h1")');
-    await wait(1500);
-  }
-}
-
-async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string): Promise<void> {
+async function runBench(host: EngineHost, rawRoot: string): Promise<void> {
   const root = rawRoot.replace(/\//g, '\\');
-  const browse = process.env.DUST_BENCH_MODE === 'browse';
   const reportPath = process.env.DUST_BENCH_REPORT ?? join(app.getPath('userData'), 'bench-report.json');
   let startedAt = 0;
   let finalizingAt = 0;
@@ -168,10 +130,7 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
           reclaimableBytes: event.reclaimableBytes,
         };
       }
-      if (event.type === 'browse-finished') {
-        scanStats = { files: event.filesScanned, bytes: event.bytesSeen, projects: 0, reclaimableBytes: 0 };
-      }
-      if (event.type === 'finished' || event.type === 'browse-finished' || event.type === 'failed') {
+      if (event.type === 'finished' || event.type === 'failed') {
         finishedAt = Date.now();
         off();
         resolve();
@@ -179,32 +138,18 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
     });
   });
 
-  const clickScript = `(() => {
-    const label = ${JSON.stringify(`${browse ? 'Browse' : 'Analyze'} ${root}`)};
-    const button = [...document.querySelectorAll('button')].find((element) => element.getAttribute('aria-label') === label);
-    if (!button) return false;
-    button.click();
-    return true;
-  })()`;
-  let clicked = false;
-  for (let attempt = 0; attempt < 40 && !clicked; attempt += 1) {
-    clicked = (await window.webContents.executeJavaScript(clickScript)) === true;
-    if (!clicked) await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  if (!clicked) {
-    const started = await (browse ? host.startBrowse(root) : host.startAnalyze(root));
-    if (!started.ok) {
-      const report = { root, ok: false, result: started, samples: reportSamples(), renderer: [] };
-      writeFileSync(reportPath, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
-      app.quit();
-      return;
-    }
+  const started = await host.startAnalyze(root);
+  if (!started.ok) {
+    const report = { root, ok: false, result: started, samples: reportSamples() };
+    writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report, null, 2));
+    app.quit();
+    return;
   }
 
   const timeout = setTimeout(
     () => {
-      const report = { root, ok: false, reason: 'bench-timeout', samples: reportSamples(), renderer: [] };
+      const report = { root, ok: false, reason: 'bench-timeout', samples: reportSamples() };
       writeFileSync(reportPath, JSON.stringify(report, null, 2));
       console.log(JSON.stringify(report, null, 2));
       app.quit();
@@ -214,20 +159,13 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
 
   await done;
   clearTimeout(timeout);
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-  const renderer = await window.webContents.executeJavaScript(
-    'window.__dustRendererReport ? window.__dustRendererReport() : []',
-  );
-  const rendererMemory = await window.webContents.executeJavaScript(
-    'window.__dustRendererMemory ? window.__dustRendererMemory() : null',
-  );
   const report = {
     root,
-    mode: browse ? 'browse' : 'analyze',
+    mode: 'analyze',
     ok: failedMessage === null,
     failedMessage,
-    scanMs: (browse ? finishedAt : finalizingAt) - startedAt,
-    finalizeMs: browse ? 0 : finishedAt - finalizingAt,
+    scanMs: finalizingAt - startedAt,
+    finalizeMs: finishedAt - finalizingAt,
     totalMs: finishedAt - startedAt,
     scanStats,
     memory: {
@@ -235,8 +173,6 @@ async function runBench(host: EngineHost, window: BrowserWindow, rawRoot: string
       heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     },
     samples: reportSamples(),
-    renderer,
-    rendererMemory,
   };
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
@@ -433,7 +369,6 @@ void app
     const host = createEngineHost({
       store,
       streamLiveRows: false,
-      emitFolderEvents: !nextRenderer,
       workerPath: resolveWorkerPath(__dirname),
       volumesCacheFile: join(userDataDir, 'volumes-cache.json'),
       installedAppsCacheFile: join(userDataDir, 'installed-apps-cache.json'),
@@ -443,7 +378,6 @@ void app
       dustInstallPath,
       uninstallDeps: {
         store,
-        batchAppEvents: nextRenderer,
         journalPath: journalPathFor(userDataDir),
         backupDir,
         elevated,
@@ -553,8 +487,7 @@ void app
         /* the parent falls back to its timeout */
       }
     }
-    if (process.env.DUST_AUTO === '1' && !app.isPackaged) await runAutoNav(window);
-    if (benchRoot) await runBench(host, window, benchRoot);
+    if (benchRoot) await runBench(host, benchRoot);
   })
   .catch((error: unknown) => {
     console.error('Dust failed to start', error);

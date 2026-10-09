@@ -5,6 +5,25 @@ All notable changes to Dust are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A rebuilt interface: lighter, faster and for everyone, with developer cleanup as one section. Details and measurements are in `docs/FRONTEND-PLAN.md`.
+
+### Changed
+
+- **New look** — a light Windows 11 style with a Windows blue accent, a native title bar, a sidebar, and pages that keep their state while you move between them.
+- **Home** — what can be freed safely (the sum of rows you can open, never a score), the drive by category, Quick clean, other drives, and tiles for every section.
+- **Clean up** — a category-first list. Only safe items start ticked; the Recycle Bin and other review items sit under "Take a look first". One Clean dialog states the amount on its confirm button, shows how each item comes back, and ends with the drive before and now.
+- **Explore disk** — a lazy folder tree that handles tens of thousands of folders, a treemap, and fast search with a "Show protected items" switch.
+- **Apps, Startup, PC Health and Developer** — rebuilt on the same system. System Info is now PC Health, with live rings that stop while the page is hidden. Startup changes are optimistic with Undo.
+- **Settings** — a privacy statement, administrator relaunch, and update status. A toast says when an update is ready.
+- **Speed** — the renderer's JS heap after a full scan is a few megabytes (it was about 228 MB), and long lists stay smooth.
+
+### Removed
+
+- **Browse-only drives** — the old per-drive browse view and its guarded delete are gone; other drives still show their usage on Home.
+- **The old tree table, space map and results page**, and the `DUST_AUTO` and `DUST_BENCH_MODE=browse` development flags.
+
 ## [1.2.0] - 2026-10-04
 
 Fix release: bulk cleanup now deletes every selected item, and results refresh after a clean.

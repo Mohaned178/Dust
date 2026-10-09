@@ -17,7 +17,6 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:app": "npm run dev -w app",
-    "dev:next": "npm run dev:next -w app",
     "build:app": "npm run build -w app",
     "dist:app": "npm run dist -w app"
   },

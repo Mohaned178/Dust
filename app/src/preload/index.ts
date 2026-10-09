@@ -1,8 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../shared/ipc';
 import type {
-  BrowseDeleteResult,
-  BrowseState,
   CleanExecuteRequest,
   CleanExecuteResult,
   CleanPreviewRequest,
@@ -15,7 +13,6 @@ import type {
   ResultsCategoriesState,
   ResultsSearchOptions,
   ResultsSearchResult,
-  ResultsState,
   ResultsSummaryState,
   ScanEvent,
   SetPinResult,
@@ -43,7 +40,6 @@ const api: DustApi = {
   getDashboard: () => ipcRenderer.invoke(IPC.dashboardGet) as Promise<DashboardState>,
   startAnalyze: (volume: string) => ipcRenderer.invoke(IPC.scanStart, volume) as Promise<StartAnalyzeResult>,
   cancelScan: () => ipcRenderer.invoke(IPC.scanCancel) as Promise<void>,
-  getResults: (root: string) => ipcRenderer.invoke(IPC.resultsGet, root) as Promise<ResultsState>,
   getResultCategories: (root: string) =>
     ipcRenderer.invoke(IPC.resultsCategoriesGet, root) as Promise<ResultsCategoriesState>,
   getResultsSummary: (root: string) => ipcRenderer.invoke(IPC.resultsSummaryGet, root) as Promise<ResultsSummaryState>,
@@ -51,9 +47,6 @@ const api: DustApi = {
     ipcRenderer.invoke(IPC.resultsChildrenGet, root, path, options ?? {}) as Promise<FolderChildrenResult>,
   searchResults: (root: string, query: string, options?: ResultsSearchOptions) =>
     ipcRenderer.invoke(IPC.resultsSearch, root, query, options ?? {}) as Promise<ResultsSearchResult>,
-  startBrowse: (volume: string) => ipcRenderer.invoke(IPC.browseStart, volume) as Promise<StartAnalyzeResult>,
-  getBrowseResults: (root: string) => ipcRenderer.invoke(IPC.browseResultsGet, root) as Promise<BrowseState>,
-  deleteBrowsePath: (path: string) => ipcRenderer.invoke(IPC.browseDelete, path) as Promise<BrowseDeleteResult>,
   revealPath: (path: string) => ipcRenderer.invoke(IPC.revealPath, path) as Promise<void>,
   previewClean: (request: CleanPreviewRequest) =>
     ipcRenderer.invoke(IPC.cleanPreview, request) as Promise<CleanPreviewResult>,

@@ -15,7 +15,6 @@ import {
   defaultRecycleBinEnumeration,
   defaultRuleEnv,
   defaultWorkersForVolume,
-  deleteUnprotectedPath,
   discoverCaches,
   getVolumeUsageAsync,
   listInstalledApps,
@@ -25,7 +24,6 @@ import {
   volumeRootOf,
 } from '@dust/core';
 import type {
-  BrowseDeleteResult,
   CacheFinding,
   CleanupPlan,
   CleanupReport as CoreCleanupReport,
@@ -50,8 +48,6 @@ import type {
   VolumeUsage,
 } from '@dust/core';
 import type {
-  BrowseRow,
-  BrowseState,
   CategorySummaryRow,
   CleanExecuteRequest,
   CleanExecuteResult,
@@ -108,7 +104,6 @@ import {
   rowsForMatches,
   sameRoot,
   summarizeCategories,
-  toBrowseRow,
   toResultRow,
 } from './results';
 import type { ResultsEnv } from './results';
@@ -127,7 +122,6 @@ import {
 import { groupDevProjects, projectNameOf, toDevProjects } from './dev-cleanup';
 import { measureDirectories } from './targeted';
 
-const MAX_FOLDER_BATCH = 2000;
 const PREWARM_DELAY_MS = 300;
 
 export interface ScanSessionLike {
@@ -144,14 +138,9 @@ export interface EngineHostDeps {
   dustInstallPath?: string;
   now?: () => number;
   progressIntervalMs?: number;
-  folderIntervalMs?: number;
   categoryIntervalMs?: number;
-  /** Stream every folder row to the renderer during Analyze (live results table). Default on. */
+  /** Build each folder's result row as the scan goes, instead of once at the end. Default on; Dust turns it off. */
   streamLiveRows?: boolean;
-  /** Send the final 'matches' event after a scan. Nothing in the app reads it; default off. */
-  emitMatchEvents?: boolean;
-  /** Send 'folders' events (result rows streamed during Analyze). Only the old renderer reads them; default on. */
-  emitFolderEvents?: boolean;
   volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   volumesCacheFile?: string;
@@ -178,15 +167,12 @@ export interface EngineHostDeps {
 export interface EngineHost {
   getDashboard(): Promise<DashboardState>;
   startAnalyze(volume: string): Promise<StartAnalyzeResult>;
-  startBrowse(volume: string): Promise<StartAnalyzeResult>;
   cancelScan(): Promise<boolean>;
   getResults(root: string): ResultsState;
   getResultCategories(root: string): ResultsCategoriesState;
   getResultsSummary(root: string): ResultsSummaryState;
   getFolderChildren(root: string, path: string, options?: FolderChildrenOptions): FolderChildrenResult;
   searchResults(root: string, query: string, options?: ResultsSearchOptions): ResultsSearchResult;
-  getBrowseResults(root: string): BrowseState;
-  deleteBrowsePath(path: string): Promise<BrowseDeleteResult>;
   previewClean(request: CleanPreviewRequest): Promise<CleanPreviewResult>;
   executeClean(request: CleanExecuteRequest): Promise<CleanExecuteResult>;
   getDevCleanup(root: string): DevCleanupState;
@@ -251,8 +237,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const lock = new ScanLock();
   const guard = guardEnv(env, deps.dustInstallPath);
   const streamLiveRows = deps.streamLiveRows ?? true;
-  const emitMatchEvents = deps.emitMatchEvents === true;
-  const emitFolderEvents = deps.emitFolderEvents ?? true;
   let disposed = false;
   let prewarmScheduled = false;
   let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
@@ -304,14 +288,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     ruleCategories: SnapshotCategory[];
     installs?: InstalledAppsSnapshot;
     finishedAt: number;
-  } | null = null;
-
-  let lastBrowse: {
-    root: string;
-    status: 'complete' | 'cancelled';
-    finishedAt: number;
-    rows: BrowseRow[];
-    tree: AggregateTree;
   } | null = null;
 
   let recentlyCleaned: RecentlyCleanedProject[] = [];
@@ -812,7 +788,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       intervalMs: deps.progressIntervalMs ?? 100,
     });
 
-    const folderIntervalMs = deps.folderIntervalMs ?? 100;
     const categoryIntervalMs = deps.categoryIntervalMs ?? 5000;
     const probe = createNodeFsProbe();
     const liveTree = new AggregateTree();
@@ -824,19 +799,11 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     });
     const liveRows: ResultRow[] = [];
     const deferredRecords: FolderRecord[] = [];
-    const folderBuffer: ResultRow[] = [];
-    let lastFolderFlush = 0;
     let lastCategoryRun = 0;
     let categoryRunning = false;
     let liveEnded = false;
 
     let rules: Rule[];
-
-    function flushFolders(): void {
-      if (folderBuffer.length === 0) return;
-      const folders = folderBuffer.splice(0);
-      if (emitFolderEvents) emit({ type: 'folders', runId, folders });
-    }
 
     function maybeLiveCategories(): void {
       if (liveEnded || categoryRunning) return;
@@ -880,15 +847,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         }),
       );
       liveRows.push(row);
-      folderBuffer.push(row);
-      const stamp = now();
-      if (folderBuffer.length >= MAX_FOLDER_BATCH) {
-        lastFolderFlush = stamp;
-        flushFolders();
-      } else if (stamp - lastFolderFlush >= folderIntervalMs) {
-        lastFolderFlush = stamp;
-        flushFolders();
-      }
       maybeLiveCategories();
     }
 
@@ -917,10 +875,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
             env: guard,
           });
           liveRows.push(row);
-          folderBuffer.push(row);
         }
       }
-      flushFolders();
     }
 
     let session: ScanSessionLike;
@@ -996,134 +952,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return { ok: true, runId };
   }
 
-  async function startBrowse(volume: string): Promise<StartAnalyzeResult> {
-    const requestedRoot = volumeRootOf(volume);
-    const volumeList = requestedRoot === null ? [] : await instrumentAsync('start.listVolumes', () => volumes.get());
-    const found =
-      requestedRoot === null
-        ? undefined
-        : volumeList.find((entry) => entry.root.toLowerCase() === requestedRoot.toLowerCase());
-    if (!found) return { ok: false, reason: 'invalid-volume', message: `unknown volume: ${volume}` };
-    const target = await withKnownMedia(found);
-    const targetRoot = target.root;
-
-    const acquired = lock.acquire('browse', targetRoot, now());
-    if (!acquired.ok) return { ok: false, reason: 'busy', running: acquired.holder.kind };
-
-    const runId = randomUUID();
-    const startedAt = now();
-    const progress = new ThrottledEmitter<ScanEvent>((event) => emit(event), {
-      intervalMs: deps.progressIntervalMs ?? 100,
-    });
-    const folderIntervalMs = deps.folderIntervalMs ?? 100;
-    const liveTree = new AggregateTree();
-    const rows: BrowseRow[] = [];
-    const folderBuffer: BrowseRow[] = [];
-    let lastFolderFlush = 0;
-    let liveEnded = false;
-
-    function flushFolders(): void {
-      if (folderBuffer.length === 0) return;
-      emit({ type: 'browse-folders', runId, folders: folderBuffer.splice(0) });
-    }
-
-    function onLiveFolder(record: FolderRecord): void {
-      if (liveEnded) return;
-      instrument('tree.browse.addFolder', () => {
-        liveTree.addFolder(record);
-      });
-      const row = instrument('row.build.browse', () =>
-        toBrowseRow(record, {
-          root: targetRoot,
-          complete: true,
-          childCount: liveTree.children(record.path).length,
-        }),
-      );
-      rows.push(row);
-      folderBuffer.push(row);
-      const stamp = now();
-      if (stamp - lastFolderFlush >= folderIntervalMs) {
-        lastFolderFlush = stamp;
-        flushFolders();
-      }
-    }
-
-    let session: ScanSessionLike;
-    try {
-      session = createSession({
-        root: volume,
-        pool: poolForVolume(target),
-        tree: liveTree,
-        onFolder: onLiveFolder,
-        onProgress: (update) => {
-          progress.push({
-            type: 'progress',
-            runId,
-            progress: {
-              filesScanned: update.filesScanned,
-              bytesSeen: update.bytesSeen,
-              currentPath: update.currentPath,
-              dirsCompleted: update.dirsCompleted,
-              errors: update.errors,
-              elapsedMs: Math.max(now() - startedAt, 0),
-            },
-          });
-        },
-      });
-    } catch (error) {
-      lock.release();
-      return { ok: false, reason: 'start-failed', message: messageOf(error) };
-    }
-
-    let settle!: () => void;
-    const settled = new Promise<void>((resolve) => {
-      settle = resolve;
-    });
-    active = { runId, session, settled };
-    emit({ type: 'started', runId, root: target.root, startedAt });
-
-    void (async () => {
-      try {
-        const result = await session.start();
-        liveEnded = true;
-        const rootNode = result.tree.get(result.root);
-        if (rootNode) {
-          const row = toBrowseRow(rootNode, {
-            root: result.root,
-            complete: rootNode.complete,
-            childCount: result.tree.children(result.root).length,
-          });
-          rows.push(row);
-          folderBuffer.push(row);
-        }
-        flushFolders();
-        progress.flush();
-        const finishedAt = now();
-        lastBrowse = { root: result.root, status: result.status, finishedAt, rows, tree: result.tree };
-        emit({
-          type: 'browse-finished',
-          runId,
-          status: result.status,
-          startedAt,
-          finishedAt,
-          filesScanned: result.filesScanned,
-          bytesSeen: result.bytesSeen,
-          errors: result.errors,
-        });
-      } catch (error) {
-        liveEnded = true;
-        progress.cancel();
-        emit({ type: 'failed', runId, message: messageOf(error) });
-      } finally {
-        active = null;
-        lock.release();
-        settle();
-      }
-    })();
-
-    return { ok: true, runId };
-  }
-
   async function runAnalysis(input: {
     session: ScanSessionLike;
     runId: string;
@@ -1153,21 +981,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         input.installsPromise,
       );
       emit({ type: 'categories', runId: input.runId, categories: summary.categories });
-      if (emitMatchEvents) {
-        emit({
-          type: 'matches',
-          runId: input.runId,
-          matches: summary.matches.map(({ path, bytes, ruleId, category, grade, evidence, origin }) => ({
-            path,
-            bytes,
-            ruleId,
-            category,
-            grade,
-            evidence,
-            origin,
-          })),
-        });
-      }
       emit({
         type: 'finished',
         runId: input.runId,
@@ -1488,56 +1301,6 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     return searchRows(getResults(requestedRoot).rows, query, options);
   }
 
-  function getBrowseResults(requestedRoot: string): BrowseState {
-    if (lastBrowse !== null && sameRoot(lastBrowse.root, requestedRoot)) {
-      return {
-        source: 'live',
-        root: lastBrowse.root,
-        finishedAt: lastBrowse.finishedAt,
-        status: lastBrowse.status,
-        rows: lastBrowse.rows,
-      };
-    }
-    return { source: 'empty', root: requestedRoot, finishedAt: null, status: null, rows: [] };
-  }
-
-  function browseRefusal(path: string, refusal: string): BrowseDeleteResult {
-    return { path, status: 'refused', deletedBytes: 0, skippedLocked: 0, errors: [], refusal };
-  }
-
-  function applyBrowseDelete(rows: BrowseRow[], result: BrowseDeleteResult): void {
-    if (result.status === 'refused' || result.status === 'failed' || result.deletedBytes === 0) return;
-
-    const removed = result.status === 'done' || result.status === 'already-gone';
-    for (const row of rows) {
-      const isTarget = samePath(row.path, result.path);
-      if (isTarget) {
-        if (!removed) row.bytes = Math.max(row.bytes - result.deletedBytes, 0);
-        continue;
-      }
-      if (isUnderAny(result.path, [row.path])) {
-        row.bytes = Math.max(row.bytes - result.deletedBytes, 0);
-      }
-    }
-
-    if (removed) {
-      const remaining = rows.filter((row) => !isUnderAny(row.path, [result.path]));
-      rows.length = 0;
-      rows.push(...remaining);
-    }
-  }
-
-  async function deleteBrowsePath(path: string): Promise<BrowseDeleteResult> {
-    if (active !== null) return browseRefusal(path, 'busy');
-    if (lastBrowse === null || !isUnderAny(path, [lastBrowse.root])) {
-      return browseRefusal(path, 'not-browsed');
-    }
-
-    const result = deleteUnprotectedPath(path, { guard });
-    applyBrowseDelete(lastBrowse.rows, result);
-    return result;
-  }
-
   function onEvent(listener: (event: ScanEvent) => void): () => void {
     listeners.add(listener);
     return () => {
@@ -1556,15 +1319,12 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   return {
     getDashboard,
     startAnalyze,
-    startBrowse,
     cancelScan,
     getResults,
     getResultCategories,
     getResultsSummary,
     getFolderChildren,
     searchResults,
-    getBrowseResults,
-    deleteBrowsePath,
     previewClean,
     executeClean,
     getDevCleanup,

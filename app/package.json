@@ -10,7 +10,6 @@
   "main": "dist/main/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:next": "node scripts/dev.mjs --next",
     "build": "vite build && node scripts/build.mjs",
     "dist": "npm run build && electron-builder --win",
     "start": "electron .",
@@ -20,7 +19,6 @@
   "dependencies": {
     "@dust/core": "*",
     "@fluentui/react-icons": "2.0.343",
-    "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.13",
     "d3-hierarchy": "3.1.2",
     "electron-updater": "^6.8.9",

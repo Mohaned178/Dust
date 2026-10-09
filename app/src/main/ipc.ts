@@ -99,9 +99,6 @@ export function registerIpcHandlers(
   registrar.handle(IPC.dashboardGet, () => timed('dashboardGet', () => host.getDashboard()));
   registrar.handle(IPC.scanStart, (_event, volume) => host.startAnalyze(typeof volume === 'string' ? volume : ''));
   registrar.handle(IPC.scanCancel, () => host.cancelScan());
-  registrar.handle(IPC.resultsGet, (_event, root) =>
-    timed('resultsGet', () => host.getResults(typeof root === 'string' ? root : '')),
-  );
   registrar.handle(IPC.resultsCategoriesGet, (_event, root) =>
     timed('resultsCategoriesGet', () => host.getResultCategories(typeof root === 'string' ? root : '')),
   );
@@ -126,11 +123,6 @@ export function registerIpcHandlers(
       ),
     ),
   );
-  registrar.handle(IPC.browseStart, (_event, volume) => host.startBrowse(typeof volume === 'string' ? volume : ''));
-  registrar.handle(IPC.browseResultsGet, (_event, root) =>
-    timed('browseResultsGet', () => host.getBrowseResults(typeof root === 'string' ? root : '')),
-  );
-  registrar.handle(IPC.browseDelete, (_event, path) => host.deleteBrowsePath(typeof path === 'string' ? path : ''));
   registrar.handle(IPC.revealPath, (_event, path) => shell.revealPath(typeof path === 'string' ? path : ''));
   registrar.handle(IPC.cleanPreview, (_event, request) => {
     const parsed = parseCleanPreviewRequest(request);

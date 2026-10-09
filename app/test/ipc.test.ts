@@ -110,9 +110,6 @@ describe('registerIpcHandlers', () => {
     expect(forwarded.some((event) => event.type === 'started')).toBe(true);
     expect(forwarded.some((event) => event.type === 'finished')).toBe(true);
 
-    const results = (await registrar.invoke(IPC.resultsGet, 'Z:\\')) as { source: string };
-    expect(results.source).toBe('empty');
-
     const summary = (await registrar.invoke(IPC.resultsSummaryGet, 'Z:\\')) as {
       source: string;
       contributors: Record<string, unknown[]>;

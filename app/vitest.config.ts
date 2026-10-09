@@ -28,20 +28,6 @@ export default defineConfig({
           setupFiles: ['test/setup.ts'],
         },
       },
-      {
-        extends: true,
-        resolve: {
-          alias: {
-            '@tanstack/react-virtual': fileURLToPath(new URL('./test/renderer/virtual-mock.ts', import.meta.url)),
-          },
-        },
-        test: {
-          name: 'renderer-next',
-          environment: 'jsdom',
-          include: ['test/renderer-next/**/*.test.{ts,tsx}'],
-          setupFiles: ['test/setup-next.ts'],
-        },
-      },
     ],
   },
 });

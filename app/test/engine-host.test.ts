@@ -596,9 +596,7 @@ describe('createEngineHost', () => {
       getVolumeUsage: () => [],
       createRules: () => [liveRule],
       createSession: (options) => (fake = new FakeSession(options)),
-      folderIntervalMs: 100,
       categoryIntervalMs: 50,
-      emitMatchEvents: true,
     });
 
     const events: ScanEvent[] = [];
@@ -621,12 +619,6 @@ describe('createEngineHost', () => {
     fake.options.onFolder?.(record(join(tree.root, 'a'), 10));
     clock = 500;
     fake.options.onFolder?.(record(join(tree.root, 'b'), 20));
-
-    const folderEvent = events.find((event) => event.type === 'folders');
-    expect(folderEvent?.type === 'folders' && folderEvent.folders.map((row) => row.path)).toEqual([
-      join(tree.root, 'a'),
-      join(tree.root, 'b'),
-    ]);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     const liveCategories = events.filter((event) => event.type === 'categories');
@@ -660,15 +652,6 @@ describe('createEngineHost', () => {
     const finished = nextEvent(host, 'finished');
     fake.finish({ ...emptyScanResult(tree.root, 'complete'), tree: settledTree, bytesSeen: 30 });
     await finished;
-
-    const folderEvents = events.filter((event) => event.type === 'folders');
-    const lastFolders = folderEvents.at(-1);
-    expect(lastFolders?.type === 'folders' && lastFolders.folders.map((row) => row.path)).toEqual([tree.root]);
-    expect(lastFolders?.type === 'folders' && lastFolders.folders[0]?.bytes).toBe(30);
-
-    const matches = events.find((event) => event.type === 'matches');
-    expect(matches?.type === 'matches' && matches.matches[0]?.path).toBe(join(tree.root, 'b'));
-    expect(matches?.type === 'matches' && matches.matches[0]).not.toHaveProperty('recovery');
   });
 
   it('skips npm-projects rules on live ticks and runs them at finalize', async () => {
@@ -1205,7 +1188,7 @@ describe('createEngineHost', () => {
     await finished;
   });
 
-  it('emits finalize progress steps and caps folder batches', async () => {
+  it('emits finalize progress steps', async () => {
     let fake!: FakeSession;
     const events: ScanEvent[] = [];
     const host = createEngineHost({
@@ -1215,7 +1198,6 @@ describe('createEngineHost', () => {
       getVolumeUsage: () => [],
       createRules: () => [],
       createSession: (options) => (fake = new FakeSession(options)),
-      folderIntervalMs: 60_000,
     });
     host.onEvent((event) => events.push(event));
 
@@ -1234,12 +1216,6 @@ describe('createEngineHost', () => {
       });
     }
 
-    const folderEvents = events.filter((event) => event.type === 'folders');
-    expect(folderEvents.length).toBeGreaterThanOrEqual(3);
-    for (const event of folderEvents) {
-      if (event.type === 'folders') expect(event.folders.length).toBeLessThanOrEqual(2000);
-    }
-
     const finished = nextEvent(host, 'finished');
     fake.finish(emptyScanResult(tree.root, 'complete'));
     await finished;
@@ -1250,7 +1226,7 @@ describe('createEngineHost', () => {
     expect(steps).toEqual(['projects', 'rules', 'detection', 'rows', 'snapshot']);
   });
 
-  it('leaves out folder events when they are switched off, and still finishes', async () => {
+  it('keeps the rows of a scan for the results, and finishes', async () => {
     let fake!: FakeSession;
     const events: ScanEvent[] = [];
     const host = createEngineHost({
@@ -1260,8 +1236,6 @@ describe('createEngineHost', () => {
       getVolumeUsage: () => [],
       createRules: () => [],
       createSession: (options) => (fake = new FakeSession(options)),
-      folderIntervalMs: 0,
-      emitFolderEvents: false,
     });
     host.onEvent((event) => events.push(event));
 
@@ -1284,7 +1258,6 @@ describe('createEngineHost', () => {
     fake.finish(emptyScanResult(tree.root, 'complete'));
     await finished;
 
-    expect(events.some((event) => event.type === 'folders')).toBe(false);
     expect(events.some((event) => event.type === 'finished')).toBe(true);
     expect(host.getResults(tree.root).rows.length).toBeGreaterThan(0);
   });

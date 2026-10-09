@@ -8,11 +8,8 @@ const { version } = JSON.parse(readFileSync(fileURLToPath(new URL('./package.jso
   version: string;
 };
 
-// DUST_RENDERER=next builds the rebuilt renderer (docs/FRONTEND-PLAN.md); phase 11 makes it the default.
-const rendererDir = process.env.DUST_RENDERER === 'next' ? './renderer-next' : './renderer';
-
 export default defineConfig({
-  root: fileURLToPath(new URL(rendererDir, import.meta.url)),
+  root: fileURLToPath(new URL('./renderer', import.meta.url)),
   base: './',
   // The version shown in Settings > About, read from package.json at build time.
   define: { __APP_VERSION__: JSON.stringify(version) },

@@ -1,11 +1,28 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { clearPageCache } from '../renderer/src/page-cache';
-import { resetStartupDetails } from '../renderer/src/startup-details';
+import { resetDialogStore } from '../renderer/src/app/dialogs';
+import { resetAllStores } from '../renderer/src/stores';
 
+// Pages are lazy chunks that jsdom compiles on first use; under a full-suite load the default 1 s is too tight.
+configure({ asyncUtilTimeout: 5000 });
+
+// The old renderer's setup.ts imports its page cache, which is deleted in phase 11, so the new tests have their own.
 afterEach(() => {
   cleanup();
-  clearPageCache();
-  resetStartupDetails();
+  // Stores are module singletons, so each case starts from empty ones.
+  resetAllStores();
+  resetDialogStore();
 });
+
+// jsdom lacks a few browser APIs that Radix Primitives call.
+class ResizeObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub;
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.setPointerCapture ??= () => {};
+Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.scrollIntoView ??= () => {};

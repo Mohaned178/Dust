@@ -12,7 +12,7 @@
 [![Node](https://img.shields.io/badge/node-%5E20.19%20%7C%7C%20%3E%3D22.12-339933?logo=node.js&logoColor=white&style=flat-square)](package.json)
 </div>
 
-Dust is a Windows-first disk-cleanup tool for developers. It scans a drive, shows where the space went, and removes the junk development work accumulates — `node_modules` in abandoned projects, the npm download cache, temp files, and browser/app caches — while explaining why each item is safe (or not) to delete.
+Dust is a Windows PC cleaner and manager for everyone, with a dedicated section for developers. It scans a drive, shows where the space went, and removes what is safe to remove — temp files, the Recycle Bin, browser and app caches, and the `node_modules` and package caches development work leaves behind — while explaining, before anything is deleted, what each item is, why it is safe and how it comes back. It also manages startup apps and installed apps, and shows what the PC is made of.
 
 Every deletion is previewed and explicitly confirmed. Dust never deletes anything on its own.
 
@@ -60,35 +60,31 @@ npm start -w app
 
 ## Features
 
-### Dashboard
+### Home
 
-The system drive's reclaimable total is the dominant object, with a used/free capacity bar and evidence below it. Category cards (Temp, Recycle Bin, npm cache, App caches) open Results filtered to that category and show their share of the total on hover; a developer-cleanup row hands off to Dev Cleanup. Session-dismissible notices cover a cancelled scan, stale rules (with one-click **Rescan**), and an unreadable snapshot.
+The first screen answers "how is my PC?" without a score. A headline says how much can be freed safely (the sum of the rows you can open), with a bar of the drive split by category, a **Scan again** and a **Quick clean** button, and notices for a cancelled scan, changed rules or a depth-limited scan. Below it: the other drives, and tiles for Startup, Apps, PC Health and Developer that each fill in on their own.
 
-- Keyboard: `A` analyze · `R` results (once analyzed) · `Q` Quick Clean · `D` Dev Cleanup
+### Clean up
 
-### Analyze
+A deep, progressive scan of the system drive (files scanned, elapsed time, the current path, and what has been found so far; cancellable, with partial results kept), then a category-first list: Temporary files, Recycle Bin, Package cache and App caches. Each category opens in place into its items, each with a plain "why" line, **Keep** with Undo, and **Show in Explorer**. Only items graded safe start ticked; categories with nothing safe (the Recycle Bin) sit under "Take a look first", unticked. **Review and clean** opens a plan that names the amount ("Delete 599 MB"), lists what comes back and how, asks for acknowledgement when something cannot be recovered, shows progress, and ends with the drive before and now. Items under `C:\Windows\Temp` offer **Relaunch as administrator**.
 
-A deep, progressive scan of a chosen drive: files scanned, bytes seen, current path, elapsed time, and error count update live, with results streaming in as folders complete. Cancellable at any moment — partial results are kept — and persisted so the next launch opens instantly.
+**Quick clean** (from Home) builds the same plan for the four quick categories, never touching `node_modules`.
 
-### Results
+### Explore disk
 
-One mono reclaimable figure over the evidence. Filter by category chip or search, then work the size-ordered contributor list: each row unfolds to show **why this grade**, its category, the rule id, and its recovery path (with a copyable restore command when the asset is regenerable). Select rows and use the sticky **Preview & clean** bar; the full folder tree lives behind "Browse everything", with protected rows hidden behind a **Show danger** gate.
+A lazy, virtualized folder tree (with thousands of children per folder), a squarified treemap of the folder you are in, search that runs in the main process, a **Show protected items** switch, and **Show in Explorer**. It reads the saved scan, so folders deeper than the saved depth say so.
 
-### Quick Clean
+### Developer
 
-The fast path for the four quick categories, never touching `node_modules`. With no Analyze data it runs a targeted scan (progress and Cancel included); otherwise it builds from the freshest results without re-scanning. Per-category totals and recovery notes sit behind one acknowledgement, and the summary reports freed bytes, what remains reclaimable, and any skipped or failed items. Items under `C:\Windows\Temp` offer **Relaunch as Administrator**.
+`node_modules` folders grouped by when each project was last used (Not used for 6+ months, Used now and then, Used recently, Loose node_modules, Kept), with a "Can be rebuilt" or "Check first" mark, **Keep** with Undo, and **Select all safe and unused**. The same Clean dialog shows each project's rebuild command, with a copy button, before anything is deleted. A package-cache row links to Clean up.
 
-### Dev Cleanup
+### Startup
 
-npm project discovery from Analyze data, grouped **Dead / Occasional / Active / Orphaned / Pinned**. Bulk-select the safe ones, then confirm against a plan that carries each project's rebuild command. Removed projects keep copyable restore commands in a session-only "Recently cleaned" group. A manual Keep pin always wins.
-
-### Startup Manager
-
-One On/Off switch per Windows startup entry, grouped into **Enabled** and **Disabled** (alphabetical, with live section counts). Toggling off moves the entry to a Dust backup — the `Run-Dust-Disabled` registry key for Run entries, `%APPDATA%\Dust\startup-disabled` for Startup-folder shortcuts — and offers a 5-second **Undo**; toggling on moves it back to its original location. Dust never deletes an entry.
+One On/Off switch per Windows startup entry, in one list with an All, On and Off filter. Toggling off moves the entry to a Dust backup — the `Run-Dust-Disabled` registry key for Run entries, `%APPDATA%\Dust\startup-disabled` for Startup-folder shortcuts — and offers an **Undo** toast; toggling on moves it back to its original location. Dust never deletes an entry.
 
 Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag; protected system entries (Windows Security, GPU/audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
 
-### Deep Uninstall
+### Apps (uninstall)
 
 Removes an installed app with its own uninstaller, then clears what it leaves behind. The app list comes from the Windows uninstall registry (per-user and machine-wide); pick an app and Dust builds a plan showing the uninstaller it will run, leftover folders (graded **safe** or **review**, with the reason for each grade), registry keys, and startup entries, plus what is kept and why.
 
@@ -96,23 +92,19 @@ Only a whitelisted set of locations can be targeted: an app's registered install
 
 Machine-wide removals ask for administrator rights and relaunch elevated; the elevated instance rebuilds the plan from the app id and waits for your confirmation before touching anything.
 
-### System Info
+### PC Health
 
-A read-only view of the machine: OS name, version, build, and architecture; hostname and uptime; CPU model with physical cores and logical threads; every reported display adapter with its driver version and VRAM when Windows reports it; and motherboard/BIOS when Windows reports them. CPU and memory usage update live while the page is open; everything else is captured once and refreshed on demand. **Copy system info** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
-
-### Browse-only volumes
-
-Non-system volumes show size and structure without safety grades or cleanup rules. The only action is a guarded permanent delete with a simple confirmation; browse results are session-only and never touch the system-drive snapshot.
+How this PC is doing right now and what it is made of: processor and memory rings read every two seconds while the page is open, storage per internal drive, and spec cards (This PC, Windows, Processor, Memory, Graphics, Firmware). **Copy specs** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
 
 ### Settings
 
-Light theme, administrator relaunch, and about. The accent color is a fixed product decision (Pine Teal) and is not configurable.
+About (version, license, a privacy statement), administrator relaunch, and updates. The look is a fixed product decision (a light Windows 11 style with Windows blue) and is not configurable; dark mode is planned.
 
 ## How safety works
 
 - **Nothing deletes without a plan.** `Cleaner.preview` mints a single-use, in-memory plan token; `Cleaner.execute(token)` is the only deletion path. Forged or expired tokens are refused.
 - **Action grade vs display grade.** Only whitelisted rule matches can enable cleanup, and their evidence is shown. Every visible row still gets an informational display grade with a "why".
-- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden behind "Show danger", and never actionable. Unknown paths are never actionable either.
+- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden until "Show protected items" is on, and never actionable. Unknown paths are never actionable either.
 - **Per-category recovery.** Permanent delete only when a rule proves the asset is regenerable (the exact restore command is shown) or worthless. The Recycle Bin is the recovery path only for unverifiable content — not a blanket default, because recycling frees no bytes for GB-scale artifacts.
 - **One acknowledgement.** The plan's confirm stays disabled until the irreversibility acknowledgement is ticked.
 
@@ -162,7 +154,7 @@ app/                         Electron app
   src/main/                  Window, typed IPC, engine host, scan lock, feature hosts
   src/preload/               Typed bridge exposed as window.dust
   src/shared/                IPC contracts and category metadata shared with the renderer
-  renderer/                  React 19 + Tailwind 4 (Vite), TanStack Table + react-virtual
+  renderer/                  React 19 + Tailwind 4 (Vite), Zustand, Radix Primitives, Fluent icons, react-virtual, d3-hierarchy
   test/                      Vitest host and jsdom renderer suites
 
 docs/superpowers/            Design spec, implementation plans, perf measurements
@@ -172,7 +164,7 @@ docs/superpowers/            Design spec, implementation plans, perf measurement
 
 - **Electron main owns the engine.** Scan sessions, the cleaner, and persistence live in the main process. The renderer holds no engine state and never touches the filesystem; it reaches the engine only through the typed `window.dust` bridge.
 - **A worker pool does the walking.** The scanner runs synchronous fs calls across 4–8 `worker_threads` with directory-level work-stealing. Reparse points (symlinks/junctions) are detected and never followed.
-- **Snapshots make relaunch instant.** The last system-drive scan is persisted to `%APPDATA%\Dust\snapshot.json`; the Dashboard reads it immediately and the Results tree rebuilds from it. Staleness and `rulesVersion` mismatches prompt a rescan.
+- **Snapshots make relaunch instant.** The last system-drive scan is persisted to `%APPDATA%\Dust\snapshot.json`; Home reads it immediately and Clean up and Explore disk rebuild from it. Staleness and `rulesVersion` mismatches prompt a rescan.
 - **One global scan lock.** Analyze and Quick Clean are mutually exclusive; a conflicting attempt offers "Wait" or "Cancel it".
 - **The engine is host-agnostic.** `core/` has zero Electron imports and runs under vitest in plain Node, so it can move into a utility process later without changes.
 - **Renderer security.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, a strict production CSP, denied window-open/navigation outside the app, denied permission requests, and a top-level error boundary.
@@ -201,27 +193,9 @@ Releases are tag-driven and produce a draft GitHub Release:
 
 `npm run dist:app` reproduces the installer locally. Signing is unset: electron-builder's `win.certificateFile`/`certificatePassword` (or Azure Trusted Signing) are documented as a stub in `app/electron-builder.yml`.
 
-### Startup Manager smoke checklist
+### Smoke checklist
 
-1. `npm run dev:app`, open **Startup Manager** from the sidebar: enabled and disabled entries list alphabetically with the total in the header and live counts on each section.
-2. Toggle off an ordinary entry (for example Discord): the row moves to **Disabled**, a "Discord disabled · Undo" toast appears for 5 seconds, and the entry's value now exists under `...\CurrentVersion\Run-Dust-Disabled` with the original `...\Run` value gone.
-3. Click **Undo** within 5 seconds: the entry returns to **Enabled** and the original registry value is restored.
-4. Toggle off a Startup-folder shortcut: the `.lnk` moves to `%APPDATA%\Dust\startup-disabled` (with a sidecar JSON) instead of being deleted; toggling on moves it back.
-5. Protected rows (Windows Security, GPU drivers) show a lock and a disabled switch with the tooltip "Protected by Dust. This entry cannot be disabled." Windows-disabled rows show the **Windows** tag and cannot be toggled.
-6. Toggle a machine-wide entry (HKLM Run or the common Startup folder): the **Administrator required** dialog appears; **Relaunch as Administrator** reopens Dust elevated, performs the toggle, opens Startup Manager, and shows the undo toast.
-7. After an elevated relaunch with a stale or forged id (`--dust-startup-toggle=deadbeefdeadbeef`), no write happens and Startup Manager opens with no toast.
-
-### System Info smoke checklist
-
-1. `npm run dev:app`, open **System Info**: the page shows a captured timestamp, OS/build/architecture, hostname, uptime, CPU model with cores and threads, every reported display adapter with its driver version and VRAM (an asterisk marks a value Windows may under-report), and motherboard/BIOS when the machine reports them.
-2. CPU and memory figures update every ~1.5 seconds while the page is open; leaving the page stops the polling.
-3. **Refresh** re-queries the machine and updates the captured timestamp.
-4. **Copy system info** copies the formatted block and shows the "System info copied." toast; the block contains no serial numbers, MAC addresses, or IP addresses.
-5. On a machine or VM with no discrete GPU, the page renders without a Graphics section (or with the adapters Windows reports) and never shows an error; on any machine, no administrator prompt appears.
-
-### New interface smoke checklist
-
-Run from an administrator terminal with `npm run dev:next -w app`. This covers the rebuilt interface in `app/renderer-next/` (see `docs/FRONTEND-PLAN.md`). Steps marked **(changes your PC)** delete or change real things; use a machine you can afford to change.
+Run from an administrator terminal with `npm run dev:app`. This covers every screen of the interface in `app/renderer/` (see `docs/FRONTEND-PLAN.md`). Steps marked **(changes your PC)** delete or change real things; use a machine you can afford to change.
 
 1. **Home.** The window opens light, with no dark flash, and the first screen shows within half a second. The greeting, the drive card and the four tiles (Startup, Apps, PC Health, Developer) fill in on their own. Nothing says "score", "risk" or "issues".
 2. **Scan.** Choose **Scan again**: the progress bar, file count, elapsed time and a path shortened in the middle update. **Cancel** stops it, and the results open with "Scan cancelled. Showing what was found."
@@ -248,9 +222,7 @@ Environment variables used by development and benchmark tooling — not needed f
 | `DUST_TIMING=1`            | Logs IPC timing to `userData/perf.log`                                    |
 | `DUST_INSTRUMENT=1`        | Collects host-process timing samples                                      |
 | `DUST_BENCH_ROOT=<path>`   | Runs the benchmark harness against a drive and writes `bench-report.json` |
-| `DUST_BENCH_MODE=browse`   | Benchmarks a browse scan instead of an analyze                            |
 | `DUST_BENCH_REPORT=<path>` | Overrides the bench report output path                                    |
-| `DUST_AUTO=1`              | Runs a scripted navigation pass (UI timing)                               |
 | `DUST_DEV_SERVER_URL`      | Points the main process at an existing Vite server                        |
 
 ### Troubleshooting
