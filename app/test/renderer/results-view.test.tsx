@@ -204,6 +204,19 @@ describe('ResultsView', () => {
     expect(await screen.findByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
+  it('cleans every safe item from the summary card', async () => {
+    const previewClean = vi.fn(makeApi().previewClean);
+    const api = makeApi({ getResults: async () => makeResultsState(), previewClean });
+    render(<ResultsView api={api} root="C:\\" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Clean all safe/ }));
+    expect(await screen.findByRole('dialog', { name: /^Clean \d+ selected$/ })).toBeInTheDocument();
+    await waitFor(() => expect(previewClean).toHaveBeenCalledTimes(1));
+    const request = previewClean.mock.calls[0]?.[0];
+    expect(request?.scope).toBe('row');
+    expect(request !== undefined && 'paths' in request ? request.paths.length : 0).toBeGreaterThan(0);
+  });
+
   it('refetches results after a cleaned event and clears the selection', async () => {
     const getResults = vi.fn(async () => makeResultsState());
     const handlers: Array<(event: ScanEvent) => void> = [];

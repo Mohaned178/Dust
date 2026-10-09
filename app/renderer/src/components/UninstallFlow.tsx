@@ -87,7 +87,7 @@ export function UninstallFlow({ api, appId, adoptJobId = null, elevated, onClose
 
   useEffect(() => {
     return api.onUninstallEvent((event: UninstallEvent) => {
-      if (event.type === 'app-size') return;
+      if (event.type === 'app-size' || event.type === 'app-icon') return;
       if (jobId.current !== null && event.jobId !== jobId.current) return;
       if (event.type === 'phase') {
         setPhases((current) => ({

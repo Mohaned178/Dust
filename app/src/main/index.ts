@@ -6,7 +6,7 @@ import {
   pruneRegistryBackups,
   systemDriveRoot,
 } from '@dust/core';
-import { BrowserWindow, app, dialog, ipcMain, session, shell } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, session, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, openSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,6 +23,7 @@ import {
 } from './elevation';
 import type { IpcRegistrar } from './ipc';
 import { registerIpcHandlers, setTimingLogPath } from './ipc';
+import { readAppIconDataUrl } from './app-icon';
 import type { EngineHost } from './host/engine-host';
 import { createEngineHost } from './host/engine-host';
 import { reportSamples } from './host/instrument';
@@ -439,6 +440,12 @@ void app
           disable: async (id) => (await startup.disable(id)).ok,
           purgeEnvelope: async (id) => (await startup.removeBackup(id)).ok,
         },
+        loadIcon: async (iconPath) =>
+          readAppIconDataUrl(iconPath, {
+            exists: existsSync,
+            fileIcon: async (target) => app.getFileIcon(target, { size: 'normal' }),
+            imageFromPath: (target) => nativeImage.createFromPath(target),
+          }),
       },
     });
     const window = createMainWindow(benchRoot === undefined);

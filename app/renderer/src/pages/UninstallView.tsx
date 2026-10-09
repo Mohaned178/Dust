@@ -43,6 +43,7 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
     reload,
   } = useCachedResource<AppList>('uninstall-apps', () => fetchApps(api, false));
   const [sizes, setSizes] = useState<ReadonlyMap<string, number>>(new Map());
+  const [icons, setIcons] = useState<ReadonlyMap<string, string>>(new Map());
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [removing, setRemoving] = useState<UninstallAppSummary | null>(null);
@@ -64,12 +65,13 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
     void reload(() => fetchApps(api, true));
   }, [api, reload]);
 
-  // Install-folder sizes are measured in the background and arrive one by one.
+  // Install-folder sizes and icons load in the background and arrive one by one.
   useEffect(
     () =>
       api.onUninstallEvent((event) => {
-        if (event.type !== 'app-size') return;
-        setSizes((current) => new Map(current).set(event.appId, event.bytes));
+        if (event.type === 'app-size') setSizes((current) => new Map(current).set(event.appId, event.bytes));
+        else if (event.type === 'app-icon')
+          setIcons((current) => new Map(current).set(event.appId, event.iconDataUrl));
       }),
     [api],
   );
@@ -98,8 +100,13 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
 
   const apps = useMemo(() => {
     const raw = list?.apps ?? [];
-    return raw.map((app) => (sizes.has(app.id) ? { ...app, sizeBytes: sizes.get(app.id)! } : app));
-  }, [list, sizes]);
+    return raw.map((app) => {
+      const size = sizes.get(app.id);
+      const icon = icons.get(app.id);
+      if (size === undefined && icon === undefined) return app;
+      return { ...app, sizeBytes: size ?? app.sizeBytes, iconDataUrl: icon ?? app.iconDataUrl };
+    });
+  }, [list, sizes, icons]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -262,15 +269,9 @@ export function UninstallView({ api, hint, onHintShown }: UninstallViewProps) {
 
 function AppRow({ app, elevated, onRemove }: { app: UninstallAppSummary; elevated: boolean; onRemove: () => void }) {
   const size = sizeOf(app);
-  const initial = app.displayName.trim().charAt(0).toUpperCase() || '?';
   return (
     <li className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface-hover">
-      <span
-        aria-hidden
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-sm font-semibold text-accent-strong"
-      >
-        {initial}
-      </span>
+      <AppIcon name={app.displayName} src={app.iconDataUrl} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="truncate text-sm font-medium text-ink">{app.displayName}</p>
@@ -290,6 +291,49 @@ function AppRow({ app, elevated, onRemove }: { app: UninstallAppSummary; elevate
         Uninstall
       </Button>
     </li>
+  );
+}
+
+// Fallback tiles get a stable hue per app so a long list is easier to scan.
+const MONOGRAM_TONES = [
+  'bg-accent-soft text-accent-strong',
+  'bg-grade-safe-soft text-grade-safe',
+  'bg-grade-review-soft text-grade-review',
+  'bg-track text-ink',
+] as const;
+
+function AppIcon({ name, src }: { name: string; src: string | null }) {
+  // Remember which URL failed so a later icon for the same row still gets a chance.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (src !== null && src !== failedSrc) {
+    return (
+      <span
+        aria-hidden
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-hairline bg-canvas"
+      >
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setFailedSrc(src)}
+          className="h-7 w-7 object-contain"
+        />
+      </span>
+    );
+  }
+  const trimmed = name.trim();
+  const initial = trimmed.charAt(0).toUpperCase() || '?';
+  let hash = 0;
+  for (let index = 0; index < trimmed.length; index += 1) hash = (hash * 31 + trimmed.charCodeAt(index)) >>> 0;
+  return (
+    <span
+      aria-hidden
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold ${
+        MONOGRAM_TONES[hash % MONOGRAM_TONES.length]
+      }`}
+    >
+      {initial}
+    </span>
   );
 }
 

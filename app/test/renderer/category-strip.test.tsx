@@ -12,7 +12,8 @@ describe('CategoryStrip', () => {
     for (const label of ['Temp', 'Recycle Bin', 'npm cache', 'App caches', 'npm projects']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getByText('256 KB')).toBeInTheDocument();
+    // The category row and the All total both read 256 KB in this fixture.
+    expect(screen.getAllByText('256 KB')).toHaveLength(2);
     expect(screen.getByRole('button', { name: /Recycle Bin/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });

@@ -10,13 +10,13 @@ describe('DevCleanupView', () => {
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
     expect(await screen.findByText('dead-app')).toBeInTheDocument();
-    const legend = screen.getByText(/Bands by last activity/);
+    const legend = screen.getByRole('list', { name: 'Bands by last activity' });
     expect(legend).toHaveTextContent('180+ days');
     expect(legend).toHaveTextContent('31–180 days');
     expect(legend).toHaveTextContent('30 days or less');
-    fireEvent.click(screen.getByRole('button', { name: 'Select all Dead + green' }));
-    expect(screen.getByText('1 selected · 512 KB')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Clean Selected (1)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Select dead & safe' }));
+    expect(screen.getByRole('status', { name: 'Selection' })).toHaveTextContent(/1 selected.*512 KB/);
+    expect(screen.getByRole('button', { name: 'Preview & delete' })).toBeInTheDocument();
   });
 
   it('keeps the Keep action persistently visible on project rows', async () => {
@@ -53,8 +53,8 @@ describe('DevCleanupView', () => {
     const api = makeApi({ getDevCleanup: async () => makeDevCleanupState(), executeClean });
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select dead & safe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
 
     expect(await screen.findByRole('dialog', { name: 'Dev Cleanup' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
@@ -117,8 +117,8 @@ describe('DevCleanupView', () => {
     });
     render(<DevCleanupView api={api} root="C:\\" onBack={vi.fn()} onViewResults={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Select all Dead + green' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clean Selected (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select dead & safe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & delete' }));
     await screen.findByRole('dialog', { name: 'Dev Cleanup' });
     fireEvent.click(screen.getByRole('button', { name: 'Delete 9.8 KB' }));
 

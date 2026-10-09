@@ -74,7 +74,14 @@ export function ResultsPage({
           ← Home
         </button>
         <PageHeader
-          title={<>Results for {root}</>}
+          title={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              Results for{' '}
+              <span className="rounded-lg border border-hairline bg-surface px-2.5 py-0.5 font-mono text-[1.25rem] font-medium text-ink">
+                {root}
+              </span>
+            </span>
+          }
           subtitle={
             current?.finishedAt != null
               ? `Scanned ${formatRelativeTime(current.finishedAt)}${

@@ -70,6 +70,8 @@ export interface UninstallServiceDeps {
   resetAppsCache?: () => void;
   createJournal?: (options: { path: string; planId: string; appId: string }) => Pick<Journal, 'append'>;
   measureDirectory?: (path: string) => Promise<number | null>;
+  /** Loads an icon file (.exe, .dll or .ico) as a data URL. */
+  loadIcon?: (path: string) => Promise<string | null>;
 }
 
 export interface UninstallService {
@@ -149,6 +151,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
       installLocation: app.installLocation,
       estimatedSizeKb: app.estimatedSizeKb,
       sizeBytes: sizes.get(sizeKey(app)) ?? null,
+      iconDataUrl: icons.get(app.id) ?? null,
       hive: app.hive,
       kind: command.kind,
       requiresAdmin: uninstallerRequiresAdmin(app, planEnvFor(app)),
@@ -199,6 +202,32 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
       }
     })().finally(() => {
       sizing = null;
+    });
+  }
+
+  // Icons come from the app's DisplayIcon and, like sizes, stream in after the
+  // list so the first paint never waits on the shell.
+  const loadIcon = deps.loadIcon;
+  const icons = new Map<string, string | null>();
+  let iconing: Promise<void> | null = null;
+
+  function loadIcons(apps: readonly InstalledApp[]): void {
+    if (loadIcon === undefined || iconing !== null) return;
+    const queue = apps.filter((app) => !icons.has(app.id));
+    if (queue.length === 0) return;
+    iconing = (async () => {
+      for (let start = 0; start < queue.length; start += 8) {
+        await Promise.all(
+          queue.slice(start, start + 8).map(async (app) => {
+            const path = iconPathOf(app.displayIcon);
+            const icon = path === null ? null : await loadIcon(path).catch(() => null);
+            icons.set(app.id, icon);
+            if (icon !== null) emit({ type: 'app-icon', appId: app.id, iconDataUrl: icon });
+          }),
+        );
+      }
+    })().finally(() => {
+      iconing = null;
     });
   }
 
@@ -281,6 +310,7 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
     try {
       const snapshot = await listSnapshot(force);
       measureSizes(snapshot.apps);
+      loadIcons(snapshot.apps);
       return {
         ok: true,
         apps: snapshot.apps.map(toSummary),
@@ -495,6 +525,43 @@ export function createUninstallService(deps: UninstallServiceDeps): UninstallSer
 
   return { list, preview, runUninstaller, execute, skipWaiting, elevatedHandoff, onEvent };
 }
+
+/**
+ * Turns a registry DisplayIcon value (`"C:\App\app.exe",0`, `%ProgramFiles%\x.ico`)
+ * into a file path, or null when it names nothing an icon can be read from.
+ * Accepts forward slashes (`C:/App/icon.ico`), resource DLLs (the shell resolves
+ * their default icon), and bare file names from System32 (`msiexec.exe`).
+ */
+export function iconPathOf(displayIcon: string, vars: NodeJS.ProcessEnv = process.env): string | null {
+  let value = displayIcon.trim();
+  if (value.length === 0) return null;
+  value = value.replace(/,\s*-?\d+\s*$/, '').trim();
+  value = value.replace(/^"+|"+$/g, '').trim();
+  value = value.replace(/%([^%]+)%/g, (whole, name: string) => lookupVar(vars, name) ?? whole);
+  if (value.includes('%')) return null;
+  value = value.replace(/\//g, '\\');
+  if (/^[a-z]:\\/i.test(value)) return ICON_FILE.test(value) ? value : null;
+  if (/^[^\\/]+$/u.test(value) && ICON_FILE.test(value)) {
+    const systemRoot = lookupVar(vars, 'SystemRoot') ?? lookupVar(vars, 'windir');
+    if (typeof systemRoot === 'string' && systemRoot.length > 0) {
+      return `${systemRoot.replace(/[\\/]+$/, '')}\\System32\\${value}`;
+    }
+  }
+  return null;
+}
+
+/** Environment lookup that tolerates the casing of `%programfiles%`-style names. */
+function lookupVar(vars: NodeJS.ProcessEnv, name: string): string | undefined {
+  const direct = vars[name] ?? vars[name.toUpperCase()] ?? vars[name.toLowerCase()];
+  if (direct !== undefined) return direct;
+  const wanted = name.toLowerCase();
+  for (const key of Object.keys(vars)) {
+    if (key.toLowerCase() === wanted) return vars[key];
+  }
+  return undefined;
+}
+
+const ICON_FILE = /\.(exe|dll|ico)$/i;
 
 function removalEventToIpc(jobId: string, event: RemovalEvent): UninstallEvent {
   switch (event.type) {

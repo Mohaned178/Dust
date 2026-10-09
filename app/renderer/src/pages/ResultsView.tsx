@@ -8,7 +8,7 @@ import { ContributorList } from '../components/ContributorList';
 import type { Contributor } from '../components/ContributorList';
 import { TreeTable } from '../components/TreeTable';
 import { CleanFlow } from '../components/CleanFlow';
-import { CloseIcon } from '../components/icons';
+import { CloseIcon, SparkleIcon } from '../components/icons';
 import { Alert, Button, Card, FOCUS } from '../components/ui';
 import { formatBytes, formatCount, formatRelativeTime } from '../format';
 import { recordRendererSample } from '../instrument';
@@ -198,6 +198,14 @@ export function ResultsView({
       return next;
     });
   }, [allListedSelected, listedKeys]);
+
+  // What "Clean all safe" hands to the clean flow: every safe row the user hasn't kept.
+  const readySafe = useMemo(() => safe.filter((row) => !kept.has(pathKey(row.path))), [safe, kept]);
+  const readySafeBytes = useMemo(() => readySafe.reduce((sum, row) => sum + row.bytes, 0), [readySafe]);
+  const cleanAllSafe = useCallback(() => {
+    setSelected(new Set(readySafe.map((row) => pathKey(row.path))));
+    setBulkOpen(true);
+  }, [readySafe]);
 
   const figureBytes = reviewToo ? safeBytes + reviewBytes : safeBytes;
   const figureCount = reviewToo ? safe.length + review.length : safe.length;
@@ -433,7 +441,7 @@ export function ResultsView({
               : 'Nothing matched a cleanup rule.'}
           </p>
           <Button className="mt-4" onClick={() => (review.length > 0 ? setReviewToo(true) : setTreeOpen(true))}>
-            {review.length > 0 ? 'Review too' : 'Browse everything'}
+            {review.length > 0 ? 'Show review items' : 'Browse everything'}
           </Button>
         </>
       ) : (
@@ -475,128 +483,172 @@ export function ResultsView({
         </Card>
       ) : (
         <>
-          <section aria-label="Reclaimable summary" className={embedded ? '' : 'mt-8'}>
-            {emptySafe ? (
-              <>
-                <p className="text-xl font-semibold tracking-tight text-ink">Nothing safe to clean here</p>
-                <p className="mt-1.5 text-sm text-ink-muted">
-                  {review.length > 0
-                    ? 'Turn on Review too to see what needs a closer look, or browse the full tree below.'
-                    : 'Browse everything below to look for reclaimable folders.'}
+          <div className={`grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] ${embedded ? '' : 'mt-8'}`}>
+            <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6">
+              <Card className="overflow-hidden">
+                <section aria-label="Reclaimable summary" className="p-5">
+                  {emptySafe ? (
+                    <>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">All clear</p>
+                      <p className="mt-2 text-lg font-semibold tracking-tight text-ink">Nothing safe to clean here</p>
+                      <p className="mt-1.5 text-sm text-ink-muted">
+                        {review.length > 0
+                          ? 'Switch to Safe + review to see what needs a closer look, or browse the full tree.'
+                          : 'Browse everything to look for reclaimable folders.'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                        You can free up
+                      </p>
+                      <p className="mt-2 font-mono text-[2.5rem] font-semibold leading-none tracking-tight text-accent-strong">
+                        {formatBytes(figureBytes)}
+                      </p>
+                      <p className="mt-2 text-sm text-ink-muted">
+                        reclaimable across {formatCount(figureCount)} {figureCount === 1 ? 'item' : 'items'}
+                      </p>
+                    </>
+                  )}
+                  <div className="mt-5">
+                    <BreakdownBar safeBytes={safeBytes} reviewBytes={reviewBytes} totalBytes={totalBytes} />
+                  </div>
+                  <dl className="mt-4 space-y-2">
+                    <StatTile label="Safe" tone="safe" count={safe.length} bytes={safeBytes} />
+                    <StatTile label="Review" tone="review" count={review.length} bytes={reviewBytes} />
+                  </dl>
+                  {readySafe.length > 0 && (
+                    <>
+                      <Button variant="primary" size="lg" className="mt-5 w-full" onClick={cleanAllSafe}>
+                        <SparkleIcon className="h-4 w-4" />
+                        Clean all safe · {formatBytes(readySafeBytes)}
+                      </Button>
+                      <p className="mt-2 text-center text-xs text-ink-muted">
+                        You&rsquo;ll see the full list before anything is deleted.
+                      </p>
+                    </>
+                  )}
+                </section>
+                <p className="border-t border-hairline bg-canvas/50 px-5 py-2.5 text-xs leading-relaxed text-ink-muted">
+                  {RESULTS_SCOPE_NOTE}
                 </p>
-              </>
-            ) : (
-              <>
-                <p className="font-mono text-[2.5rem] font-semibold leading-none tracking-tight text-ink">
-                  {formatBytes(figureBytes)}
-                </p>
-                <p className="mt-2 text-sm text-ink-muted">
-                  reclaimable across {formatCount(figureCount)} {figureCount === 1 ? 'item' : 'items'}
-                </p>
-              </>
-            )}
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-muted">
-              <StatLine label="Safe" count={safe.length} bytes={safeBytes} />
-              <StatLine label="Review" count={review.length} bytes={reviewBytes} />
-            </div>
-            <p className="mt-2 text-xs text-ink-muted">{RESULTS_SCOPE_NOTE}</p>
-          </section>
+              </Card>
+              <Card className="p-2 pt-3">
+                <CategoryStrip categories={stripCategories} active={categoryFilter} onSelect={selectCategory} />
+              </Card>
+            </aside>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-            <CategoryStrip categories={stripCategories} active={categoryFilter} onSelect={selectCategory} />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <p role="status" aria-live="polite" aria-atomic="true" className="text-xs text-ink-muted">
-                {query !== '' && (
-                  <>
-                    <span className="font-mono tabular-nums text-ink">{formatCount(listed.length)}</span>{' '}
-                    {listed.length === 1 ? 'match' : 'matches'}
-                  </>
-                )}
-              </p>
-              <div className="relative">
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search paths and names"
-                  aria-label="Search paths and names"
-                  className={`h-8 w-52 rounded-lg border border-hairline bg-surface pl-3 pr-8 text-sm text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${EASE}`}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hairline bg-surface p-2 shadow-card">
+                <div className="relative min-w-[12rem] flex-1">
+                  <SearchGlyph />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search paths and names"
+                    aria-label="Search paths and names"
+                    className={`h-9 w-full rounded-lg bg-canvas/60 pl-9 pr-9 text-sm text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${EASE}`}
+                  />
+                  {search !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch('')}
+                      aria-label="Clear search"
+                      className={`absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft hover:text-ink ${FOCUS}`}
+                    >
+                      <CloseIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <p role="status" aria-live="polite" aria-atomic="true" className="text-xs text-ink-muted empty:hidden">
+                  {query !== '' && (
+                    <>
+                      <span className="font-mono tabular-nums text-ink">{formatCount(listed.length)}</span>{' '}
+                      {listed.length === 1 ? 'match' : 'matches'}
+                    </>
+                  )}
+                </p>
+                <div role="group" aria-label="Which items to list" className="inline-flex rounded-lg bg-canvas/60 p-0.5">
+                  {[
+                    { on: false, label: 'Safe', count: safe.length, active: 'bg-surface text-ink shadow-card' },
+                    {
+                      on: true,
+                      label: 'Safe + review',
+                      count: safe.length + review.length,
+                      active: 'bg-grade-review-soft text-grade-review',
+                    },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      aria-pressed={reviewToo === option.on}
+                      onClick={() => setReviewToo(option.on)}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${EASE} ${FOCUS} ${
+                        reviewToo === option.on ? option.active : 'text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      {option.label}
+                      <span className="font-mono text-xs tabular-nums opacity-70">{formatCount(option.count)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <ContributorList
+                  contributors={visibleContributors}
+                  totalCount={listed.length}
+                  selected={selected}
+                  keptCount={kept.size}
+                  selectAll={{
+                    count: listed.length,
+                    bytes: listedBytes,
+                    allSelected: allListedSelected,
+                    someSelected: someListedSelected,
+                    noun: selectAllNoun,
+                    onToggle: toggleAllListed,
+                  }}
+                  onToggleSelect={toggleSelect}
+                  onKeep={keep}
+                  onUndoKept={() => setKept(new Set())}
+                  onAnnounce={announce}
+                  loadRecovery={loadRecovery}
+                  empty={contributorEmpty}
                 />
-                {search !== '' && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch('')}
-                    aria-label="Clear search"
-                    className={`absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft hover:text-ink ${FOCUS}`}
-                  >
-                    <CloseIcon className="h-3.5 w-3.5" />
-                  </button>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="button"
+                  aria-expanded={treeOpen}
+                  aria-controls="results-tree"
+                  onClick={() => setTreeOpen((value) => !value)}
+                  className={`flex w-full items-center gap-3 rounded-2xl border border-dashed border-hairline-strong px-4 py-3 text-left text-sm font-medium text-ink transition-colors duration-150 ${EASE} hover:border-accent hover:bg-accent-soft/40 ${FOCUS}`}
+                >
+                  <ChevronToggle open={treeOpen} />
+                  Browse everything
+                  <span className="font-normal text-ink-muted">the full folder tree</span>
+                </button>
+                {treeOpen && (
+                  <div id="results-tree" className="dust-disclose mt-3">
+                    <TreeTable
+                      rows={tableRows}
+                      totalBytes={totalBytes}
+                      sort={sort}
+                      onSortChange={setSort}
+                      expanded={expanded}
+                      onToggle={toggle}
+                      onReveal={reveal}
+                      onSelect={(path) => setTreeSelectedPath((current) => (current === path ? null : path))}
+                      selectedPath={treeSelectedPath}
+                      toolbar={toolbar}
+                      empty={filteredTreeEmpty}
+                    />
+                  </div>
                 )}
               </div>
-              <label className="inline-flex items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={reviewToo}
-                  onChange={(event) => setReviewToo(event.target.checked)}
-                  className={`h-4 w-4 shrink-0 rounded border-hairline accent-accent ${FOCUS}`}
-                />
-                Review too
-              </label>
             </div>
-          </div>
-
-          <div className="mt-4">
-            <ContributorList
-              contributors={visibleContributors}
-              totalCount={listed.length}
-              selected={selected}
-              keptCount={kept.size}
-              selectAll={{
-                count: listed.length,
-                bytes: listedBytes,
-                allSelected: allListedSelected,
-                someSelected: someListedSelected,
-                noun: selectAllNoun,
-                onToggle: toggleAllListed,
-              }}
-              onToggleSelect={toggleSelect}
-              onKeep={keep}
-              onUndoKept={() => setKept(new Set())}
-              onAnnounce={announce}
-              loadRecovery={loadRecovery}
-              empty={contributorEmpty}
-            />
-          </div>
-
-          <div className="mt-6">
-            <button
-              type="button"
-              aria-expanded={treeOpen}
-              aria-controls="results-tree"
-              onClick={() => setTreeOpen((value) => !value)}
-              className={`inline-flex items-center gap-2 text-sm font-medium text-ink transition-colors duration-150 ${EASE} hover:text-accent ${FOCUS}`}
-            >
-              <ChevronToggle open={treeOpen} />
-              Browse everything
-              <span className="font-normal text-ink-muted">the full folder tree</span>
-            </button>
-            {treeOpen && (
-              <div id="results-tree" className="dust-disclose mt-3">
-                <TreeTable
-                  rows={tableRows}
-                  totalBytes={totalBytes}
-                  sort={sort}
-                  onSortChange={setSort}
-                  expanded={expanded}
-                  onToggle={toggle}
-                  onReveal={reveal}
-                  onSelect={(path) => setTreeSelectedPath((current) => (current === path ? null : path))}
-                  selectedPath={treeSelectedPath}
-                  toolbar={toolbar}
-                  empty={filteredTreeEmpty}
-                />
-              </div>
-            )}
           </div>
         </>
       )}
@@ -630,19 +682,79 @@ export function ResultsView({
   );
 }
 
-function StatLine({ label, count, bytes }: { label: string; count: number; bytes: number }) {
+function StatTile({
+  label,
+  tone,
+  count,
+  bytes,
+}: {
+  label: string;
+  tone: 'safe' | 'review';
+  count: number;
+  bytes: number;
+}) {
+  const dot = tone === 'safe' ? 'bg-accent' : 'bg-grade-review-dot';
   return (
-    <p>
-      <span className="font-medium text-ink">{label}</span>
-      <span className="mx-1.5 text-ink-muted/60" aria-hidden="true">
-        ·
-      </span>
-      <span className="font-mono text-ink">{formatCount(count)}</span> {count === 1 ? 'item' : 'items'}
-      <span className="mx-1.5 text-ink-muted/60" aria-hidden="true">
-        ·
-      </span>
-      <span className="font-mono text-ink">{formatBytes(bytes)}</span>
-    </p>
+    <div className="flex items-center gap-2.5 text-sm">
+      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
+      <dt className="font-medium text-ink">{label}</dt>
+      <dd className="ml-auto flex items-baseline gap-2">
+        <span className="text-xs text-ink-muted">
+          <span className="font-mono tabular-nums">{formatCount(count)}</span> {count === 1 ? 'item' : 'items'}
+        </span>
+        <span className="font-mono font-semibold tabular-nums text-ink">{formatBytes(bytes)}</span>
+      </dd>
+    </div>
+  );
+}
+
+function SearchGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable={false}
+      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+/** Share of the scanned total that is safe, needs review, or stays. */
+function BreakdownBar({
+  safeBytes,
+  reviewBytes,
+  totalBytes,
+}: {
+  safeBytes: number;
+  reviewBytes: number;
+  totalBytes: number;
+}) {
+  const total = Math.max(totalBytes, safeBytes + reviewBytes);
+  const pct = (value: number) => (total > 0 ? (value / total) * 100 : 0);
+  const safePct = pct(safeBytes);
+  const reviewPct = pct(reviewBytes);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-xs text-ink-muted">
+        <span>Of {formatBytes(total)} scanned</span>
+        <span className="font-mono tabular-nums">{Math.round(safePct + reviewPct)}% reclaimable</span>
+      </div>
+      <div
+        role="img"
+        aria-label={`${Math.round(safePct)}% safe, ${Math.round(reviewPct)}% needs review`}
+        className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-track"
+      >
+        <div className="dust-bar-fill h-full bg-accent" style={{ width: `${safePct}%` }} />
+        <div className="dust-bar-fill h-full bg-grade-review-dot" style={{ width: `${reviewPct}%` }} />
+      </div>
+    </div>
   );
 }
 

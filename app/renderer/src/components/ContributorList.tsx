@@ -8,7 +8,8 @@ import { pathKey, pathParent } from '../tree';
 import { recoveryText } from '../clean';
 import { CopyButton } from './CopyButton';
 import { GradePill, gradeWord } from './GradePill';
-import { ChevronRightIcon, FolderIcon } from './icons';
+import { CategoryIcon } from './CategoryIcon';
+import { ChevronRightIcon } from './icons';
 import { Button, FOCUS } from './ui';
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]';
 
@@ -99,6 +100,8 @@ export function ContributorList({
     );
   }
 
+  const maxBytes = contributors.reduce((max, row) => Math.max(max, row.bytes), 0);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-card">
       {selectAll !== undefined && (
@@ -132,7 +135,7 @@ export function ContributorList({
           const parent = pathParent(row.path);
           return (
             <li key={row.path}>
-              <div className="group flex items-start gap-3 px-3 py-2.5 transition-colors duration-150 hover:bg-canvas/60 sm:px-4">
+              <div className="group flex items-center gap-3 px-3 py-3 transition-colors duration-150 hover:bg-canvas/60 sm:px-4">
                 <input
                   type="checkbox"
                   aria-label={`Select ${row.name}`}
@@ -151,7 +154,16 @@ export function ContributorList({
                   }}
                   className={`flex min-w-0 flex-1 items-center gap-3 text-left ${FOCUS}`}
                 >
-                  <FolderIcon className="h-4 w-4 shrink-0 text-ink-muted" />
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      row.grade === 'safe'
+                        ? 'bg-accent-soft text-accent-strong'
+                        : 'bg-grade-review-soft text-grade-review'
+                    }`}
+                  >
+                    <CategoryIcon category={row.action.category} className="h-4 w-4" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="min-w-0 truncate text-sm font-medium text-ink">{row.name}</span>
@@ -161,11 +173,29 @@ export function ContributorList({
                         </span>
                       )}
                     </span>
-                    {parent !== null && (
-                      <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">{parent}</span>
-                    )}
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-ink-muted">
+                      <span className="shrink-0">{CATEGORY_LABELS[row.action.category]}</span>
+                      {parent !== null && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="min-w-0 truncate font-mono" title={row.path}>
+                            {parent}
+                          </span>
+                        </>
+                      )}
+                    </span>
                   </span>
-                  <span className="shrink-0 font-mono text-sm tabular-nums text-ink">{formatBytes(row.bytes)}</span>
+                  <span className="hidden w-24 shrink-0 sm:block" aria-hidden="true">
+                    <span className="block h-1.5 w-full overflow-hidden rounded-full bg-track">
+                      <span
+                        className={`dust-bar-fill block h-full rounded-full ${row.grade === 'safe' ? 'bg-accent' : 'bg-grade-review-dot'}`}
+                        style={{ width: `${maxBytes > 0 ? Math.max((row.bytes / maxBytes) * 100, 3) : 0}%` }}
+                      />
+                    </span>
+                  </span>
+                  <span className="w-20 shrink-0 text-right font-mono text-sm font-semibold tabular-nums text-ink">
+                    {formatBytes(row.bytes)}
+                  </span>
                   <GradePill grade={row.grade} />
                   <ChevronRightIcon
                     className={`h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform duration-150 ${EASE} ${

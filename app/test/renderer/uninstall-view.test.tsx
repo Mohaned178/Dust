@@ -6,8 +6,8 @@ import { makeApi, makeRemovalReport, makeUninstallApp, makeUninstallPreview } fr
 
 function renderView(api: DustApi, hint: UninstallLaunchHint | null = null) {
   const onHintShown = vi.fn();
-  render(<UninstallView api={api} hint={hint} onHintShown={onHintShown} />);
-  return { onHintShown };
+  const { container } = render(<UninstallView api={api} hint={hint} onHintShown={onHintShown} />);
+  return { onHintShown, container };
 }
 
 function apiWithApps(overrides: Partial<DustApi> = {}): DustApi {
@@ -87,6 +87,26 @@ describe('UninstallView', () => {
       .getAllByRole('button', { name: /^Remove / })
       .map((button) => button.getAttribute('aria-label'));
     expect(names[0]).toBe('Remove Office');
+  });
+
+  it('shows app icons that arrive in the background', async () => {
+    const handlers = new Set<(event: UninstallEvent) => void>();
+    const api = apiWithApps({
+      listUninstallApps: twoApps,
+      onUninstallEvent: (handler) => {
+        handlers.add(handler);
+        return () => handlers.delete(handler);
+      },
+    });
+    const { container } = renderView(api);
+    await screen.findByRole('button', { name: 'Remove Spotify' });
+    expect(container.querySelector('img')).toBeNull();
+
+    act(() => {
+      for (const handler of handlers)
+        handler({ type: 'app-icon', appId: 'app-2', iconDataUrl: 'data:image/png;base64,icon' });
+    });
+    expect(container.querySelector('img')).toHaveAttribute('src', 'data:image/png;base64,icon');
   });
 
   it('shows a recoverable error and reloads on Try again', async () => {

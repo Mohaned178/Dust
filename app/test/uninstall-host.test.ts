@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InstalledApp, RemovalPlan, RemovalReport } from '@dust/core';
-import { createUninstallService } from '../src/main/host/uninstall';
+import { createUninstallService, iconPathOf } from '../src/main/host/uninstall';
 import type { UninstallServiceDeps } from '../src/main/host/uninstall';
 import type { UninstallEvent, UninstallExecuteRequest, ScanKind } from '../src/shared/ipc';
 
@@ -543,5 +543,80 @@ describe('two-step uninstall', () => {
     expect(planInputs[1]).toMatchObject({ skipUninstaller: true, uninstallKeyPresent: false });
     // Without leftoversOnly an uninstalled app is simply gone.
     expect(await service.preview('app-1')).toMatchObject({ ok: false, reason: 'not-found' });
+  });
+});
+
+describe('iconPathOf', () => {
+  it('strips quotes and the icon index from DisplayIcon', () => {
+    expect(iconPathOf('"C:\\Program Files\\App\\app.exe",0')).toBe('C:\\Program Files\\App\\app.exe');
+    expect(iconPathOf('C:\\App\\app.ico')).toBe('C:\\App\\app.ico');
+    expect(iconPathOf('"C:\\Program Files\\qBittorrent\\qbittorrent.exe",0')).toBe(
+      'C:\\Program Files\\qBittorrent\\qbittorrent.exe',
+    );
+  });
+
+  it('expands environment variables regardless of casing', () => {
+    expect(iconPathOf('%ProgramFiles%\\App\\app.exe,-101', { ProgramFiles: 'C:\\Program Files' })).toBe(
+      'C:\\Program Files\\App\\app.exe',
+    );
+    expect(iconPathOf('%programfiles%\\App\\app.exe', { ProgramFiles: 'C:\\Program Files' })).toBe(
+      'C:\\Program Files\\App\\app.exe',
+    );
+  });
+
+  it('accepts forward slashes and resource DLLs', () => {
+    expect(iconPathOf('C:/ProgramData/Riot Games/Metadata/x.live/x.live.ico')).toBe(
+      'C:\\ProgramData\\Riot Games\\Metadata\\x.live\\x.live.ico',
+    );
+    expect(iconPathOf('C:\\Program Files\\NVIDIA Corporation\\NVI2.dll,0')).toBe(
+      'C:\\Program Files\\NVIDIA Corporation\\NVI2.dll',
+    );
+  });
+
+  it('resolves bare file names from System32', () => {
+    expect(iconPathOf('msiexec.exe', { SystemRoot: 'C:\\Windows' })).toBe('C:\\Windows\\System32\\msiexec.exe');
+    expect(iconPathOf('msiexec.exe', {})).toBeNull();
+  });
+
+  it('rejects values that are not an exe, dll or ico file', () => {
+    expect(iconPathOf('')).toBeNull();
+    expect(iconPathOf('%Missing%\\app.exe', {})).toBeNull();
+    expect(iconPathOf('C:\\Users\\pc\\AppData\\Roaming\\Microsoft\\Installer\\{guid}\\')).toBeNull();
+  });
+});
+
+describe('app icons', () => {
+  async function waitFor(events: UninstallEvent[], type: UninstallEvent['type']): Promise<void> {
+    const deadline = Date.now() + 2000;
+    while (!events.some((event) => event.type === type)) {
+      if (Date.now() > deadline) throw new Error(`timed out waiting for ${type}`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  it('streams an app-icon event for each loadable icon', async () => {
+    const loaded: string[] = [];
+    const { service, events } = makeService({
+      listApps: async () => ({
+        apps: [
+          installedApp({ id: 'exe-app', displayName: 'Exe App', displayIcon: 'C:\\App\\app.exe,0' }),
+          installedApp({ id: 'ico-app', displayName: 'Ico App', displayIcon: 'C:/App/icon.ico' }),
+          installedApp({ id: 'no-icon', displayName: 'No Icon', displayIcon: '' }),
+        ],
+        trusted: true,
+      }),
+      measureDirectory: async () => null,
+      loadIcon: async (path) => {
+        loaded.push(path);
+        return path.endsWith('.ico') ? null : 'data:image/png;base64,icon';
+      },
+    });
+    const result = await service.list(false);
+    expect(result).toMatchObject({ ok: true });
+    await waitFor(events, 'app-icon');
+    expect(loaded).toEqual(['C:\\App\\app.exe', 'C:\\App\\icon.ico']);
+    expect(events.filter((event) => event.type === 'app-icon')).toEqual([
+      { type: 'app-icon', appId: 'exe-app', iconDataUrl: 'data:image/png;base64,icon' },
+    ]);
   });
 });

@@ -427,6 +427,8 @@ export interface UninstallAppSummary {
   estimatedSizeKb: number | null;
   /** Measured size of the install folder, once known (arrives via 'app-size' events). */
   sizeBytes: number | null;
+  /** The app's icon as a data URL, once loaded (arrives via 'app-icon' events). */
+  iconDataUrl: string | null;
   hive: UninstallHive;
   kind: UninstallKind;
   requiresAdmin: boolean;
@@ -533,7 +535,8 @@ export type UninstallEvent =
   | { type: 'item'; jobId: string; itemId: string; status: string; bytes: number }
   | { type: 'finished'; jobId: string; report: RemovalReport }
   | { type: 'failed'; jobId: string; message: string }
-  | { type: 'app-size'; appId: string; bytes: number };
+  | { type: 'app-size'; appId: string; bytes: number }
+  | { type: 'app-icon'; appId: string; iconDataUrl: string };
 
 export interface UninstallLaunchHint {
   open: boolean;

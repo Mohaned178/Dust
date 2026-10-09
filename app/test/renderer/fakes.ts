@@ -387,6 +387,7 @@ export function makeUninstallApp(overrides: Partial<UninstallAppSummary> = {}): 
     installLocation: 'C:\\Users\\x\\AppData\\Roaming\\Spotify',
     estimatedSizeKb: 2048,
     sizeBytes: null,
+    iconDataUrl: null,
     hive: 'hkcu',
     kind: 'exe',
     requiresAdmin: false,
