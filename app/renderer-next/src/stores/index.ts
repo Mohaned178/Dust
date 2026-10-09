@@ -4,6 +4,7 @@ import { resetCleanStore } from './clean';
 import { resetCleanupStore } from './cleanup';
 import { resetDashboardStore } from './dashboard';
 import { resetDevStore } from './dev';
+import { resetExploreStore } from './explore';
 import { resetHealthStore } from './health';
 import { resetResultsStore } from './results';
 import { resetScanStore } from './scan';
@@ -18,6 +19,7 @@ export function resetAllStores(): void {
   resetCleanupStore();
   resetDashboardStore();
   resetDevStore();
+  resetExploreStore();
   resetHealthStore();
   resetResultsStore();
   resetScanStore();

@@ -19,5 +19,6 @@ export function useVirtualizer(options: { count: number; estimateSize: (index: n
     getTotalSize: () => start,
     getVirtualItems: () => items,
     measureElement: () => {},
+    scrollToIndex: () => {},
   };
 }

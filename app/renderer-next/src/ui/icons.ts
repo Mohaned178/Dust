@@ -8,6 +8,7 @@ export {
 } from '@fluentui/react-icons/headless/svg/apps-list';
 export { ArrowClockwise20Regular as RefreshIcon } from '@fluentui/react-icons/headless/svg/arrow-clockwise';
 export { ArrowUndo20Regular as UndoIcon } from '@fluentui/react-icons/headless/svg/arrow-undo';
+export { ArrowLeft20Regular as BackIcon } from '@fluentui/react-icons/headless/svg/arrow-left';
 export { Box20Regular as PackageIcon } from '@fluentui/react-icons/headless/svg/box';
 export { Checkmark20Regular as CheckIcon } from '@fluentui/react-icons/headless/svg/checkmark';
 export { CheckmarkCircle20Regular as SuccessIcon } from '@fluentui/react-icons/headless/svg/checkmark-circle';
@@ -22,6 +23,7 @@ export { Document20Regular as DocumentIcon } from '@fluentui/react-icons/headles
 export { ErrorCircle20Regular as ErrorIcon } from '@fluentui/react-icons/headless/svg/error-circle';
 export { Folder20Regular as FolderIcon } from '@fluentui/react-icons/headless/svg/folder';
 export { FolderOpen20Regular as FolderOpenIcon } from '@fluentui/react-icons/headless/svg/folder-open';
+export { DataTreemap20Regular as MapIcon } from '@fluentui/react-icons/headless/svg/data-treemap';
 export { HeartPulse24Regular as HealthNavIcon } from '@fluentui/react-icons/headless/svg/heart-pulse';
 export { Home24Regular as HomeNavIcon } from '@fluentui/react-icons/headless/svg/home';
 export { Info20Regular as InfoIcon } from '@fluentui/react-icons/headless/svg/info';

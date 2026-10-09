@@ -239,14 +239,18 @@ export function ResultsView({ root, category }: ResultsViewProps) {
             </Card>
           </section>
         ) : null}
-        {developer !== undefined && developer.bytes > 0 ? (
-          <div>
+        <div className="flex flex-wrap items-center gap-2">
+          {developer !== undefined && developer.bytes > 0 ? (
             <Button variant="subtle" onClick={() => navigate('developer', { root })}>
               Developer caches {formatBytes(developer.bytes)}
               <ChevronRightIcon className="size-4" aria-hidden="true" />
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+          <Button variant="subtle" onClick={() => navigate('cleanup', { view: 'explore', root })}>
+            Explore disk
+            <ChevronRightIcon className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
       {empty ? null : (
         <div className="sticky bottom-0 z-10 mt-6 -mb-8 flex items-center justify-between gap-4 border-t border-border bg-canvas py-4">

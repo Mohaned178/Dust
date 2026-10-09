@@ -1,7 +1,12 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { memo, useRef } from 'react';
-import type { ReactNode } from 'react';
+import { memo, useImperativeHandle, useRef } from 'react';
+import type { HTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '../lib/cn';
+
+export interface VirtualListHandle {
+  /** Scrolls so the row is on screen. Rows outside the window do not exist in the page until this has run. */
+  scrollToIndex: (index: number) => void;
+}
 
 export interface VirtualListProps<T> {
   items: ReadonlyArray<T>;
@@ -15,6 +20,13 @@ export interface VirtualListProps<T> {
   label: string;
   overscan?: number;
   className?: string;
+  /** `tree` gives the list tree semantics; `itemProps` then carries each row's level, state and focus. */
+  semantics?: 'list' | 'tree';
+  /** Extra attributes for a row's wrapper, e.g. `aria-level`, `aria-expanded`, `tabIndex`. */
+  itemProps?: (item: T, index: number) => HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | undefined>;
+  /** Called for key presses inside the list, for roving focus. */
+  onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  ref?: Ref<VirtualListHandle>;
 }
 
 interface RowProps<T> {
@@ -24,15 +36,18 @@ interface RowProps<T> {
   height: number;
   count: number;
   renderRow: (item: T, index: number) => ReactNode;
+  role: 'listitem' | 'treeitem';
+  extra?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | undefined>;
 }
 
-function RowInner<T>({ item, index, top, height, count, renderRow }: RowProps<T>) {
+function RowInner<T>({ item, index, top, height, count, renderRow, role, extra }: RowProps<T>) {
   return (
     <div
-      role="listitem"
+      role={role}
       aria-setsize={count}
       aria-posinset={index + 1}
-      className="absolute inset-x-0 top-0"
+      {...extra}
+      className="absolute inset-x-0 top-0 outline-none"
       style={{ height, transform: `translateY(${top}px)` }}
     >
       {renderRow(item, index)}
@@ -52,6 +67,10 @@ export function VirtualList<T>({
   label,
   overscan = 8,
   className,
+  semantics = 'list',
+  itemProps,
+  onKeyDown,
+  ref,
 }: VirtualListProps<T>) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -61,9 +80,16 @@ export function VirtualList<T>({
     overscan,
     getItemKey: (index) => getKey(items[index]!, index),
   });
+  useImperativeHandle(ref, () => ({ scrollToIndex: (index) => virtualizer.scrollToIndex(index) }), [virtualizer]);
+  const tree = semantics === 'tree';
   return (
-    <div ref={scrollRef} className={cn('h-full overflow-y-auto', className)}>
-      <div role="list" aria-label={label} className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+    <div ref={scrollRef} className={cn('h-full overflow-y-auto', className)} onKeyDown={onKeyDown}>
+      <div
+        role={tree ? 'tree' : 'list'}
+        aria-label={label}
+        className="relative w-full"
+        style={{ height: virtualizer.getTotalSize() }}
+      >
         {virtualizer.getVirtualItems().map((virtualItem) => (
           <Row
             key={virtualItem.key}
@@ -73,6 +99,8 @@ export function VirtualList<T>({
             height={rowHeight}
             count={items.length}
             renderRow={renderRow}
+            role={tree ? 'treeitem' : 'listitem'}
+            extra={itemProps?.(items[virtualItem.index]!, virtualItem.index)}
           />
         ))}
       </div>

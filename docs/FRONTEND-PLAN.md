@@ -768,9 +768,50 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 5 — Explore disk
 
-- [ ] Build the lazy virtualized folder tree using `getFolderChildren`.
-- [ ] Build the treemap using `d3-hierarchy`, with breadcrumbs.
-- [ ] Add main-process search, the protected-items toggle, and Open in Explorer.
+- [x] Build the lazy virtualized folder tree using `getFolderChildren`.
+- [x] Build the treemap using `d3-hierarchy`, with breadcrumbs.
+- [x] Add main-process search, the protected-items toggle, and Open in Explorer.
+      Notes: reached from Clean up through "Explore disk ›" (`view: 'explore'`), as its own lazy chunk (34 kB; the entry
+      chunk is 248.03 kB, budget 250). Code: `pages/explore/` (`ExploreView`, `FolderTree`, `SearchResults`, `SpaceMap`,
+      `useRoving`), `stores/explore.ts`, and the pure `lib/explore.ts` (tree flattening) and `lib/treemap.ts` (d3 layout).
+      **Tree:** one flat, virtualized list of the open folders. Each open folder fetches its direct children, 1,000 at a
+      time, sorted by size; the next page loads by itself when the list is scrolled to the "Show N more" row (the button
+      stays for the keyboard). Bars are drawn against the largest sibling. Protected folders are hidden until "Show
+      protected items" is on, then carry a "Protected" pill; flipping the switch closes everything and starts again.
+      Cached folders are tied to the scan (`root|finishedAt`) and cleared after a clean or a new scan.
+      **Keyboard:** the tree has tree semantics with a roving tab stop: Up, Down, Home, End, PageUp and PageDown move,
+      Right opens (or goes to the first child), Left closes (or goes up to the parent), Enter opens, and the active row's
+      action buttons join the tab order. This needed two additions to `VirtualList`: a `scrollToIndex` handle and
+      `semantics='tree'` with per-row attributes (the shared test virtualizer got a no-op `scrollToIndex`).
+      **Map:** the folder you are in, drawn with d3's squarified treemap, at most 40 tiles. What the shown folders leave
+      out of the folder's size is one muted, unclickable "Everything else" tile (never negative). The drive root has no
+      known size, so it has no such tile. Breadcrumbs are the stack of folders you drilled through (so each keeps its
+      size); a tree row's map button jumps there from anywhere. Labels are hidden on tiny tiles; the name stays in the
+      tooltip and accessible name. Nothing is laid out at width 0 (a hidden page).
+      **Search:** the 300 ms debounce in `SearchBox` sends one request per burst; answers that arrive out of order are
+      dropped; clearing the box restores the tree with no request; results are capped at 500 and say "Showing the largest
+      500 of N matches". The backend matches the whole path, so a folder name also matches everything inside it (searching
+      `winsxs` finds 38,814). The count is the honest part of that. The search index is warmed once per backend, early,
+      with a query no Windows path can match (`<dust-index-warm-up>`), after the first screen is showing.
+      **Saved scan:** a saved scan keeps the top of the tree. Folders the scan counted subfolders in, but the saved scan
+      did not keep, say "Folders this deep were not saved. Scan again to see them." A notice at the top says the view is
+      the saved scan. On this machine `getFolderChildren` was coherent for both a saved and a fresh scan: for 20 folders
+      checked, `total` equals `childCount` and the children's sizes never exceed the folder's (the rest is files), so
+      nothing was changed in `results-index.ts`.
+      **Focus:** the heading takes focus on entering Explore and on going back to Clean up.
+      **Tests:** `test/renderer-next/pages/explore.test.tsx` (19 cases: opening and focus, in-place open, paging, the
+      saved-scan note, protected items, keyboard use, Explorer, warm-up, empty scan, back, search burst and clear, capped
+      and empty results, out-of-order answers, protected search, show on map, map drill and breadcrumb, tile bounds)
+      and `lib/explore.test.ts` (tree flattening incl. 10,000 rows, treemap limits). Whole suite: 615 tests. The test
+      virtualizer draws every row, so the jsdom tests use at most 1,100 rows.
+      **Verified in the running app** (production build, Electron over the debug port, real C:\ data): Explore opens
+      with rows 375-390 ms after the click; with protected items on, `C:\Windows\WinSxS` (27,774 children) opens, and
+      scrolling to the end pages in all of them (about 27,900 rows in the list, 20-29 in the page). A scripted scroll
+      from top to bottom over 4 s gave 297 frames, median 15 ms, p99 30 ms, one frame over 33 ms, none over 50 ms, and
+      no long task. JS heap with those rows loaded: 20 MB. Typing `winsxs` six characters 40 ms apart: results 294 ms
+      after the last key, no long task. The map and the search results rendered and looked right. Not run live: a
+      screen reader, the 20-keystroke burst as an IPC count (that is covered by the test that types 15 characters and
+      counts one search call), and the map at a window narrower than 1000 px.
 - **Done when:**
   - Expanding a folder with 10k children scrolls at 60 fps.
   - Search never blocks typing.

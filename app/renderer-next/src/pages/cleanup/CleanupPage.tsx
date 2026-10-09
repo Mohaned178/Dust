@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { useNavStore } from '../../app/nav';
 import { useApi } from '../../lib/api';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -10,7 +10,30 @@ import { Skeleton } from '../../ui/Skeleton';
 import { ResultsView } from './ResultsView';
 import { ScanView } from './ScanView';
 
+// The explorer (and its treemap library) is fetched only when someone opens it.
+const ExploreView = lazy(() => import('../explore/ExploreView').then((m) => ({ default: m.ExploreView })));
+
 export function CleanupPage() {
+  const view = useNavStore((state) => state.params.cleanup?.view ?? 'auto');
+  const wrapper = useRef<HTMLDivElement>(null);
+
+  // Moving between the results and the explorer replaces the button that was pressed; the heading takes focus.
+  useEffect(() => {
+    if (useNavStore.getState().focusTarget !== 'cleanup') return;
+    const heading = wrapper.current?.querySelector('h1');
+    if (heading == null) return;
+    heading.focus({ preventScroll: true });
+    useNavStore.getState().clearFocusTarget('cleanup');
+  }, [view]);
+
+  return (
+    <div ref={wrapper}>
+      <CleanupView />
+    </div>
+  );
+}
+
+function CleanupView() {
   const api = useApi();
   const params = useNavStore((state) => state.params.cleanup);
   const dashboard = useDashboardStore((state) => state.dashboard);
@@ -53,6 +76,20 @@ export function CleanupPage() {
           <Skeleton className="h-12 w-full" />
         </Card>
       </>
+    );
+  }
+  if (params?.view === 'explore') {
+    return (
+      <Suspense
+        fallback={
+          <>
+            <PageHeader title="Explore disk" />
+            <Skeleton className="h-80 w-full" />
+          </>
+        }
+      >
+        <ExploreView root={root} />
+      </Suspense>
     );
   }
   return <ResultsView root={root} category={params?.view === 'results' ? params.category : undefined} />;
