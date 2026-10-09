@@ -1,6 +1,7 @@
 import { resetNavStore } from '../app/nav';
 import { resetAppsStore } from './apps';
 import { resetCleanStore } from './clean';
+import { resetCleanupStore } from './cleanup';
 import { resetDashboardStore } from './dashboard';
 import { resetDevStore } from './dev';
 import { resetHealthStore } from './health';
@@ -14,6 +15,7 @@ import { resetUpdatesStore } from './updates';
 export function resetAllStores(): void {
   resetAppsStore();
   resetCleanStore();
+  resetCleanupStore();
   resetDashboardStore();
   resetDevStore();
   resetHealthStore();

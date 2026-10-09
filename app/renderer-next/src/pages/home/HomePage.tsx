@@ -2,14 +2,17 @@ import type { CategoryId } from '@dust/core';
 import { useEffect, useMemo } from 'react';
 import { QUICK_CLEAN_CATEGORY_IDS } from '../../../../src/shared/categories';
 import type { DashboardVolumeCard } from '../../../../src/shared/ipc';
+import { useDialogs } from '../../app/dialogs';
 import { useNavStore } from '../../app/nav';
 import { useStartScan } from '../../app/useStartScan';
 import { useApi } from '../../lib/api';
+import { QUICK_CLEAN_NOTE } from '../../lib/categories';
 import { useDashboardStore } from '../../stores/dashboard';
 import { useResultsStore } from '../../stores/results';
 import { useScanStore } from '../../stores/scan';
 import { Notice } from '../../ui/Notice';
 import { PageHeader } from '../../ui/PageHeader';
+import { openCleanDialog } from '../cleanup/openClean';
 import { Hero } from './Hero';
 import type { HeroState } from './Hero';
 import { OtherDrives } from './OtherDrives';
@@ -32,6 +35,7 @@ export function HomePage() {
   const loadCategories = useResultsStore((state) => state.loadCategories);
   const run = useScanStore((state) => (state.latestRunId === null ? undefined : state.runs[state.latestRunId]));
   const scan = useStartScan();
+  const dialogs = useDialogs();
 
   const system = dashboard.data?.volumes.find((volume) => volume.role === 'system') ?? null;
   const root = system?.root ?? null;
@@ -151,7 +155,14 @@ export function HomePage() {
     <div className="flex flex-col gap-6 [&>header]:pb-0">
       <PageHeader title={greetingFor(new Date())} />
       {scan.error !== null ? <Notice variant="warning">Dust could not start the scan: {scan.error}</Notice> : null}
-      <Hero state={hero} onScan={onScan} scanStarting={scan.starting} />
+      <Hero
+        state={hero}
+        onScan={onScan}
+        scanStarting={scan.starting}
+        onQuickClean={() =>
+          openCleanDialog(dialogs, { title: 'Quick clean', request: { scope: 'quick' }, scopeNote: QUICK_CLEAN_NOTE })
+        }
+      />
       <OtherDrives volumes={otherDrives} />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StartupTile />

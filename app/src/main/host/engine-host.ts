@@ -104,6 +104,8 @@ import {
   applyFindingsToRows,
   applyMatchesToRows,
   buildRowsFromSnapshot,
+  pathKey,
+  rowsForMatches,
   sameRoot,
   summarizeCategories,
   toBrowseRow,
@@ -148,6 +150,8 @@ export interface EngineHostDeps {
   streamLiveRows?: boolean;
   /** Send the final 'matches' event after a scan. Nothing in the app reads it; default off. */
   emitMatchEvents?: boolean;
+  /** Send 'folders' events (result rows streamed during Analyze). Only the old renderer reads them; default on. */
+  emitFolderEvents?: boolean;
   volumesTtlMs?: number;
   listVolumes?: () => VolumeInfo[];
   volumesCacheFile?: string;
@@ -248,6 +252,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
   const guard = guardEnv(env, deps.dustInstallPath);
   const streamLiveRows = deps.streamLiveRows ?? true;
   const emitMatchEvents = deps.emitMatchEvents === true;
+  const emitFolderEvents = deps.emitFolderEvents ?? true;
   let disposed = false;
   let prewarmScheduled = false;
   let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
@@ -284,6 +289,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     finishedAt: number;
     categories: CategorySummaryRow[];
     rows: ResultRow[];
+    /** What each cleanup rule matched, with the size it counted. */
+    matches: ResultMatch[];
     findings: CacheFinding[];
   } | null = null;
 
@@ -588,9 +595,18 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     const report = toCleanReport(pending.plan, pending.scope, pending.root, coreReport, 0);
 
     if (lastResults !== null && sameRoot(lastResults.root, pending.root)) {
+      const cleaned = new Map(report.items.map((item) => [pathKey(item.path), item]));
       lastResults = {
         ...lastResults,
         rows: applyCleanReport(lastResults.rows, report),
+        // What was removed is no longer a match; what was partly removed is smaller.
+        matches: lastResults.matches.flatMap((match) => {
+          const item = cleaned.get(pathKey(match.path));
+          if (item === undefined) return [match];
+          if (item.status === 'done' || item.status === 'already-gone') return [];
+          if (item.status === 'partial') return [{ ...match, bytes: Math.max(match.bytes - item.deletedBytes, 0) }];
+          return [match];
+        }),
         categories: summarizeCategories(subtractCategories(baseCategories, report)),
       };
     }
@@ -818,7 +834,8 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
 
     function flushFolders(): void {
       if (folderBuffer.length === 0) return;
-      emit({ type: 'folders', runId, folders: folderBuffer.splice(0) });
+      const folders = folderBuffer.splice(0);
+      if (emitFolderEvents) emit({ type: 'folders', runId, folders });
     }
 
     function maybeLiveCategories(): void {
@@ -1253,6 +1270,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       finishedAt,
       categories,
       rows,
+      matches,
       findings,
     };
 
@@ -1415,6 +1433,39 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     };
   }
 
+  // The rows the Clean up summary lists: one per cleanup match, sized by what the rule counted (a folder's own size
+  // can differ, as with Windows temp files). Cached for as long as the results they come from stay the same.
+  const summaryRowsCache = new WeakMap<ResultRow[], ResultRow[]>();
+  function summaryRows(state: ResultsState, requestedRoot: string): ResultRow[] {
+    const cached = summaryRowsCache.get(state.rows);
+    if (cached !== undefined) return cached;
+    let rows: ResultRow[];
+    if (state.source === 'live' && lastResults !== null) {
+      const matchBytes = new Map(lastResults.matches.map((match) => [pathKey(match.path), match.bytes]));
+      // After a clean a row is smaller than its match was; the smaller figure wins.
+      const withRows = state.rows
+        .filter((row) => row.action !== null)
+        .map((row) => ({ ...row, bytes: Math.min(row.bytes, matchBytes.get(pathKey(row.path)) ?? row.bytes) }));
+      rows = [
+        ...withRows,
+        ...rowsForMatches(
+          lastResults.matches,
+          lastResults.root,
+          guard,
+          new Set(withRows.map((row) => pathKey(row.path))),
+        ),
+      ];
+    } else if (state.source === 'snapshot') {
+      const loaded = deps.store.load(requestedRoot);
+      if (loaded.kind !== 'ok') return state.rows;
+      rows = rowsForMatches(loaded.snapshot.matches, loaded.snapshot.root, guard);
+    } else {
+      return state.rows;
+    }
+    summaryRowsCache.set(state.rows, rows);
+    return rows;
+  }
+
   function getResultsSummary(requestedRoot: string): ResultsSummaryState {
     const state = getResults(requestedRoot);
     return {
@@ -1425,7 +1476,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
       rulesStale: state.rulesStale,
       depthLimited: state.depthLimited,
       categories: state.categories,
-      contributors: topContributors(state.rows),
+      contributors: topContributors(summaryRows(state, requestedRoot)),
     };
   }
 

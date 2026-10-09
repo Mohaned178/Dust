@@ -8,14 +8,17 @@ export {
 } from '@fluentui/react-icons/headless/svg/apps-list';
 export { ArrowClockwise20Regular as RefreshIcon } from '@fluentui/react-icons/headless/svg/arrow-clockwise';
 export { ArrowUndo20Regular as UndoIcon } from '@fluentui/react-icons/headless/svg/arrow-undo';
+export { Box20Regular as PackageIcon } from '@fluentui/react-icons/headless/svg/box';
 export { Checkmark20Regular as CheckIcon } from '@fluentui/react-icons/headless/svg/checkmark';
 export { CheckmarkCircle20Regular as SuccessIcon } from '@fluentui/react-icons/headless/svg/checkmark-circle';
 export { ChevronDown20Regular as ChevronDownIcon } from '@fluentui/react-icons/headless/svg/chevron-down';
 export { ChevronRight20Regular as ChevronRightIcon } from '@fluentui/react-icons/headless/svg/chevron-right';
 export { Code20Regular as CodeIcon, Code24Regular as DeveloperNavIcon } from '@fluentui/react-icons/headless/svg/code';
 export { Copy20Regular as CopyIcon } from '@fluentui/react-icons/headless/svg/copy';
+export { Database20Regular as CacheIcon } from '@fluentui/react-icons/headless/svg/database';
 export { Delete20Regular as DeleteIcon } from '@fluentui/react-icons/headless/svg/delete';
 export { Dismiss20Regular as DismissIcon } from '@fluentui/react-icons/headless/svg/dismiss';
+export { Document20Regular as DocumentIcon } from '@fluentui/react-icons/headless/svg/document';
 export { ErrorCircle20Regular as ErrorIcon } from '@fluentui/react-icons/headless/svg/error-circle';
 export { Folder20Regular as FolderIcon } from '@fluentui/react-icons/headless/svg/folder';
 export { FolderOpen20Regular as FolderOpenIcon } from '@fluentui/react-icons/headless/svg/folder-open';

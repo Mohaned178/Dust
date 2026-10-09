@@ -245,6 +245,66 @@ export function buildRowsFromSnapshot(snapshot: SnapshotData, env?: ResultsEnv):
   });
 }
 
+interface MatchLike {
+  path: string;
+  ruleId: string;
+  category: string;
+  bytes: number;
+  grade: 'safe' | 'review';
+  evidence: string;
+  origin?: 'detected';
+}
+
+/**
+ * One row per cleanup match, sized by what the rule counted. The Clean up summary lists every match the category
+ * totals count, including those with no folder row of their own (a saved scan keeps only the top of the tree, and the
+ * Recycle Bin is not a folder). `skip` holds lower-cased paths that already have a row.
+ */
+export function rowsForMatches(
+  matches: ReadonlyArray<MatchLike>,
+  root: string,
+  env?: ResultsEnv,
+  skip: ReadonlySet<string> = new Set(),
+): ResultRow[] {
+  const seen = new Set(skip);
+  const rows: ResultRow[] = [];
+  for (const match of matches) {
+    if (!isCategoryId(match.category)) continue;
+    const key = pathKey(match.path);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(
+      toResultRow(
+        {
+          path: match.path,
+          bytes: match.bytes,
+          allocatedBytes: match.bytes,
+          fileCount: 0,
+          folderCount: 0,
+          linkCount: 0,
+          newestMtimeMs: 0,
+          errorCount: 0,
+          partial: false,
+        },
+        {
+          root,
+          complete: true,
+          childCount: 0,
+          action: {
+            ruleId: match.ruleId,
+            category: match.category,
+            grade: match.grade,
+            evidence: match.evidence,
+            origin: match.origin,
+          },
+          env,
+        },
+      ),
+    );
+  }
+  return rows;
+}
+
 export function summarizeCategories(
   categories: ReadonlyArray<{ ruleId: string; category: string; bytes: number; items: number }>,
 ): CategorySummaryRow[] {

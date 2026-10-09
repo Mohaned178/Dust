@@ -692,10 +692,73 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 4 — Scan and Clean up
 
-- [ ] Build §3.2 and §3.3: the category list, expandable item lists, Keep with Undo, the sticky footer, and the Clean
+- [x] Build §3.2 and §3.3: the category list, expandable item lists, Keep with Undo, the sticky footer, and the Clean
       dialog (plan → acknowledge → progress → summary).
-- [ ] Build Quick Clean on the same dialog with `scope:'quick'`.
-- [ ] Handle the admin relaunch.
+- [x] Build Quick Clean on the same dialog with `scope:'quick'`.
+- [x] Handle the admin relaunch.
+      Notes: the page is `pages/cleanup/` (`CleanupPage` picks the view, `ScanView`, `ResultsView`, `CategoryList`,
+      `CleanDialog`, `openClean.tsx`, `refresh.ts`). Selection and kept items are pure functions in `lib/selection.ts`,
+      held in `stores/cleanup.ts` as **differences from the defaults** (safe: ticked, review: unticked), so a refreshed
+      scan never wipes the user's choices. Paths are keyed case-insensitively. Danger rows and `npm-projects` are never
+      offered; Developer dependencies are a link to the Developer page. A category with no safe item goes under
+      "Take a look first" and starts unticked; a mixed category stays in the main list with its review rows unticked
+      (tri-state checkbox). The footer figure is the sum of the exact rows passed to `previewClean({scope:'row'})`;
+      the dialog total comes from `preview.totals`.
+      **Plan inconsistency to decide:** the sketch in §3.3 shows Recycle Bin ticked, but every Recycle Bin item is graded
+      `review` (irreversible), and §1.2 says only safe items are preselected. Clean up follows §1.2, so Recycle Bin starts
+      unticked under "Take a look first". Home's headline ("can be freed safely") still adds the Recycle Bin in, because
+      it sums the Quick clean categories; so the Clean up footer can read lower than the Home figure (by the bin, and by
+      any other review item). Quick clean itself does include the bin (behind the acknowledgement checkbox). Options:
+      drop the bin from Home's headline, or keep it and add a line. Left as is, for the owner to choose.
+      **Rows must add up to the totals (found on the live run, fixed):** the first version hid rows that Home and
+      Quick clean count. Two causes. (1) It dropped any row whose folder is graded `danger`; `C:\Windows\Temp` is
+      graded system-critical as a folder but its rule marks the contents safe, and Quick clean includes it. Clean up now
+      offers every row that has a cleanup rule; the plan lists anything it refuses under "not included". (2) After a
+      relaunch the saved scan keeps only the top of the folder tree, so most matches had no row (temp 1 of 2, app
+      caches 0 of 10); and the Recycle Bin is not a folder, so a live scan had no row for it either. `getResultsSummary`
+      now builds its rows from the cleanup **matches** (`rowsForMatches` in `host/results.ts`), sized by what the rule
+      counted (a folder's own size can differ: Windows temp is 2.6 MB as a folder, 0 for the rule). The live results keep
+      their matches (and drop cleaned ones after a clean). Checked on the real machine, for both a saved and a live
+      scan: for every category the number of rows equals `items` and the sum of their sizes equals `bytes`, and the
+      footer figure equals the plan total (711 MB).
+      **Cap:** the host sends at most 200 rows per category. The list says "Showing the largest 200 of N items" when
+      the category has more, and only those rows can be selected. Cleaning a whole category beyond 200 needs a new
+      IPC, so it was not added. Quick clean (`scope:'quick'`) covers everything in its categories.
+      **Deviation:** per-item recovery is not loaded lazily on each row (`previewClean({scope:'row'})` per click).
+      Every item's recovery and rebuild command is shown in the Clean dialog before anything is deleted, which is the
+      point of the lazy load. Rows show the rule's "why" line instead.
+      **Not built:** the "Explore disk ›" link (phase 5). `view: 'explore'` falls back to the results.
+      **Scan:** `ScanView` reads the run from the scan store (so a fast scan is never missed), ticks its own 1 s
+      clock, shortens the path in the middle with JS, and on any finish (including cancel) reads the lists again
+      and then opens the results; a cancelled scan shows "Scan cancelled. Showing what was found." A run missing
+      from the store after 3 s opens the results instead of waiting. Opened from the sidebar with no parameters, the
+      page shows a scan that is running, otherwise the system drive's results.
+      **Dialog:** one `Dialog` with internal steps (planning, plan, deleting, done, failed). `Dialog` has a new
+      `initialFocus` ref, and every step puts focus on its safe control (Cancel, Done, Close). It cannot be dismissed
+      while deleting. Progress reads `clean-item` events from the clean store and is weighted by planned bytes. The
+      acknowledgement list is the review-grade paths, as before. The summary shows the drive "Before" (read before the
+      clean) and "Now" (read again afterwards through `refreshAfterClean`), never a computed figure. "Relaunch as
+      administrator" shows in the plan when an item needs it and in the summary when such an item failed. A quick
+      plan that is still building is cancelled with `cancelScan` if the dialog closes. The dialog is its own lazy chunk
+      (14 kB), opened through `openCleanDialog`. Copy was rewritten (no "Analyze", no "plan expired").
+      **Host:** the `folders` scan event is now opt-in (`emitFolderEvents`, off when `DUST_RENDERER=next`, on for the
+      old renderer), as phase 2 asked. `getResultsSummary` was corrected as described above (new host tests for a live
+      scan with a row-less match and for a saved scan). **Home:** a "Quick clean" button next to "Scan again" in the results hero.
+      **Bundle:** entry chunk 248.0 kB (budget 250); `CleanupPage` 39 kB and `CleanDialog` 14 kB are lazy.
+      **Tests:** `test/renderer-next/pages/cleanup.test.tsx` (23 cases: preselection, grouping, cap note, Keep and
+      Undo, link from Home, notices, the dialog steps, acknowledgement, progress weighting, summary with the drive read
+      again, failures and admin relaunch, refused plans, cancel, Quick clean, a StrictMode double mount, a system-graded
+      folder that still has a rule, every scan view
+      state) and `lib/selection.test.ts`, `lib/clean.test.ts`. Whole app suite: 587 tests.
+      **Verified in the running app** (production build of the next renderer, Electron driven over the debug port,
+      real C:\ data): a full scan of C:\ (660k files, 32 s) showed the progress, the path cut in the middle and
+      "Found so far"; it opened the results by itself; a category opened in place with its items; the Clean dialog
+      plan for the selected rows and the Quick clean plan both rendered with Cancel focused, "Delete 599 MB" and
+      the footer figure equal to the plan total. JS heap after a garbage collection with the results open: 3.5 MB
+      (4.8 MB after opening a category and both dialogs); the budget is 80 MB. That is the JS heap from DevTools'
+      `Runtime.getHeapUsage`, not whole-process memory. The scan replaced the saved scan on this machine.
+      **Not exercised live:** deleting anything (no real delete was run on this machine), so the progress and
+      summary steps, the Keep toast and the administrator relaunch are covered by tests only; scroll smoothness.
 - **Done when:**
   - The full flow works on a real C:\ scan.
   - The confirm button shows the size.

@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AggregateTree, SnapshotStore, volumeRootOf } from '@dust/core';
+import { AggregateTree, SnapshotStore, buildSnapshot, volumeRootOf } from '@dust/core';
 import type { ProjectOptions, Rule, RuleContext, RuleEnv, SystemInfoStatic, VolumeInfo } from '@dust/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEngineHost } from '../src/main/host/engine-host';
@@ -90,6 +90,11 @@ describe('createEngineHost', () => {
       projects: 1,
       reclaimableBytes: 10,
     });
+
+    // The summary lists each match once, sized by what the rule counted.
+    const summary = host.getResultsSummary(tree.root);
+    expect(summary.source).toBe('live');
+    expect(summary.contributors.temp.map((row) => row.bytes)).toEqual([10]);
 
     const loaded = store.load();
     expect(loaded.kind).toBe('ok');
@@ -1245,6 +1250,45 @@ describe('createEngineHost', () => {
     expect(steps).toEqual(['projects', 'rules', 'detection', 'rows', 'snapshot']);
   });
 
+  it('leaves out folder events when they are switched off, and still finishes', async () => {
+    let fake!: FakeSession;
+    const events: ScanEvent[] = [];
+    const host = createEngineHost({
+      store,
+      pool: false,
+      listVolumes: volumeList,
+      getVolumeUsage: () => [],
+      createRules: () => [],
+      createSession: (options) => (fake = new FakeSession(options)),
+      folderIntervalMs: 0,
+      emitFolderEvents: false,
+    });
+    host.onEvent((event) => events.push(event));
+
+    await host.startAnalyze(tree.root);
+    for (let index = 0; index < 3; index += 1) {
+      fake.options.onFolder?.({
+        path: join(tree.root, `d${index}`),
+        bytes: 1,
+        allocatedBytes: 1,
+        fileCount: 0,
+        folderCount: 0,
+        linkCount: 0,
+        newestMtimeMs: 0,
+        errorCount: 0,
+        partial: false,
+      });
+    }
+
+    const finished = nextEvent(host, 'finished');
+    fake.finish(emptyScanResult(tree.root, 'complete'));
+    await finished;
+
+    expect(events.some((event) => event.type === 'folders')).toBe(false);
+    expect(events.some((event) => event.type === 'finished')).toBe(true);
+    expect(host.getResults(tree.root).rows.length).toBeGreaterThan(0);
+  });
+
   it('streams quick-clean progress and cancels the targeted measurement', async () => {
     let fake!: FakeSession;
     const events: ScanEvent[] = [];
@@ -1424,6 +1468,90 @@ describe('createEngineHost', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sessions).toHaveLength(1);
     expect(await pending).toEqual({ ok: false, reason: 'failed', message: 'Quick clean cancelled' });
+  });
+
+  it('lists a live match that has no folder row, such as the Recycle Bin, in the Clean up summary', async () => {
+    tree.file('temp/junk.bin', 'abcdefghij');
+    const virtualRule: Rule = {
+      id: 'fixture-bin',
+      category: 'recycle-bin',
+      title: 'Fixture bin',
+      action: { kind: 'delete-path' },
+      match: () => [
+        {
+          path: join(tree.root, 'virtual-bin'),
+          bytes: 7,
+          grade: 'review',
+          recovery: { kind: 'junk', reason: 'fixture bin' },
+          evidence: 'fixture bin',
+        },
+      ],
+    };
+    const host = createEngineHost({
+      store,
+      pool: false,
+      env: ruleEnvFor(tree.root),
+      listVolumes: volumeList,
+      getVolumeUsage: () => [{ volume: volumeList()[0]!.root, label: 'Fixtures', totalBytes: 1000, freeBytes: 400 }],
+      createRules: () => [tempRule(tree.root), virtualRule],
+    });
+    const finished = nextEvent(host, 'finished');
+    await host.startAnalyze(tree.root);
+    await finished;
+
+    const { contributors, categories } = host.getResultsSummary(tree.root);
+    expect(contributors['recycle-bin'].map((row) => [row.bytes, row.action?.grade])).toEqual([[7, 'review']]);
+    expect(categories.find((row) => row.category === 'recycle-bin')?.items).toBe(1);
+    expect(contributors.temp.map((row) => row.bytes)).toEqual([10]);
+  });
+
+  it('lists saved matches that have no folder row in the Clean up summary', async () => {
+    const root = tree.root;
+    store.save(
+      buildSnapshot({
+        root,
+        startedAt: 1,
+        finishedAt: 2,
+        status: 'complete',
+        tree: new AggregateTree(),
+        projects: [],
+        categories: [{ ruleId: 'fixture-cache', category: 'app-caches', bytes: 300, items: 2 }],
+        matches: [
+          {
+            path: join(root, 'local', 'a'),
+            ruleId: 'fixture-cache',
+            category: 'app-caches',
+            bytes: 100,
+            grade: 'safe',
+            evidence: 'A',
+          },
+          {
+            path: join(root, 'local', 'b'),
+            ruleId: 'fixture-cache',
+            category: 'app-caches',
+            bytes: 200,
+            grade: 'review',
+            evidence: 'B',
+          },
+        ],
+        disks: [],
+      }),
+    );
+    const host = createEngineHost({ store, pool: false, env: ruleEnvFor(root), listVolumes: volumeList });
+
+    const summary = host.getResultsSummary(root);
+    expect(summary.source).toBe('snapshot');
+    expect(summary.categories.find((row) => row.category === 'app-caches')?.items).toBe(2);
+    // Both matches are listed, largest first, with their rule's grade and reason, even though the saved folder list
+    // has no row for either of them.
+    expect(
+      summary.contributors['app-caches'].map((row) => [row.bytes, row.action?.grade, row.action?.evidence]),
+    ).toEqual([
+      [200, 'review', 'B'],
+      [100, 'safe', 'A'],
+    ]);
+    // A second call reuses the same rows.
+    expect(host.getResultsSummary(root).contributors['app-caches']).toHaveLength(2);
   });
 
   it('serves system info through the injected service', async () => {

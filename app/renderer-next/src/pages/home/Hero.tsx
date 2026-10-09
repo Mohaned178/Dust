@@ -57,6 +57,7 @@ export interface HeroProps {
   state: HeroState;
   onScan: () => void;
   scanStarting: boolean;
+  onQuickClean: () => void;
 }
 
 function UsageLine({ usedBytes, totalBytes }: { usedBytes: number | null; totalBytes: number | null }) {
@@ -72,10 +73,12 @@ function ResultsHero({
   state,
   onScan,
   scanStarting,
+  onQuickClean,
 }: {
   state: Extract<HeroState, { kind: 'results' }>;
   onScan: () => void;
   scanStarting: boolean;
+  onQuickClean: () => void;
 }) {
   const { rows, usedBytes, totalBytes, root, onSelectCategory } = state;
   // The headline is the sum of the rows in the bar's legend, so every figure can be traced to a line.
@@ -128,6 +131,9 @@ function ResultsHero({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="subtle" size="lg" onClick={onQuickClean}>
+            Quick clean
+          </Button>
           <Button variant="subtle" size="lg" onClick={onScan} loading={scanStarting}>
             Scan again
           </Button>
@@ -147,7 +153,7 @@ function ResultsHero({
   );
 }
 
-export function Hero({ state, onScan, scanStarting }: HeroProps) {
+export function Hero({ state, onScan, scanStarting, onQuickClean }: HeroProps) {
   switch (state.kind) {
     case 'loading':
       return (
@@ -252,6 +258,6 @@ export function Hero({ state, onScan, scanStarting }: HeroProps) {
         </Card>
       );
     case 'results':
-      return <ResultsHero state={state} onScan={onScan} scanStarting={scanStarting} />;
+      return <ResultsHero state={state} onScan={onScan} scanStarting={scanStarting} onQuickClean={onQuickClean} />;
   }
 }

@@ -1,4 +1,6 @@
 import type { CategoryId } from '@dust/core';
+import { CacheIcon, CodeIcon, DeleteIcon, DocumentIcon, PackageIcon } from '../ui/icons';
+import type { IconComponent } from '../ui/icons';
 
 /** Plain-language names and one-line explanations for the cleanup categories. */
 export const CATEGORY_COPY: Record<CategoryId, { name: string; description: string }> = {
@@ -15,3 +17,16 @@ export const CATEGORY_COPY: Record<CategoryId, { name: string; description: stri
 export function categoryName(id: CategoryId): string {
   return CATEGORY_COPY[id].name;
 }
+
+/** The 20px glyph for each category's row. */
+export const CATEGORY_ICONS: Record<CategoryId, IconComponent> = {
+  temp: DocumentIcon,
+  'recycle-bin': DeleteIcon,
+  'npm-cache': PackageIcon,
+  'app-caches': CacheIcon,
+  'npm-projects': CodeIcon,
+};
+
+/** What Quick clean covers, in plain words. It never includes developer dependencies. */
+export const QUICK_CLEAN_NOTE =
+  'Quick clean covers temporary files, the Recycle Bin, package caches and app caches. It never touches project dependencies.';

@@ -433,6 +433,7 @@ void app
     const host = createEngineHost({
       store,
       streamLiveRows: false,
+      emitFolderEvents: !nextRenderer,
       workerPath: resolveWorkerPath(__dirname),
       volumesCacheFile: join(userDataDir, 'volumes-cache.json'),
       installedAppsCacheFile: join(userDataDir, 'installed-apps-cache.json'),

@@ -1,6 +1,6 @@
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { cn } from '../lib/cn';
 import { Button } from './Button';
 import { DismissIcon } from './icons';
@@ -15,6 +15,11 @@ export interface DialogProps {
   footer?: ReactNode;
   /** Hide the corner close button when the dialog must be answered, e.g. mid-deletion. */
   dismissible?: boolean;
+  /**
+   * Where focus lands when the dialog opens. Without it Radix picks the first control, which is the close button.
+   * Dialogs that delete things point it at Cancel.
+   */
+  initialFocus?: RefObject<HTMLElement | null>;
   className?: string;
 }
 
@@ -27,6 +32,7 @@ export function Dialog({
   children,
   footer,
   dismissible = true,
+  initialFocus,
   className,
 }: DialogProps) {
   // Radix only restores focus to a Dialog.Trigger, and ours are opened from ordinary buttons, so remember the opener.
@@ -36,8 +42,13 @@ export function Dialog({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="dust-overlay fixed inset-0 z-40 bg-backdrop" />
         <DialogPrimitive.Content
-          onOpenAutoFocus={() => {
+          onOpenAutoFocus={(event) => {
             openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            const target = initialFocus?.current;
+            if (target) {
+              event.preventDefault();
+              target.focus();
+            }
           }}
           onCloseAutoFocus={() => {
             openerRef.current?.focus();
