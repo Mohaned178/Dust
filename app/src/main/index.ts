@@ -493,7 +493,15 @@ void app
       window.show();
       window.focus();
     });
-    window.once('ready-to-show', () => window.show());
+    // 'ready-to-show' waits for a first paint and can be starved on some GPUs/sessions, which left the window
+    // hidden forever. Never let the app sit invisible: show on load, or after a short timeout at the latest.
+    const showWindow = (): void => {
+      if (!window.isDestroyed() && !window.isVisible()) window.show();
+    };
+    window.once('ready-to-show', showWindow);
+    window.webContents.once('did-finish-load', showWindow);
+    const showTimer = setTimeout(showWindow, 5000);
+    window.once('closed', () => clearTimeout(showTimer));
     app.on('before-quit', () => {
       updates.dispose();
       host.dispose();
