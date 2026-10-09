@@ -12,12 +12,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Check the tag matches the app version
+        shell: pwsh
+        run: |
+          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          $appVersion = (Get-Content app/package.json -Raw | ConvertFrom-Json).version
+          if ($tagVersion -ne $appVersion) {
+            Write-Error "Tag $env:GITHUB_REF_NAME does not match app/package.json version $appVersion."
+            exit 1
+          }
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - name: Build installer
         run: npm run dist -w app -- --publish never
@@ -30,6 +40,34 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
           } | Set-Content app/release/sha256sums.txt
+      - name: Write release notes
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $lines = Get-Content CHANGELOG.md
+          $notes = @()
+          $inSection = $false
+          foreach ($line in $lines) {
+            if ($line -match '^## \[') {
+              if ($inSection) { break }
+              if ($line.StartsWith("## [$version]")) { $inSection = $true; continue }
+            }
+            elseif ($inSection) { $notes += $line }
+          }
+          $body = ($notes -join "`n").Trim()
+          if (-not $body) {
+            Write-Error "CHANGELOG.md has no section for version $version."
+            exit 1
+          }
+          $install = @"
+
+          ## Install
+
+          Download ``Dust-Setup-$version.exe`` and run it. The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC". Choose More info, then Run anyway.
+
+          To verify the download, compare its SHA-256 hash with the matching line in ``sha256sums.txt``: ``Get-FileHash Dust-Setup-$version.exe -Algorithm SHA256``.
+          "@
+          Set-Content -Path release-notes.md -Value ($body + "`n" + $install) -Encoding utf8
       - name: Create draft release
         shell: pwsh
         env:
@@ -38,4 +76,4 @@ jobs:
           $installer = (Get-ChildItem app/release/Dust-Setup-*.exe).FullName
           $assets = @($installer, 'app/release/latest.yml', 'app/release/sha256sums.txt')
           $assets += (Get-ChildItem app/release/*.blockmap).FullName
-          gh release create "$env:GITHUB_REF_NAME" --draft --generate-notes --title "Dust $env:GITHUB_REF_NAME" @assets
+          gh release create "$env:GITHUB_REF_NAME" --draft --notes-file release-notes.md --title "Dust $env:GITHUB_REF_NAME" @assets

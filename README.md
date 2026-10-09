@@ -5,116 +5,138 @@
 
 **Find what is safe to delete.**
 
+A calm, open-source PC cleaner for Windows. It shows where the space went, explains each item, and lets you choose.
+
+[![Latest release](https://img.shields.io/github/v/release/Mohaned178/Dust?label=release&style=flat-square)](https://github.com/Mohaned178/Dust/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/Mohaned178/Dust/ci.yml?label=CI&logo=github&style=flat-square)](https://github.com/Mohaned178/Dust/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Mohaned178/Dust?label=release&style=flat-square)](https://github.com/Mohaned178/Dust/releases)
-[![License](https://img.shields.io/github/license/Mohaned178/Dust?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/github/license/Mohaned178/Dust?style=flat-square)](LICENSE)
 [![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d6?logo=windows&style=flat-square)](#install)
-[![Node](https://img.shields.io/badge/node-%5E20.19%20%7C%7C%20%3E%3D22.12-339933?logo=node.js&logoColor=white&style=flat-square)](package.json)
+[![Downloads](https://img.shields.io/github/downloads/Mohaned178/Dust/total?style=flat-square)](https://github.com/Mohaned178/Dust/releases)
+
+**[Download the latest version](https://github.com/Mohaned178/Dust/releases/latest)**
+
 </div>
 
-Dust is a Windows PC cleaner and manager for everyone, with a dedicated section for developers. It scans a drive, shows where the space went, and removes what is safe to remove — temp files, the Recycle Bin, browser and app caches, and the `node_modules` and package caches development work leaves behind — while explaining, before anything is deleted, what each item is, why it is safe and how it comes back. It also manages startup apps and installed apps, and shows what the PC is made of.
+Dust is a PC cleaner and manager for Windows, for everyone, with a dedicated section for developers. It scans a drive, shows where the space went, and removes what is safe to remove: temporary files, the Recycle Bin, browser and app caches, and the `node_modules` folders and package caches that development work leaves behind. Before anything is deleted, it explains what each item is, why it is safe and how it comes back.
 
-Every deletion is previewed and explicitly confirmed. Dust never deletes anything on its own.
+Every deletion is previewed and confirmed by you. Dust never deletes anything on its own.
 
 > [!NOTE]
-> Dust is Windows-only. Docker cleanup, a quarantine buffer, and cross-platform builds are planned but not shipped yet — see [Roadmap](#roadmap).
+> Dust is Windows-only. Docker cleanup, a recovery buffer for deletions, dark mode and cross-platform builds are not shipped yet. See the [Roadmap](#roadmap).
 
-**Contents:** [Why Dust](#why-dust) · [Install](#install) · [Quick start](#quick-start) · [Features](#features) · [How safety works](#how-safety-works) · [Documentation](#documentation) · [Reference](#reference) · [Roadmap](#roadmap)
+**Contents:** [What Dust does](#what-dust-does) · [Why you can trust it](#why-you-can-trust-it) · [Install](#install) · [Build from source](#build-from-source) · [How safety works](#how-safety-works) · [Documentation](#documentation) · [Reference](#reference) · [Roadmap](#roadmap)
+
+## What Dust does
+
+### Home
+
+The first screen answers "how is my PC?" without a score. A headline says how much can be freed (the sum of the rows you can open; Clean up then ticks only the safe ones), with a bar of the drive split by category, **Scan again** and **Quick clean** buttons, and notices for a cancelled scan, changed rules or a depth-limited scan. Below it are the other drives and tiles for Startup, Apps, PC Health and Developer that each fill in on their own.
+
+### Clean up
+
+A deep, progressive scan of the system drive (files scanned, elapsed time, the current path, and what has been found so far; cancellable, with partial results kept), then a category-first list: Temporary files, Recycle Bin, Package cache and App caches. Each category opens in place into its items, each with a plain "why" line, **Keep** with Undo, and **Show in Explorer**. Only items graded safe start ticked; categories with nothing safe (the Recycle Bin) sit under "Take a look first", unticked.
+
+**Review and clean** opens a plan that names the amount ("Delete 599 MB"), lists what comes back and how, asks for acknowledgement when something cannot be recovered, shows progress, and ends with the drive before and now. Items under `C:\Windows\Temp` offer **Relaunch as administrator**. **Quick clean** (from Home) builds the same plan for the four quick categories and never touches `node_modules`.
+
+### Explore disk
+
+A lazy, virtualized folder tree that copes with thousands of children per folder, a treemap of the folder you are in, search, a **Show protected items** switch, and **Show in Explorer**. It reads the saved scan, so folders deeper than the saved depth say so.
+
+### Apps
+
+Removes an installed app with its own uninstaller, then clears what it leaves behind. The list comes from the Windows uninstall registry (per-user and machine-wide). Pick an app and Dust builds a plan showing the uninstaller it will run, leftover folders (graded **safe** or **review**, with the reason), registry keys and startup entries, plus what is kept and why.
+
+Only a whitelisted set of locations can be targeted: the app's registered install directory, its `%APPDATA%`, `%LOCALAPPDATA%` and `%ProgramData%` folders, and its registry keys. Paths are validated again at execution time against the protected-path policy, user-data items always go through the Recycle Bin, and registry keys are exported to `%APPDATA%\Dust\uninstall-backups` before deletion, so every removal has a `reg import` restore command. Deletions are gated on a write-ahead journal. Machine-wide removals ask for administrator rights and relaunch elevated; the elevated instance rebuilds the plan from the app id and waits for your confirmation before touching anything.
+
+### Startup
+
+One On/Off switch per Windows startup entry, in one list with an All, On and Off filter. Turning an entry off moves it to a Dust backup (the `Run-Dust-Disabled` registry key for Run entries, `%APPDATA%\Dust\startup-disabled` for Startup-folder shortcuts) and offers an **Undo** toast; turning it on moves it back to its original location. Dust never deletes an entry.
+
+Entries are read from the `HKCU` and `HKLM` Run keys (including `WOW6432Node`) and the user and common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag. Protected system entries (Windows Security, GPU and audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
+
+### PC Health
+
+How this PC is doing right now and what it is made of: processor and memory rings read every two seconds while the page is open, storage per internal drive, and spec cards (This PC, Windows, Processor, Memory, Graphics, Firmware). **Copy specs** produces a plain-text block for bug reports with no serial numbers, MAC addresses or IP addresses.
+
+### Developer
+
+`node_modules` folders grouped by when each project was last used (Not used for 6+ months, Used now and then, Used recently, Loose node_modules, Kept), with a "Can be rebuilt" or "Check first" mark, **Keep** with Undo, and **Select all safe and unused**. The same Clean dialog shows each project's rebuild command, with a copy button, before anything is deleted. A Toolchain caches section covers the package cache and links to Clean up. `node_modules` folders that belong to installed apps (under Program Files, ProgramData, AppData, editor extension folders or a packaged Electron app) are listed but never offered, because deleting them would break the app.
+
+### Settings
+
+About (version, license), a privacy statement, administrator relaunch, and updates. The look is a fixed product decision (a light Windows 11 style with Windows blue) and is not configurable. Dark mode is planned.
+
+## Why you can trust it
+
+- **It explains before it acts.** Every item has a plain reason and a statement of how it comes back. Every plan names the amount before you confirm.
+- **Only safe items are preselected.** Anything you untick is left alone, and review items start unticked.
+- **Exact sizes and paths.** Every headline total is the sum of rows you can open.
+- **No scores, no alarms.** Dust shows no health score, no "issues found" count and no countdowns, and it has no registry cleaner.
+- **Nothing deletes on its own.** There is no background or automatic deletion. Every deletion needs a preview and your confirmation.
+- **It runs entirely on this PC.** There is no account and no telemetry. The only place Dust connects to is GitHub, to look for new versions and to download one when there is one.
+- **It is open source.** The code is MIT-licensed and in this repository.
 
 ## Install
 
-Download `Dust-Setup-1.0.0.exe` from [Releases](https://github.com/Mohaned178/Dust/releases) and run it. The installer is per-user, asks where to install, and creates Start Menu and desktop shortcuts.
+**System requirements:** Windows 10 or 11, 64-bit (x64).
+
+1. Download `Dust-Setup-<version>.exe` from [Releases](https://github.com/Mohaned178/Dust/releases/latest).
+2. Run it. The installer is per-user, asks where to install, and creates Start Menu and desktop shortcuts.
 
 > [!IMPORTANT]
-> The 1.0.0 build is **not code-signed**, so Windows SmartScreen may show "Windows protected your PC" on first run. Choose **More info → Run anyway**. Signed builds are on the [Roadmap](#roadmap).
+> The installer is **not code-signed**, so Windows SmartScreen may show "Windows protected your PC". Choose **More info**, then **Run anyway**. Code signing is on the [Roadmap](#roadmap).
 
-## Why Dust
+To verify the download, compare its SHA-256 hash with the matching line in `sha256sums.txt` from the same release:
 
-- **Friction.** Cleaning a disk takes too many steps — find the folders, check sizes, decide what is safe, delete by hand. Dust cuts it to a few explicit steps: Analyze → see what is reclaimable → confirm a plan → execute.
-- **Fear.** No tool gives a trustworthy answer to "is this safe to delete?" Dust answers per item, with a grade, the evidence behind it, and what comes back if it is removed.
-- **The developer wedge.** npm cleanup — dead `node_modules` plus the npm download cache — is the reason to install Dust. Temp-file cleaning is table stakes around it.
+```powershell
+Get-FileHash .\Dust-Setup-<version>.exe -Algorithm SHA256
+```
 
-## Quick start
+Installed builds check GitHub Releases for updates and say when one is ready.
 
-Requirements:
+## Build from source
 
-- Windows 10 or 11
-- Node.js `^20.19.0 || >=22.12.0` and npm
+Requirements: Windows 10 or 11, and Node.js `^20.19.0 || >=22.12.0` with npm.
 
 ```bash
+git clone https://github.com/Mohaned178/Dust.git
+cd Dust
 npm install
 npm run dev:app
 ```
 
-`dev:app` bundles the Electron main/preload/worker processes with esbuild, starts Vite on `http://localhost:5173`, and launches Electron against it.
+`dev:app` bundles the Electron main, preload and worker processes with esbuild, starts Vite on `http://localhost:5173`, and launches Electron against it. Use an administrator terminal when you want to exercise the elevated flows (the [smoke checklist](#new-interface-smoke-checklist) assumes one).
 
 > [!WARNING]
 > Main-process code (`app/src/main/`) is not hot-reloaded. Restart `npm run dev:app` after changing it. The renderer hot-reloads normally.
 
-Build and run the production app:
+Build and run the production app, or build the installer into `app/release/`:
 
 ```bash
 npm run build:app
 npm start -w app
+npm run dist:app
 ```
 
-## Features
-
-### Home
-
-The first screen answers "how is my PC?" without a score. A headline says how much can be freed safely (the sum of the rows you can open), with a bar of the drive split by category, a **Scan again** and a **Quick clean** button, and notices for a cancelled scan, changed rules or a depth-limited scan. Below it: the other drives, and tiles for Startup, Apps, PC Health and Developer that each fill in on their own.
-
-### Clean up
-
-A deep, progressive scan of the system drive (files scanned, elapsed time, the current path, and what has been found so far; cancellable, with partial results kept), then a category-first list: Temporary files, Recycle Bin, Package cache and App caches. Each category opens in place into its items, each with a plain "why" line, **Keep** with Undo, and **Show in Explorer**. Only items graded safe start ticked; categories with nothing safe (the Recycle Bin) sit under "Take a look first", unticked. **Review and clean** opens a plan that names the amount ("Delete 599 MB"), lists what comes back and how, asks for acknowledgement when something cannot be recovered, shows progress, and ends with the drive before and now. Items under `C:\Windows\Temp` offer **Relaunch as administrator**.
-
-**Quick clean** (from Home) builds the same plan for the four quick categories, never touching `node_modules`.
-
-### Explore disk
-
-A lazy, virtualized folder tree (with thousands of children per folder), a squarified treemap of the folder you are in, search that runs in the main process, a **Show protected items** switch, and **Show in Explorer**. It reads the saved scan, so folders deeper than the saved depth say so.
-
-### Developer
-
-`node_modules` folders grouped by when each project was last used (Not used for 6+ months, Used now and then, Used recently, Loose node_modules, Kept), with a "Can be rebuilt" or "Check first" mark, **Keep** with Undo, and **Select all safe and unused**. The same Clean dialog shows each project's rebuild command, with a copy button, before anything is deleted. A package-cache row links to Clean up.
-
-### Startup
-
-One On/Off switch per Windows startup entry, in one list with an All, On and Off filter. Toggling off moves the entry to a Dust backup — the `Run-Dust-Disabled` registry key for Run entries, `%APPDATA%\Dust\startup-disabled` for Startup-folder shortcuts — and offers an **Undo** toast; toggling on moves it back to its original location. Dust never deletes an entry.
-
-Entries are read from `HKCU`/`HKLM` Run (including `WOW6432Node`) and the user/common Startup folders, with icons and publishers resolved from the executable. Entries disabled by Windows itself appear read-only with a **Windows** tag; protected system entries (Windows Security, GPU/audio drivers, `System32` commands) show a lock and cannot be toggled. Machine-wide entries ask for administrator rights and relaunch through the existing elevation flow, carrying a `--dust-startup-toggle=<id>` argument that is validated against the current list before any write.
-
-### Apps (uninstall)
-
-Removes an installed app with its own uninstaller, then clears what it leaves behind. The app list comes from the Windows uninstall registry (per-user and machine-wide); pick an app and Dust builds a plan showing the uninstaller it will run, leftover folders (graded **safe** or **review**, with the reason for each grade), registry keys, and startup entries, plus what is kept and why.
-
-Only a whitelisted set of locations can be targeted: an app's registered install directory, its `%APPDATA%`/`%LOCALAPPDATA%`/`%ProgramData%` folders, and its registry keys. Paths are validated again at execution time against the protected-path policy, user-data items always go through the Recycle Bin, and registry keys are exported to `%APPDATA%\Dust\uninstall-backups` before deletion so every removal has a `reg import` restore command. Deletions are gated on a write-ahead journal.
-
-Machine-wide removals ask for administrator rights and relaunch elevated; the elevated instance rebuilds the plan from the app id and waits for your confirmation before touching anything.
-
-### PC Health
-
-How this PC is doing right now and what it is made of: processor and memory rings read every two seconds while the page is open, storage per internal drive, and spec cards (This PC, Windows, Processor, Memory, Graphics, Firmware). **Copy specs** produces a plain-text block for bug reports with no serial numbers, MAC addresses, or IP addresses.
-
-### Settings
-
-About (version, license, a privacy statement), administrator relaunch, and updates. The look is a fixed product decision (a light Windows 11 style with Windows blue) and is not configurable; dark mode is planned.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## How safety works
 
 - **Nothing deletes without a plan.** `Cleaner.preview` mints a single-use, in-memory plan token; `Cleaner.execute(token)` is the only deletion path. Forged or expired tokens are refused.
 - **Action grade vs display grade.** Only whitelisted rule matches can enable cleanup, and their evidence is shown. Every visible row still gets an informational display grade with a "why".
-- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are red, read-only, hidden until "Show protected items" is on, and never actionable. Unknown paths are never actionable either.
-- **Per-category recovery.** Permanent delete only when a rule proves the asset is regenerable (the exact restore command is shown) or worthless. The Recycle Bin is the recovery path only for unverifiable content — not a blanket default, because recycling frees no bytes for GB-scale artifacts.
+- **A hard protected list.** System-critical roots (`C:\Windows`, Program Files, ProgramData, profile and volume roots) are read-only, hidden until "Show protected items" is on, and never actionable. Unknown paths are never actionable either.
+- **Per-category recovery.** Permanent delete only when a rule proves the asset is regenerable (the exact restore command is shown) or worthless. The Recycle Bin is the recovery path only for unverifiable content, not a blanket default, because recycling frees no bytes for GB-scale artifacts.
 - **One acknowledgement.** The plan's confirm stays disabled until the irreversibility acknowledgement is ticked.
 
 ## Documentation
 
-- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — what Dust is, the locked decisions, and the design principles.
-- [app/PRODUCT.md](app/PRODUCT.md) — users, positioning, brand commitments, and constraints.
-- [app/DESIGN.md](app/DESIGN.md) — the design system: tokens, components, and named rules.
-- [docs/superpowers/specs/2026-09-17-dust-mvp-design.md](docs/superpowers/specs/2026-09-17-dust-mvp-design.md) — the full MVP design spec.
-- [docs/superpowers/plans/](docs/superpowers/plans/) — the ordered implementation plans.
+- [PROJECT_BRIEF.md](PROJECT_BRIEF.md): what Dust is, the locked decisions, and the design principles.
+- [app/PRODUCT.md](app/PRODUCT.md): users, positioning, brand commitments, and constraints.
+- [app/DESIGN.md](app/DESIGN.md): the design system, with tokens, components, and named rules.
+- [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md): the rebuilt interface, with decisions, budgets and measurements.
+- [docs/superpowers/specs/2026-09-17-dust-mvp-design.md](docs/superpowers/specs/2026-09-17-dust-mvp-design.md): the full MVP design spec.
+- [docs/superpowers/plans/](docs/superpowers/plans/): the ordered implementation plans.
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release.
 
 ## Reference
 
@@ -186,14 +208,17 @@ DUST_PERF=1 npm test -w core
 
 Releases are tag-driven and produce a draft GitHub Release:
 
-1. Bump `version` in `app/package.json` and add a `CHANGELOG.md` entry; merge to `master`.
-2. Tag and push: `git tag v1.0.0 && git push origin v1.0.0`.
-3. The **Release** workflow (`.github/workflows/release.yml`) runs typecheck, tests, builds the NSIS installer, writes `sha256sums.txt`, and opens a draft release with both files attached.
-4. Review the draft, then publish it. `Dust-Setup-<version>.exe` is the asset users download.
+1. Bump `version` in `app/package.json` and move the `CHANGELOG.md` entries under a new `## [x.y.z]` heading; merge to `master`.
+2. Tag and push: `git tag v2.0.0 && git push origin v2.0.0`.
+3. The **Release** workflow (`.github/workflows/release.yml`) first checks that the tag matches the `app/package.json` version. It then runs typecheck, lint and tests, builds the NSIS installer, writes `sha256sums.txt`, and opens a draft release. The notes are the matching `CHANGELOG.md` section plus an install note. The installer, `latest.yml`, the blockmap and `sha256sums.txt` are attached.
+4. Check the draft, then publish it. `Dust-Setup-<version>.exe` is the asset users download, and installed apps read `latest.yml` from the published release.
 
 `npm run dist:app` reproduces the installer locally. Signing is unset: electron-builder's `win.certificateFile`/`certificatePassword` (or Azure Trusted Signing) are documented as a stub in `app/electron-builder.yml`.
 
-### Smoke checklist
+### New interface smoke checklist
+
+<details>
+<summary>Show the 13-step smoke checklist</summary>
 
 Run from an administrator terminal with `npm run dev:app`. This covers every screen of the interface in `app/renderer/` (see `docs/FRONTEND-PLAN.md`). Steps marked **(changes your PC)** delete or change real things; use a machine you can afford to change.
 
@@ -211,9 +236,11 @@ Run from an administrator terminal with `npm run dev:app`. This covers every scr
 12. **Keyboard only.** From each page, Tab reaches every control in a sensible order, each shows a visible focus ring, Escape closes dialogs, and arrow keys move through the Explore tree and the Developer list.
 13. **Reduced motion.** With Windows animation effects off, nothing slides or fades.
 
+</details>
+
 ### Development flags
 
-Environment variables used by development and benchmark tooling — not needed for normal use.
+Environment variables used by development and benchmark tooling. They are not needed for normal use.
 
 | Flag                       | Effect                                                                    |
 | -------------------------- | ------------------------------------------------------------------------- |
@@ -229,15 +256,20 @@ Environment variables used by development and benchmark tooling — not needed f
 
 - **The window opens but main-process changes don't appear.** Restart `npm run dev:app`; main bundles are not hot-reloaded.
 - **"Snapshot unreadable" banner.** `%APPDATA%\Dust\snapshot.json` is corrupt. Run Analyze to rebuild it; nothing else is lost.
-- **Some Temp items can't be cleaned.** `C:\Windows\Temp` needs elevation; use **Relaunch as Administrator** in the plan or Settings.
+- **Some Temp items can't be cleaned.** `C:\Windows\Temp` needs elevation; use **Relaunch as administrator** in the plan or Settings.
 - **Port 5173 is taken.** Vite runs with `strictPort`, so stop the other process or point the app at a different server with `DUST_DEV_SERVER_URL`.
 
 ## Roadmap
 
-Planned after 1.0, in rough order:
+Planned, in rough order:
 
-- Code signing and auto-update
+- Code signing
 - Docker image cleanup
-- Real pnpm/bun support (global store and symlink math); Yarn Berry
-- Quarantine (recovery buffer for deletions)
-- Cross-platform builds, background scheduled scans, and a visual treemap
+- Real pnpm and bun support (global store and symlink math); Yarn Berry
+- A recovery buffer for deletions, with Undo
+- Dark mode
+- Cross-platform builds and background scheduled scans
+
+## License
+
+[MIT](LICENSE)
