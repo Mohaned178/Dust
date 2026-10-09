@@ -216,6 +216,12 @@ function installCrashLogging(userDataDir: string): void {
   });
 }
 
+// The elevated copy shares the userData folder with the normal copy, so cache folders created by one are
+// unreadable to the other ("Unable to move the cache: Access is denied"). Give it its own session data.
+if (hasElevatedFlag(process.argv)) {
+  app.setPath('sessionData', join(app.getPath('userData'), 'elevated-session'));
+}
+
 void app
   .whenReady()
   .then(async () => {
@@ -322,6 +328,10 @@ void app
           break;
         }
       }
+    }
+    if (benchRoot === undefined && !app.requestSingleInstanceLock()) {
+      app.quit();
+      return;
     }
     const store = new VolumeSnapshotStore(userDataDir, systemDriveRoot(defaultRuleEnv()) ?? 'C:\\');
     const backupDir = backupDirFor(userDataDir);
@@ -469,6 +479,12 @@ void app
       updates,
     );
 
+    app.on('second-instance', () => {
+      if (window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    });
     window.once('ready-to-show', () => window.show());
     app.on('before-quit', () => {
       updates.dispose();
