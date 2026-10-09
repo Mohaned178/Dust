@@ -24,14 +24,15 @@ import { formatBytes, formatCount } from '../../lib/format';
 import { useCleanStore } from '../../stores/clean';
 import { useCleanupStore } from '../../stores/cleanup';
 import { useDashboardStore } from '../../stores/dashboard';
+import { useDevStore } from '../../stores/dev';
 import { useScanStore } from '../../stores/scan';
 import { Button } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { Dialog } from '../../ui/Dialog';
 import { RelativeTime } from '../../ui/Display';
 import { GradePill } from '../../ui/Badge';
-import { IconButton } from '../../ui/IconButton';
-import { ChevronRightIcon, CopyIcon, SuccessIcon } from '../../ui/icons';
+import { CopyLine } from '../../ui/CopyLine';
+import { ChevronRightIcon, SuccessIcon } from '../../ui/icons';
 import { Notice } from '../../ui/Notice';
 import { ProgressBar } from '../../ui/ProgressBar';
 import { Skeleton } from '../../ui/Skeleton';
@@ -85,17 +86,6 @@ function errorText(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function CopyCommand({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <code className="min-w-0 flex-1 font-mono text-caption break-all">{text}</code>
-      <IconButton label={label} onClick={() => void navigator.clipboard?.writeText(text).catch(() => {})}>
-        <CopyIcon className="size-4" aria-hidden="true" />
-      </IconButton>
-    </div>
-  );
-}
-
 function PlanItem({ item }: { item: CleanItemPreview }) {
   return (
     <li className="flex flex-col gap-1 rounded-control bg-canvas p-3">
@@ -110,7 +100,7 @@ function PlanItem({ item }: { item: CleanItemPreview }) {
         </span>
       </div>
       {item.recovery.kind === 'regenerate' ? (
-        <CopyCommand text={item.recovery.text} label={`Copy the rebuild command for ${item.path}`} />
+        <CopyLine text={item.recovery.text} label={`Copy the rebuild command for ${item.path}`} />
       ) : null}
       <p className="text-caption text-ink-2">{item.evidence}</p>
       {item.adminRequired ? <p className="text-caption text-ink-2">Needs administrator rights.</p> : null}
@@ -240,6 +230,21 @@ function Summary({
           </li>
         ))}
       </ul>
+      {report.items.some((item) => item.restoreCommand !== null) ? (
+        <section aria-label="Rebuild commands" className="flex flex-col gap-2">
+          <h3 className="text-body font-semibold">Bring them back</h3>
+          <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto">
+            {report.items
+              .filter((item) => item.restoreCommand !== null)
+              .map((item) => (
+                <li key={`${item.ruleId}:${item.path}`} className="flex flex-col rounded-control bg-canvas p-3">
+                  <span className="font-mono text-caption break-all text-ink-2">{item.path}</span>
+                  <CopyLine text={item.restoreCommand!} label={`Copy the rebuild command for ${item.path}`} />
+                </li>
+              ))}
+          </ul>
+        </section>
+      ) : null}
       {problems.length > 0 ? (
         <Notice
           variant="warning"
@@ -347,6 +352,7 @@ export function CleanDialog({ open, onClose, request, title, scopeNote }: CleanD
       }
       const { report } = result;
       useCleanupStore.getState().resetSelection();
+      useDevStore.getState().resetSelection();
       setStep({ kind: 'done', preview, report, drive: { root: report.root, before, after: null } });
       // The "now" figure is read from the backend again, never worked out from the amount freed.
       await refreshAfterClean(api, report.root);

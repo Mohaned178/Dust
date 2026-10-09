@@ -938,7 +938,47 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 9 — Developer
 
-- [ ] Build §3.7 with the shared Clean dialog and restore commands.
+- [x] Build §3.7 with the shared Clean dialog and restore commands.
+      Notes: `pages/developer/` (`DeveloperPage`, `GroupRow`, `ProjectRow`), `lib/developer.ts` (pure helpers), a dev
+      selection in `stores/dev.ts`, and a shared `ui/CopyLine` (the copy-a-command line, now used by the Clean dialog, the
+      resume flow and this page). Page chunk 16 kB; entry chunk 248.93 kB (budget 250: about 1 kB left).
+      **Groups, in plain words:** "Not used for 6+ months", "Used now and then", "Used recently", "Loose node_modules" and
+      "Kept", each with its count, size and a one-line reason. Each project shows how long ago it was used as words ("Not
+      touched for 7 months", "Used 2 days ago", "Last use unknown", with where that came from in the tooltip), a
+      "Can be rebuilt" or "Check first" pill (word plus dot), its rebuild command or why it is not offered, and Keep.
+      Keeping shows a toast with Undo, unticks the project and reads the list again.
+      **List:** one virtualized tree of group headings and projects (fixed 56 px rows), with the roving-focus keyboard
+      model from Explore: arrows, Home and End move; Right and Left open and close a group; Space ticks a project or a
+      whole group; Enter opens or closes. The kept group starts closed.
+      **Overview:** the total (the sum of the rows), a bar by group whose segments jump to that group, and a "Suggested"
+      card. "Select all safe and unused" ticks the projects unused for 6+ months that are offered, not kept, and rebuild
+      from a lockfile; with none it says "Nothing to suggest" and offers no button.
+      **Cleaning:** a footer ("2 projects · 800 MB selected", Clear, Review and clean) opens the same Clean dialog with
+      `scope: 'dev'` and exactly the ticked projects. The plan lists each rebuild command with a copy button before
+      anything is deleted; the summary adds a "Bring them back" list of commands; the acknowledgement box appears for items
+      that cannot be recovered. After a clean the selection is cleared and the project list is read again
+      (`refreshAfterClean` now includes it). A tick left over from before a refresh never reaches the plan.
+      **Toolchain caches:** a section with the package cache row (its size from the scan, "Review in Clean up" opens that
+      category), ready for the caches in `ENHANCEMENT-PLAN.md` §3b. **Recently cleaned** lists each project with its rebuild
+      command.
+      **Tests:** `test/renderer-next/pages/developer.test.tsx` (16 cases: grouping and wording, the pills, opening and
+      closing, the suggested selection, the tri-state group box, the keyboard, keeping with Undo and its failure, the plan,
+      the summary's commands, acknowledgement, recently cleaned, the package cache row, empty and failed reads, opening
+      from the sidebar). Whole suite: 708 tests.
+      **Verified in the running app** (production build, real data): the page opens 359 ms after the click with 259
+      projects and 5.9 GB; the group bar, suggestion card and virtualized list drew correctly; selecting "Used recently"
+      showed "10 projects · 189 MB selected" and opened the plan with Cancel focused and "Delete 189 MB" and the
+      acknowledgement box; I cancelled it, **nothing was deleted**. JS heap 3.6 MB.
+      **Found on this machine (backend, not changed here): the engine offers node_modules folders that belong to
+      installed apps, not to your projects.** The "Used recently" group's 10 offered "projects" included
+      `Program Files\Docker\...\node_modules`, VS Code's own `resources\app\node_modules`, Discord's
+      `modules\discord_voice-1\...\node_modules` and the VS Code extensions' folders. Deleting those could break those apps,
+      and the plan's "Downloaded again when needed" is not true for them. The old Dev Cleanup shows the same list. A rule
+      that never offers node_modules under Program Files, `AppData\Local\Programs`, `.vscode\extensions` and app module
+      folders is needed in `core` before this page is released; until then the confirm button is behind the
+      acknowledgement box, which is the only guard. Also, 57 "not used for 6+ months" rows are 0 B nested node_modules
+      inside other packages ("Not offered"); they are listed as the backend sends them.
+      **Not run live:** an actual cleanup, and the keyboard model on the real list (covered by tests).
 - **Done when:**
   - It reaches parity with today's Dev Cleanup tests, ported.
 

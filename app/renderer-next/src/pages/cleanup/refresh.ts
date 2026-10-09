@@ -1,5 +1,6 @@
 import type { DustApi } from '../../../../src/shared/ipc';
 import { useDashboardStore } from '../../stores/dashboard';
+import { useDevStore } from '../../stores/dev';
 import { useExploreStore } from '../../stores/explore';
 import { useResultsStore } from '../../stores/results';
 
@@ -15,5 +16,6 @@ export async function refreshAfterClean(api: DustApi, root: string): Promise<voi
     useDashboardStore.getState().load(api, true),
     results.load(api, root, true),
     results.loadCategories(api, root, true),
+    useDevStore.getState().load(api, root, true),
   ]);
 }

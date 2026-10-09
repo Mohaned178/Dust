@@ -18,8 +18,8 @@ import { GradePill } from '../../ui/Badge';
 import { Button, Spinner } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { Dialog } from '../../ui/Dialog';
-import { CheckIcon, CopyIcon, WarningIcon } from '../../ui/icons';
-import { IconButton } from '../../ui/IconButton';
+import { CheckIcon, WarningIcon } from '../../ui/icons';
+import { CopyLine } from '../../ui/CopyLine';
 import { Notice } from '../../ui/Notice';
 
 export interface ResumeFlowProps {
@@ -72,17 +72,6 @@ function PhaseList({ phases }: { phases: Record<string, { status: string; note?:
         );
       })}
     </ol>
-  );
-}
-
-function CopyLine({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="flex items-start gap-1">
-      <code className="min-w-0 flex-1 font-mono text-caption break-all">{text}</code>
-      <IconButton label={label} onClick={() => void navigator.clipboard?.writeText(text).catch(() => {})}>
-        <CopyIcon className="size-4" aria-hidden="true" />
-      </IconButton>
-    </div>
   );
 }
 
