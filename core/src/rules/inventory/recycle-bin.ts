@@ -54,7 +54,7 @@ export function defaultRecycleBinEnumeration(): Promise<RecycleBinInfo> {
     execFile(
       resolvePowerShell(),
       ['-NoProfile', '-NonInteractive', '-Command', ENUMERATE_SCRIPT],
-      { encoding: 'utf8', timeout: 30_000 },
+      { encoding: 'utf8', timeout: 30_000, windowsHide: true },
       (error, stdout) => {
         if (error) {
           resolve({ fileCount: 0, bytes: 0, oldestMs: null, newestMs: null, volume: null, error: codeOf(error) });

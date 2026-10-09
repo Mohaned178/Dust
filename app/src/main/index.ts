@@ -276,6 +276,7 @@ void app
               ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', encodePowerShellCommand(command)],
               {
                 detached: false,
+                windowsHide: true,
                 stdio: ['ignore', fd, fd],
               },
             );
