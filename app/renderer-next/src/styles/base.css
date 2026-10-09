@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import './tokens.css';
+/* Forced-colors and right-to-left defaults for the headless icon build. */
+@import '@fluentui/react-icons/headless/styles.css';
 
 /* Utilities read the runtime tokens, so changing tokens.css restyles everything. */
 @theme inline {

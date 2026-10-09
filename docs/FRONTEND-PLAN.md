@@ -578,7 +578,7 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
       and never take focus. `UsageBar` legend buttons are the tab stops; the bar's own buttons are mouse-only so keyboard
       users do not tab through each action twice. The Gallery is `#gallery` in dev only and is absent from the
       production bundle (entry chunk unchanged at 223 kB). Icon cold start is fine (about 190 ms for `icons.ts`), so
-      `icons.ts` keeps the barrel import. The `dataviz` palette validator was not run on `--chart-1…5`; they are only
+      `icons.ts` first kept the barrel import; phase 2 switched it to headless per-icon imports to save bundle size. The `dataviz` palette validator was not run on `--chart-1…5`; they are only
       checked for 4.2:1 or better against white.
 - **Done when:**
   - The Gallery shows every component in every state.
@@ -588,10 +588,64 @@ Each phase is one commit. Tests for new code go in `app/test/renderer-next/`.
 
 ### Phase 2 — Shell, navigation, data layer
 
-- [ ] TitleBar, Sidebar (with the compact rail), the nav store, and `<Activity>` page hosting with lazy chunks.
-- [ ] Focus moves on navigation.
-- [ ] `ApiContext`, the stores skeleton, `events.ts` with coalescing and run replay, ToastHost, DialogHost, and
+- [x] TitleBar, Sidebar (with the compact rail), the nav store, and `<Activity>` page hosting with lazy chunks.
+- [x] Focus moves on navigation.
+- [x] `ApiContext`, the stores skeleton, `events.ts` with coalescing and run replay, ToastHost, DialogHost, and
       ErrorBoundary.
+      Notes: the shell is in `renderer-next/src/app/` (`nav.ts`, `events.ts`, `PageHost.tsx`, `Sidebar.tsx`,
+      `dialogs.tsx`, `launch.ts`); stores are in `stores/`; the SWR helper is `lib/resource.ts`. `nav.params` keeps the
+      last parameters per page, so leaving and returning shows the same view. Pages are `<Activity>`-hosted only once
+      visited (the visible page plus at most 4 hidden, least recently used dropped). Each page slot saves and restores
+      its own scroll position, because `display: none` loses it. Focus: `navigate()` sets `focusTarget`; the page
+      slot focuses its `<h1>` when shown, and waits with a `MutationObserver` if the lazy page has not rendered yet.
+      Nothing takes focus on first load.
+      **Events:** `startEvents(api)` is started from `main.tsx` before the first render, next to `applyLaunchHints`. Only high-rate events are buffered (scan
+      `progress`/`categories`/`finalize-progress`, `quick-clean-progress`, `clean-item`, uninstall `app-size(s)` /
+      `app-icon(s)` / `item`, startup details). They reach the stores at most every 100 ms, as one `set()` per store.
+      `started`, `finalizing`, `finished`, `failed`, `cleaned`, uninstall phases and update events flush the buffer
+      first and apply at once, because a hidden window gets no animation frames. The stores are the replay: a screen
+      that mounts after a fast scan reads `runs[runId].outcome` from the store, so the old `getRun` ref is not needed.
+      Runs and clean jobs keep the last 3. `folders`, `browse-folders`, `browse-finished` and `matches` payloads are
+      never stored.
+      **Phase 4 heads-up:** the host still emits the `folders` scan event with every folder row to the renderer
+      (`engine-host.ts:821`). The new renderer ignores it, but the IPC cost and the structured clone remain. Make it
+      opt-in like `matches` before the phase 4 heap measurement.
+      **Launch hints:** `applyLaunchHints(api)` runs once from `main.tsx`; a Startup hint opens Startup with
+      `{ notice }`, an uninstall hint opens Apps with `{ hint }` (and wins if both are set). The pages read and clear
+      these in phases 6 and 7.
+      **Stores:** `scan`, `clean`, `apps` (sizes, icons, uninstall job folding), `startup` (details) and `updates` are
+      wired to the bridge. `dashboard`, `results`, `health` and `dev` are typed resource skeletons with a `load(api)`.
+      `resetAllStores()` runs after every test.
+      **Dialogs and toasts:** `useDialogs().open(({ open, close }) => <Dialog … />)` shows any dialog, keeping it
+      mounted 150 ms after close so the exit plays. Toasts are pushed with `useToast()` from `ui/toast-store.ts`; the
+      Radix host loads on the first toast (`ToastLayer`).
+      **Bundle:** the entry chunk is **245.7 kB** minified (78 kB gzip), budget 250 kB. Getting there took three
+      changes: the toast host and rail tooltips load lazily, `ErrorState` loads only on a crash, and `ui/icons.ts` now
+      imports from `@fluentui/react-icons/headless/svg/<icon>`, which drops the Griffel runtime (about 5 kB). The
+      headless icons carry `data-fui-icon`; `base.css` imports `@fluentui/react-icons/headless/styles.css` for the
+      forced-colors defaults. Do not import from the package root. That brings Griffel back.
+      **Error boundaries:** one around the whole app in `main.tsx` (its button reloads the window) and one around each
+      page. The fallback is plain markup with no lazy code, so it still draws when the crash is a chunk that failed
+      to load. A crash in a page leaves the sidebar and the other pages working.
+      **Rail tooltips** open to the right of the icon (`Tooltip` takes a `side`). The tooltip code is fetched after the
+      shell mounts, so resizing into the rail does not swap a focused button for a fresh one.
+      **Verified in the production build** (`DUST_RENDERER=next vite build`, then `electron . --dust-elevated` with no
+      dev server, driven over the debug port, window in front): the console and log are empty; every nav item opens its
+      page, so each lazy chunk loads from `file://`; click to second animation frame is 12-23 ms on a first visit and
+      3-8 ms on a revisit (budgets: 200 and 50); the renderer's first contentful paint is 40 ms after navigation
+      start; `#gallery` shows the normal app and the gallery code is not in `dist`; the heading takes focus after each
+      click; a scrolled page is back at its position after leaving and returning (`scrollTop` is 0 while the page is
+      hidden, which is why it is restored by hand); at 1000 px the sidebar is a 56 px rail and hovering an icon shows
+      its tooltip on the right. **Verified in the dev server run:** 1200x800 window, focus ring on a tabbed nav item.
+      **Verified by tests only:** coalescing (with the real scheduler too, including the 250 ms fallback when no frame
+      arrives), replay, eviction, state kept across pages, hidden pages stopping their effects, both error boundaries,
+      the dialog host, the lazy toast host, the rail tooltip. **Not checked:** the native title-bar overlay buttons,
+      real screen-reader output, and any scan, uninstall or startup event stream in the live app (none was started).
+      **Note for later phases:** a window that is behind others gets no animation frames at all (measured: none fired
+      until the window was brought to the front), so anything that waits on `requestAnimationFrame` needs a timer
+      fallback, as the event bridge has. **Unexplained:** on the first dev-server launch the app had already visited
+      Clean up, Startup and PC Health and the Home heading had focus before any script of mine clicked. It did not
+      repeat on two fresh launches.
 - **Done when:**
   - Every nav item opens a placeholder page.
   - Returning to a page keeps its state.

@@ -1,48 +1,10 @@
 import { Toast as ToastPrimitive } from 'radix-ui';
-import { create } from 'zustand';
 import { Button } from './Button';
 import { DismissIcon } from './icons';
+import { TOAST_DURATION_MS, useToastStore } from './toast-store';
 
-export interface ToastAction {
-  label: string;
-  onAction: () => void;
-}
-
-export interface ToastOptions {
-  title: string;
-  description?: string;
-  /** For example Undo. Running it also dismisses the toast. */
-  action?: ToastAction;
-}
-
-interface ToastItem extends ToastOptions {
-  id: number;
-}
-
-interface ToastStore {
-  toasts: ToastItem[];
-  push: (options: ToastOptions) => number;
-  dismiss: (id: number) => void;
-}
-
-let nextId = 1;
-
-export const useToastStore = create<ToastStore>((set) => ({
-  toasts: [],
-  push: (options) => {
-    const id = nextId++;
-    set((state) => ({ toasts: [...state.toasts, { ...options, id }] }));
-    return id;
-  },
-  dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
-}));
-
-/** `const toast = useToast(); toast({ title: 'Startup entry turned off', action: { label: 'Undo', onAction } })` */
-export function useToast(): (options: ToastOptions) => number {
-  return useToastStore((state) => state.push);
-}
-
-export const TOAST_DURATION_MS = 5000;
+export { TOAST_DURATION_MS, useToast, useToastStore } from './toast-store';
+export type { ToastAction, ToastOptions } from './toast-store';
 
 /** Mount once near the app root. Toasts are announced politely and never take focus. */
 export function ToastHost() {
