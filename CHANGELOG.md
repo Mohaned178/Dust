@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-09
+
+### Fixed
+
+- **The window could stay hidden after start** — on some PCs the app ran but never showed its window. It now shows as soon as the page loads.
+- **"Access is denied" cache errors** — the administrator copy now keeps its cache in its own folder instead of sharing the normal copy's.
+- **Only one Dust at a time** — opening Dust again brings the open window forward instead of starting another copy.
+
 ## [2.0.0] - 2026-10-09
 
 A rebuilt interface: lighter, faster and for everyone, with developer cleanup as one section. Details and measurements are in `docs/FRONTEND-PLAN.md`.

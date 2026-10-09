@@ -2,7 +2,7 @@
   "name": "@dust/app",
   "productName": "Dust",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "license": "MIT",
   "author": "Mohaned178",
   "description": "A calm, open-source PC cleaner for Windows: see what is safe to delete, then choose.",
